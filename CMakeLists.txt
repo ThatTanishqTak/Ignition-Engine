@@ -1,0 +1,26 @@
+# Root CMakeLists
+
+cmake_minimum_required(VERSION 3.30)
+project(Ignition)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(ARCH_NAME ${CMAKE_SYSTEM_PROCESSOR})
+if(ARCH_NAME MATCHES "AMD64|amd64|x86_64")
+    set(ARCH_NAME "x86_64")
+elseif(ARCH_NAME MATCHES "i386|i686|x86")
+    set(ARCH_NAME "x86_32")
+elseif(ARCH_NAME MATCHES "aarch64|arm64|ARM64")
+    set(ARCH_NAME "arm64")
+endif()
+
+set(BASE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${ARCH_NAME}/${PROJECT_NAME}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${BASE_OUTPUT_DIRECTORY}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${BASE_OUTPUT_DIRECTORY}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${BASE_OUTPUT_DIRECTORY}")
+
+add_subdirectory(Vendor)
+add_subdirectory(Ignition-Engine)
+add_subdirectory(Ignition-Sandbox)
+
+set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT Sandbox)
