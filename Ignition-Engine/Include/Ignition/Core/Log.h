@@ -3,9 +3,6 @@
 #include "Ignition/Core/Export.h"
 
 #include <memory>
-#include <filesystem>
-#include <functional>
-#include <string>
 
 #include <spdlog/spdlog.h>
 

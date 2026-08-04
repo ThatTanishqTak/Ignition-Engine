@@ -38,14 +38,18 @@ namespace Ignition
 
 		if (!SDL_Init(SDL_INIT_VIDEO))
 		{
-			CORE_CRITICAL("Failed to initialize SDL");
+			CORE_CRITICAL("Failed to initialize SDL: {}", SDL_GetError());
+
+			return;
 		}
 
 		m_SDLWindow = SDL_CreateWindow(title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 		if (!m_SDLWindow)
 		{
-			CORE_CRITICAL("Failed to create SDL window");
+			CORE_CRITICAL("Failed to create SDL window: {}", SDL_GetError());
 			SDL_Quit();
+
+			return;
 		}
 
 		m_IsOpen = true;

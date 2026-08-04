@@ -1,19 +1,19 @@
 #include "Ignition/Core/Engine.h"
 
-#include "Ignition/Window/Window.h"
 #include "Ignition/Core/Log.h"
+#include "Ignition/Window/Window.h"
 
 namespace Ignition
 {
 	Engine::Engine() = default;
 	Engine::~Engine() = default;
 
-	void Engine::Initialize()
+	void Engine::Initialize(const char* title, int width, int height)
 	{
 		CORE_INFO("------- INITIALIZING IGNITION -------");
 
 		m_Window = std::make_unique<Window>();
-		m_Window->Initialize("Sandbox", 1920, 1080);
+		m_Window->Initialize(title, width, height);
 
 		CORE_INFO("------- IGNITION INITIALIZED -------");
 	}
@@ -22,17 +22,25 @@ namespace Ignition
 	{
 		CORE_INFO("------- IGNITION SHUTTING DOWN -------");
 
-		m_Window->Shutdown();
-		m_Window.reset();
+		if (m_Window)
+		{
+			m_Window->Shutdown();
+			m_Window.reset();
+		}
 
 		CORE_INFO("------- IGNITION SHUTDOWN COMPLETE -------");
 	}
 
-	void Engine::Run()
+	void Engine::Update()
 	{
-		while (m_Window->IsOpen())
+		if (m_Window)
 		{
 			m_Window->PollEvents();
 		}
+	}
+
+	bool Engine::IsRunning() const
+	{
+		return m_Window && m_Window->IsOpen();
 	}
 }
