@@ -1,6 +1,9 @@
 #include <Ignition/Core/Application.h>
 #include <Ignition/Core/EntryPoint.h>
 #include <Ignition/Core/Log.h>
+#include <Ignition/Events/Event.h>
+#include <Ignition/Events/KeyEvent.h>
+#include <Ignition/Events/WindowEvent.h>
 
 namespace Sandbox
 {
@@ -28,6 +31,18 @@ namespace Sandbox
 		void OnFixedUpdate(float fixedTimeStep) override
 		{
 			//APP_TRACE("FixedTimestep: {}", fixedTimeStep);
+		}
+
+		void OnEvent(Ignition::Event& event) override
+		{
+			Ignition::EventDispatcher dispatcher(event);
+
+			dispatcher.Dispatch<Ignition::KeyPressedEvent>([](Ignition::KeyPressedEvent& keyEvent)
+			{
+				APP_TRACE("Key pressed: {}", keyEvent.GetKeyCode());
+
+				return false;
+			});
 		}
 
 		void OnShutdown() override

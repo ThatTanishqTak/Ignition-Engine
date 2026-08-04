@@ -3,6 +3,7 @@
 #include "Ignition/Core/Engine.h"
 #include "Ignition/Core/Log.h"
 #include "Ignition/Core/Time.h"
+#include "Ignition/Events/EventQueue.h"
 
 namespace Ignition
 {
@@ -56,6 +57,18 @@ namespace Ignition
 			Time::Update();
 
 			m_Engine->Update();
+
+			for (auto& queuedEvent : m_Engine->GetEventQueue())
+			{
+				m_Engine->OnEvent(*queuedEvent);
+
+				if (!queuedEvent->Handled)
+				{
+					OnEvent(*queuedEvent);
+				}
+			}
+
+			m_Engine->GetEventQueue().Clear();
 
 			while (Time::NextFixedStep())
 			{

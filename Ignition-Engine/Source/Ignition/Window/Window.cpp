@@ -1,6 +1,10 @@
 #include "Ignition/Window/Window.h"
 
 #include "Ignition/Core/Log.h"
+#include "Ignition/Events/EventQueue.h"
+#include "Ignition/Events/KeyEvent.h"
+#include "Ignition/Events/MouseEvent.h"
+#include "Ignition/Events/WindowEvent.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -74,7 +78,7 @@ namespace Ignition
 		CORE_TRACE("Window Shutdown Complete");
 	}
 
-	void Window::PollEvents()
+	void Window::PollEvents(EventQueue& eventQueue)
 	{
 		SDL_Event event;
 
@@ -82,19 +86,69 @@ namespace Ignition
 		{
 			switch (event.type)
 			{
-			case SDL_EVENT_QUIT:
-				m_IsOpen = false;
-				break;
-
-			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-				if (m_SDLWindow && event.window.windowID == SDL_GetWindowID(m_SDLWindow))
-				{
+				case SDL_EVENT_QUIT:
 					m_IsOpen = false;
-				}
-				break;
+					eventQueue.Push<WindowCloseEvent>();
+					break;
 
-			default:
-				break;
+				case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+					if (m_SDLWindow && event.window.windowID == SDL_GetWindowID(m_SDLWindow))
+					{
+						m_IsOpen = false;
+						eventQueue.Push<WindowCloseEvent>();
+					}
+					break;
+
+				case SDL_EVENT_WINDOW_RESIZED:
+					eventQueue.Push<WindowResizeEvent>(event.window.data1, event.window.data2);
+					break;
+
+				case SDL_EVENT_WINDOW_MOVED:
+					eventQueue.Push<WindowMovedEvent>(event.window.data1, event.window.data2);
+					break;
+
+				case SDL_EVENT_WINDOW_FOCUS_GAINED:
+					eventQueue.Push<WindowFocusEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_FOCUS_LOST:
+					eventQueue.Push<WindowLostFocusEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_MINIMIZED:
+					eventQueue.Push<WindowMinimizedEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_RESTORED:
+					eventQueue.Push<WindowRestoredEvent>();
+					break;
+
+				case SDL_EVENT_KEY_DOWN:
+					eventQueue.Push<KeyPressedEvent>(static_cast<KeyCode>(event.key.key), event.key.repeat);
+					break;
+
+				case SDL_EVENT_KEY_UP:
+					eventQueue.Push<KeyReleasedEvent>(static_cast<KeyCode>(event.key.key));
+					break;
+
+				case SDL_EVENT_MOUSE_BUTTON_DOWN:
+					eventQueue.Push<MouseButtonPressedEvent>(static_cast<MouseCode>(event.button.button));
+					break;
+
+				case SDL_EVENT_MOUSE_BUTTON_UP:
+					eventQueue.Push<MouseButtonReleasedEvent>(static_cast<MouseCode>(event.button.button));
+					break;
+
+				case SDL_EVENT_MOUSE_MOTION:
+					eventQueue.Push<MouseMovedEvent>(event.motion.x, event.motion.y);
+					break;
+
+				case SDL_EVENT_MOUSE_WHEEL:
+					eventQueue.Push<MouseScrolledEvent>(event.wheel.x, event.wheel.y);
+					break;
+
+				default:
+					break;
 			}
 		}
 	}

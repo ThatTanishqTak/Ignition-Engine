@@ -1,9 +1,12 @@
 #pragma once
 
+#include "Ignition/Events/EventQueue.h"
+
 #include <memory>
 
 namespace Ignition
 {
+	class Event;
 	class Window;
 
 	class Engine
@@ -20,9 +23,14 @@ namespace Ignition
 
 		void Update();
 
+		void OnEvent(Event& event);
+
+		EventQueue& GetEventQueue() { return m_EventQueue; }
+
 		bool IsRunning() const;
 
 	private:
 		std::unique_ptr<Window> m_Window;
+		EventQueue m_EventQueue;
 	};
 }

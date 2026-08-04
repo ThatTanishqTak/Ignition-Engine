@@ -1,6 +1,7 @@
 #include "Ignition/Core/Engine.h"
 
 #include "Ignition/Core/Log.h"
+#include "Ignition/Events/WindowEvent.h"
 #include "Ignition/Window/Window.h"
 
 namespace Ignition
@@ -35,8 +36,20 @@ namespace Ignition
 	{
 		if (m_Window)
 		{
-			m_Window->PollEvents();
+			m_Window->PollEvents(m_EventQueue);
 		}
+	}
+
+	void Engine::OnEvent(Event& event)
+	{
+		EventDispatcher dispatcher(event);
+
+		dispatcher.Dispatch<WindowResizeEvent>([](WindowResizeEvent& resizeEvent)
+		{
+			CORE_TRACE("Window resized to {}x{}", resizeEvent.GetWidth(), resizeEvent.GetHeight());
+
+			return false;
+		});
 	}
 
 	bool Engine::IsRunning() const

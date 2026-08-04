@@ -8,6 +8,8 @@ struct SDL_Window;
 
 namespace Ignition
 {
+	class EventQueue;
+
 	class IGNITION_API Window
 	{
 	public:
@@ -23,7 +25,7 @@ namespace Ignition
 		void Initialize(const char* title, int width, int height);
 		void Shutdown();
 
-		void PollEvents();
+		void PollEvents(EventQueue& eventQueue);
 
 		bool IsOpen() const { return m_IsOpen; }
 		SDL_Window* GetNativeWindow() const { return m_SDLWindow; }
