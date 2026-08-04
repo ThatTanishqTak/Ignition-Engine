@@ -32,9 +32,9 @@ namespace Sandbox
 
 		void OnShutdown() override
 		{
-			APP_INFO("------- SHUTTING DOWN SNADBOX -------");
+			APP_INFO("------- SHUTTING DOWN SANDBOX -------");
 
-			APP_INFO("------- SNADBOX SHUTDOWN COMPLETE -------");
+			APP_INFO("------- SANDBOX SHUTDOWN COMPLETE -------");
 		}
 
 	private:
