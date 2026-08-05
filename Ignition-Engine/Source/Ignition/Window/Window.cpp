@@ -2,6 +2,7 @@
 
 #include "Ignition/Core/Log.h"
 #include "Ignition/Events/EventQueue.h"
+#include "Ignition/Events/GamepadEvent.h"
 #include "Ignition/Events/KeyEvent.h"
 #include "Ignition/Events/MouseEvent.h"
 #include "Ignition/Events/WindowEvent.h"
@@ -40,7 +41,7 @@ namespace Ignition
 	{
 		CORE_TRACE("Initializing Window");
 
-		if (!SDL_Init(SDL_INIT_VIDEO))
+		if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
 		{
 			CORE_CRITICAL("Failed to initialize SDL: {}", SDL_GetError());
 
@@ -103,6 +104,18 @@ namespace Ignition
 					eventQueue.Push<WindowResizeEvent>(event.window.data1, event.window.data2);
 					break;
 
+				case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+					eventQueue.Push<WindowPixelSizeChangedEvent>(event.window.data1, event.window.data2);
+					break;
+
+				case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+					eventQueue.Push<WindowDisplayScaleChangedEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+					eventQueue.Push<WindowDisplayChangedEvent>(event.window.data1);
+					break;
+
 				case SDL_EVENT_WINDOW_MOVED:
 					eventQueue.Push<WindowMovedEvent>(event.window.data1, event.window.data2);
 					break;
@@ -119,16 +132,129 @@ namespace Ignition
 					eventQueue.Push<WindowMinimizedEvent>();
 					break;
 
+				case SDL_EVENT_WINDOW_MAXIMIZED:
+					eventQueue.Push<WindowMaximizedEvent>();
+					break;
+
 				case SDL_EVENT_WINDOW_RESTORED:
 					eventQueue.Push<WindowRestoredEvent>();
 					break;
 
+				case SDL_EVENT_WINDOW_SHOWN:
+					eventQueue.Push<WindowShownEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_HIDDEN:
+					eventQueue.Push<WindowHiddenEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_EXPOSED:
+					eventQueue.Push<WindowExposedEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_OCCLUDED:
+					eventQueue.Push<WindowOccludedEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_MOUSE_ENTER:
+					eventQueue.Push<WindowMouseEnterEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+					eventQueue.Push<WindowMouseLeaveEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+					eventQueue.Push<WindowEnterFullscreenEvent>();
+					break;
+
+				case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+					eventQueue.Push<WindowLeaveFullscreenEvent>();
+					break;
+
+				case SDL_EVENT_DROP_FILE:
+					if (event.drop.data)
+					{
+						eventQueue.Push<FileDroppedEvent>(std::string(event.drop.data), event.drop.x, event.drop.y);
+					}
+					break;
+
+				case SDL_EVENT_DROP_TEXT:
+					if (event.drop.data)
+					{
+						eventQueue.Push<TextDroppedEvent>(std::string(event.drop.data), event.drop.x, event.drop.y);
+					}
+					break;
+
+				case SDL_EVENT_TEXT_INPUT:
+					if (event.text.text)
+					{
+						eventQueue.Push<TextInputEvent>(std::string(event.text.text));
+					}
+					break;
+
+				case SDL_EVENT_GAMEPAD_ADDED:
+					if (SDL_OpenGamepad(event.gdevice.which))
+					{
+						CORE_INFO("Gamepad connected (id {})", event.gdevice.which);
+						eventQueue.Push<GamepadConnectedEvent>(event.gdevice.which);
+					}
+					else
+					{
+						CORE_WARN("Failed to open gamepad {}: {}", event.gdevice.which, SDL_GetError());
+					}
+					break;
+
+				case SDL_EVENT_GAMEPAD_REMOVED:
+				{
+					SDL_Gamepad* gamepad = SDL_GetGamepadFromID(event.gdevice.which);
+					if (gamepad)
+					{
+						SDL_CloseGamepad(gamepad);
+					}
+
+					CORE_INFO("Gamepad disconnected (id {})", event.gdevice.which);
+					eventQueue.Push<GamepadDisconnectedEvent>(event.gdevice.which);
+					break;
+				}
+
+				case SDL_EVENT_GAMEPAD_REMAPPED:
+					eventQueue.Push<GamepadRemappedEvent>(event.gdevice.which);
+					break;
+
+				case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+					eventQueue.Push<GamepadButtonPressedEvent>(event.gbutton.which, static_cast<GamepadButton>(event.gbutton.button));
+					break;
+
+				case SDL_EVENT_GAMEPAD_BUTTON_UP:
+					eventQueue.Push<GamepadButtonReleasedEvent>(event.gbutton.which, static_cast<GamepadButton>(event.gbutton.button));
+					break;
+
+				case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+				{
+					const GamepadAxis axis = static_cast<GamepadAxis>(event.gaxis.axis);
+					const bool isTrigger = axis == GamepadAxis::LEFT_TRIGGER || axis == GamepadAxis::RIGHT_TRIGGER;
+
+					float normalized = 0.0f;
+					if (isTrigger)
+					{
+						normalized = static_cast<float>(event.gaxis.value) / 32767.0f;
+					}
+					else
+					{
+						normalized = static_cast<float>(event.gaxis.value) / (event.gaxis.value < 0 ? 32768.0f : 32767.0f);
+					}
+
+					eventQueue.Push<GamepadAxisMovedEvent>(event.gaxis.which, axis, normalized, event.gaxis.value);
+					break;
+				}
+
 				case SDL_EVENT_KEY_DOWN:
-					eventQueue.Push<KeyPressedEvent>(static_cast<KeyCode>(event.key.key), event.key.repeat);
+					eventQueue.Push<KeyPressedEvent>(static_cast<KeyCode>(event.key.key), static_cast<ScanCode>(event.key.scancode), event.key.repeat);
 					break;
 
 				case SDL_EVENT_KEY_UP:
-					eventQueue.Push<KeyReleasedEvent>(static_cast<KeyCode>(event.key.key));
+					eventQueue.Push<KeyReleasedEvent>(static_cast<KeyCode>(event.key.key), static_cast<ScanCode>(event.key.scancode));
 					break;
 
 				case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -150,6 +276,23 @@ namespace Ignition
 				default:
 					break;
 			}
+		}
+	}
+
+	void Window::SetTextInputEnabled(bool enabled)
+	{
+		if (!m_SDLWindow)
+		{
+			return;
+		}
+
+		if (enabled)
+		{
+			SDL_StartTextInput(m_SDLWindow);
+		}
+		else
+		{
+			SDL_StopTextInput(m_SDLWindow);
 		}
 	}
 

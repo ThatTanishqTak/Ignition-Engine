@@ -46,7 +46,7 @@ namespace Ignition
 	protected:
 		explicit MouseButtonEvent(MouseCode button) : m_Button(button) {}
 
-		MouseCode m_Button = 0;
+		MouseCode m_Button = MouseCode::UNKNOWN;
 	};
 
 	class IGNITION_API MouseButtonPressedEvent : public MouseButtonEvent

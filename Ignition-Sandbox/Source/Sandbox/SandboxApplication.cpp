@@ -3,7 +3,10 @@
 #include <Ignition/Core/Log.h>
 #include <Ignition/Events/Event.h>
 #include <Ignition/Events/KeyEvent.h>
+#include <Ignition/Events/MouseEvent.h>
 #include <Ignition/Events/WindowEvent.h>
+
+#include <utility>
 
 namespace Sandbox
 {
@@ -39,7 +42,7 @@ namespace Sandbox
 
 			dispatcher.Dispatch<Ignition::KeyPressedEvent>([](Ignition::KeyPressedEvent& keyEvent)
 			{
-				APP_TRACE("Key pressed: {}", keyEvent.GetKeyCode());
+				APP_TRACE("Key pressed: {} (scancode {})", std::to_underlying(keyEvent.GetKeyCode()), std::to_underlying(keyEvent.GetScanCode()));
 
 				return false;
 			});

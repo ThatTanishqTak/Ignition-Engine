@@ -1,33 +1,57 @@
 #pragma once
 
 #include "Ignition/Core/Export.h"
+#include "Ignition/Events/GamepadCodes.h"
+#include "Ignition/Events/KeyCodes.h"
+#include "Ignition/Events/MouseCodes.h"
+#include "Ignition/Events/ScanCodes.h"
 
 #include <cstdint>
 
 namespace Ignition
 {
-	using KeyCode = uint32_t;
-	using MouseCode = uint8_t;
-
 	enum class EventType
 	{
 		None = 0,
 
 		WindowClose,
 		WindowResize,
+		WindowPixelSizeChanged,
+		WindowDisplayScaleChanged,
+		WindowDisplayChanged,
+		WindowMoved,
 		WindowFocus,
 		WindowLostFocus,
-		WindowMoved,
 		WindowMinimized,
+		WindowMaximized,
 		WindowRestored,
+		WindowShown,
+		WindowHidden,
+		WindowExposed,
+		WindowOccluded,
+		WindowMouseEnter,
+		WindowMouseLeave,
+		WindowEnterFullscreen,
+		WindowLeaveFullscreen,
+
+		FileDropped,
+		TextDropped,
 
 		KeyPressed,
 		KeyReleased,
+		TextInput,
 
 		MouseButtonPressed,
 		MouseButtonReleased,
 		MouseMoved,
-		MouseScrolled
+		MouseScrolled,
+
+		GamepadConnected,
+		GamepadDisconnected,
+		GamepadRemapped,
+		GamepadButtonPressed,
+		GamepadButtonReleased,
+		GamepadAxisMoved
 	};
 
 	enum EventCategory
@@ -37,7 +61,8 @@ namespace Ignition
 		EventCategoryInput = 1 << 1,
 		EventCategoryKeyboard = 1 << 2,
 		EventCategoryMouse = 1 << 3,
-		EventCategoryMouseButton = 1 << 4
+		EventCategoryMouseButton = 1 << 4,
+		EventCategoryGamepad = 1 << 5
 	};
 
 	class IGNITION_API Event

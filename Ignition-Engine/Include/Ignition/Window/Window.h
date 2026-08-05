@@ -27,6 +27,8 @@ namespace Ignition
 
 		void PollEvents(EventQueue& eventQueue);
 
+		void SetTextInputEnabled(bool enabled);
+
 		bool IsOpen() const { return m_IsOpen; }
 		SDL_Window* GetNativeWindow() const { return m_SDLWindow; }
 
