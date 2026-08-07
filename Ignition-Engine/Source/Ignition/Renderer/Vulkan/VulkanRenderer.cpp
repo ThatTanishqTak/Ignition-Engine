@@ -6,16 +6,24 @@
 #include "Ignition/Renderer/Vulkan/VulkanSwapchain.h"
 #include "Ignition/Renderer/Vulkan/VulkanFrameContext.h"
 #include "Ignition/Renderer/Vulkan/VulkanAllocator.h"
+#include "Ignition/Renderer/Vulkan/VulkanPipeline.h"
 
 #include "Ignition/Core/Log.h"
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
 
 #include <SDL3/SDL_video.h>
+#include <SDL3/SDL_filesystem.h>
 
 #include <cstdlib>
+#include <string>
 
 namespace Ignition
 {
+	namespace
+	{
+		constexpr const char* ShaderDirectory = "Shaders/";
+	}
+
 	VulkanRenderer::VulkanRenderer() = default;
 	VulkanRenderer::~VulkanRenderer() = default;
 
@@ -85,12 +93,34 @@ namespace Ignition
 			return;
 		}
 
+		const char* basePath = SDL_GetBasePath();
+		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Triangle.spv";
+
+		m_VulkanPipeline = std::make_unique<VulkanPipeline>();
+		m_VulkanPipeline->Initialize(m_VulkanDevice->GetDevice(), m_VulkanSwapchain->GetImageFormat(), shaderPath);
+
+		if (!m_VulkanPipeline->IsValid())
+		{
+			IG_CORE_ERROR("Demo pipeline unavailable, the triangle will not draw");
+		}
+
 		IG_CORE_INFO("------- VULKAN RENDERER INITIALIZED -------");
 	}
 
 	void VulkanRenderer::Shutdown()
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN VULKAN RENDERER -------");
+
+		if (m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
+		{
+			Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()), "Failed vkDeviceWaitIdle");
+		}
+
+		if (m_VulkanPipeline)
+		{
+			m_VulkanPipeline->Shutdown();
+			m_VulkanPipeline.reset();
+		}
 
 		if (m_VulkanFrameContext)
 		{
@@ -398,5 +428,19 @@ namespace Ignition
 
 		m_FrameStarted = false;
 		m_FrameIndex = (m_FrameIndex + 1) % VulkanFrameContext::MaximumFramesInFlight;
+	}
+
+	void VulkanRenderer::DrawDemoTriangle()
+	{
+		if (!m_FrameStarted || !m_VulkanPipeline || !m_VulkanPipeline->IsValid())
+		{
+			return;
+		}
+
+		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
+
+		m_VulkanPipeline->Bind(commandBuffer);
+
+		vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 	}
 }

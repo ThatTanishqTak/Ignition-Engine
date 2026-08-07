@@ -26,6 +26,8 @@ namespace Ignition
 		void BeginFrame();
 		void EndFrame();
 
+		IGNITION_API void DrawDemoTriangle();
+
 		void OnResize();
 
 	private:

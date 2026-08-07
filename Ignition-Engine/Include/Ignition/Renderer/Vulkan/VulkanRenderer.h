@@ -15,6 +15,7 @@ namespace Ignition
 	class VulkanAllocator;
 	class VulkanSwapchain;
 	class VulkanFrameContext;
+	class VulkanPipeline;
 
 	class VulkanRenderer
 	{
@@ -31,6 +32,8 @@ namespace Ignition
 
 		void BeginFrame();
 		void EndFrame();
+
+		void DrawDemoTriangle();
 
 		void OnResize();
 
@@ -49,6 +52,7 @@ namespace Ignition
 		std::unique_ptr<VulkanAllocator> m_VulkanAllocator;
 		std::unique_ptr<VulkanSwapchain> m_VulkanSwapchain;
 		std::unique_ptr<VulkanFrameContext> m_VulkanFrameContext;
+		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;
 
 		uint32_t m_FrameIndex = 0;
 		uint32_t m_ImageIndex = 0;

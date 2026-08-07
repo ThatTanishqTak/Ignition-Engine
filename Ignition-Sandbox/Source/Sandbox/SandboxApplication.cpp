@@ -67,6 +67,11 @@ namespace Sandbox
 			//IG_APP_TRACE("FixedTimestep: {}", fixedTimeStep);
 		}
 
+		void OnRender() override
+		{
+			GetRenderer()->DrawDemoTriangle();
+		}
+
 		void OnEvent(Ignition::Event& event) override
 		{
 			Ignition::EventDispatcher dispatcher(event);

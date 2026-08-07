@@ -63,6 +63,14 @@ namespace Ignition
 		}
 	}
 
+	void Renderer::DrawDemoTriangle()
+	{
+		if (m_VulkanRenderer)
+		{
+			m_VulkanRenderer->DrawDemoTriangle();
+		}
+	}
+
 	void Renderer::OnResize()
 	{
 		if (m_VulkanRenderer)

@@ -269,11 +269,15 @@ namespace Ignition
 		}
 
 		VkPhysicalDeviceFeatures physicalDeviceFeatures{};
+		VkPhysicalDeviceVulkan11Features physicalDeviceVulkan11Features{};
+		physicalDeviceVulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+		physicalDeviceVulkan11Features.shaderDrawParameters = VK_TRUE;
 
 		VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features{};
 		physicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 		physicalDeviceVulkan13Features.dynamicRendering = VK_TRUE;
 		physicalDeviceVulkan13Features.synchronization2 = VK_TRUE;
+		physicalDeviceVulkan13Features.pNext = &physicalDeviceVulkan11Features;
 
 		VkDeviceCreateInfo deviceCreateInfo{};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

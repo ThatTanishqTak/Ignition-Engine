@@ -29,6 +29,8 @@ endif()
 
 target_link_libraries(Sandbox PRIVATE Ignition)
 
+add_dependencies(Sandbox IgnitionShaders)
+
 set_target_properties(Sandbox PROPERTIES
     CXX_EXTENSIONS OFF
     BUILD_RPATH "$ORIGIN"
