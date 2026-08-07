@@ -72,7 +72,7 @@ namespace Ignition
 			{
 				m_Engine->OnEvent(*queuedEvent);
 
-				if (!queuedEvent->m_Handled)
+				if (!queuedEvent->IsHandled())
 				{
 					OnEvent(*queuedEvent);
 				}
@@ -90,7 +90,16 @@ namespace Ignition
 				break;
 			}
 
-			m_Engine->Render();
+			m_Engine->BeginFrame();
+			
+			OnRender();
+			
+			m_Engine->EndFrame();
 		}
+	}
+
+	Renderer* Application::GetRenderer() const
+	{
+		return m_Engine ? m_Engine->GetRenderer() : nullptr;
 	}
 }

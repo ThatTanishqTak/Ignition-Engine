@@ -15,6 +15,7 @@ namespace Ignition
 
 	class Engine;
 	class Event;
+	class Renderer;
 
 	class Application
 	{
@@ -34,8 +35,11 @@ namespace Ignition
 		virtual void OnInitialize() {}
 		virtual void OnUpdate(float deltaTime) { (void)deltaTime; }
 		virtual void OnFixedUpdate(float fixedTimeStep) { (void)fixedTimeStep; }
+		virtual void OnRender() {}
 		virtual void OnEvent(Event& event) { (void)event; }
 		virtual void OnShutdown() {}
+
+		IGNITION_API Renderer* GetRenderer() const;
 
 	private:
 		ApplicationSpecification m_Specification;

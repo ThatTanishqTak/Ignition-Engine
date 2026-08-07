@@ -67,11 +67,21 @@ namespace Ignition
 		}
 	}
 
-	void Engine::Render()
+	void Engine::BeginFrame()
+	{
+		if (!m_Renderer)
+		{
+			return;
+		}
+
+		m_Renderer->BeginFrame();
+	}
+
+	void Engine::EndFrame()
 	{
 		if (m_Renderer)
 		{
-			m_Renderer->DrawFrame(0.01f, 0.01f, 0.01f);
+			m_Renderer->EndFrame();
 		}
 	}
 

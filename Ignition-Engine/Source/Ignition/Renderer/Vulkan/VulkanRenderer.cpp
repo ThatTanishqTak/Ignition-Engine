@@ -131,12 +131,12 @@ namespace Ignition
 		IG_CORE_INFO("------- VULKAN RENDERER SHUTDOWN COMPLETE -------");
 	}
 
-	void VulkanRenderer::SetClearColor(float r, float g, float b)
+	void VulkanRenderer::SetClearColor(float r, float g, float b, float a)
 	{
 		m_ClearColor[0] = r;
 		m_ClearColor[1] = g;
 		m_ClearColor[2] = b;
-		m_ClearColor[3] = 1.0f;
+		m_ClearColor[3] = a;
 	}
 
 	void VulkanRenderer::OnResize()

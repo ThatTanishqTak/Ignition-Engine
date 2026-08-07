@@ -37,17 +37,30 @@ namespace Ignition
 		IG_CORE_INFO("------- RENDERER SHUTDOWN COMPLETE -------");
 	}
 
-	void Renderer::DrawFrame(float r, float g, float b)
+	void Renderer::SetClearColor(float r, float g, float b, float a)
+	{
+		if (m_VulkanRenderer)
+		{
+			m_VulkanRenderer->SetClearColor(r, g, b, a);
+		}
+	}
+
+	void Renderer::BeginFrame()
 	{
 		if (!m_VulkanRenderer)
 		{
 			return;
 		}
-
-		m_VulkanRenderer->SetClearColor(r, g, b);
+		
 		m_VulkanRenderer->BeginFrame();
+	}
 
-		m_VulkanRenderer->EndFrame();
+	void Renderer::EndFrame()
+	{
+		if (m_VulkanRenderer)
+		{
+			m_VulkanRenderer->EndFrame();
+		}
 	}
 
 	void Renderer::OnResize()

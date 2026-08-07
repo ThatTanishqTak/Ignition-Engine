@@ -50,6 +50,5 @@ target_link_libraries(Ignition PRIVATE
     SDL3::SDL3-static
     Vulkan::Vulkan
     GPUOpen::VulkanMemoryAllocator
-PUBLIC
     spdlog::spdlog
 )

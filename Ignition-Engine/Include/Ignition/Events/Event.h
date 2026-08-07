@@ -74,6 +74,11 @@ namespace Ignition
 
 		bool IsInCategory(EventCategory category) const { return (GetCategoryFlags() & category) != 0; }
 
+		bool IsHandled() const { return m_Handled; }
+
+		void SetHandled(bool handled) { m_Handled = m_Handled || handled; }
+
+	private:
 		bool m_Handled = false;
 	};
 
@@ -90,7 +95,7 @@ namespace Ignition
 				return false;
 			}
 
-			m_Event.m_Handled = m_Event.m_Handled || function(static_cast<T&>(m_Event));
+			m_Event.SetHandled(function(static_cast<T&>(m_Event)));
 
 			return true;
 		}

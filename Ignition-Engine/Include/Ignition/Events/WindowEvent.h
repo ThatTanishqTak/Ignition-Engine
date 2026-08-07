@@ -6,7 +6,7 @@
 
 namespace Ignition
 {
-	class IGNITION_API WindowCloseEvent : public Event
+	class WindowCloseEvent : public Event
 	{
 	public:
 		WindowCloseEvent() = default;
@@ -15,7 +15,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowResizeEvent : public Event
+	class WindowResizeEvent : public Event
 	{
 	public:
 		WindowResizeEvent(int pixelWidth, int pixelHeight) : m_PixelWidth(pixelWidth), m_PixelHeight(pixelHeight) {}
@@ -31,7 +31,7 @@ namespace Ignition
 		int m_PixelHeight = 0;
 	};
 
-	class IGNITION_API WindowDisplayScaleChangedEvent : public Event
+	class WindowDisplayScaleChangedEvent : public Event
 	{
 	public:
 		WindowDisplayScaleChangedEvent() = default;
@@ -40,7 +40,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowDisplayChangedEvent : public Event
+	class WindowDisplayChangedEvent : public Event
 	{
 	public:
 		explicit WindowDisplayChangedEvent(int displayIndex) : m_DisplayIndex(displayIndex) {}
@@ -54,7 +54,7 @@ namespace Ignition
 		int m_DisplayIndex = 0;
 	};
 
-	class IGNITION_API WindowMovedEvent : public Event
+	class WindowMovedEvent : public Event
 	{
 	public:
 		WindowMovedEvent(int x, int y) : m_X(x), m_Y(y) {}
@@ -70,7 +70,7 @@ namespace Ignition
 		int m_Y = 0;
 	};
 
-	class IGNITION_API WindowFocusEvent : public Event
+	class WindowFocusEvent : public Event
 	{
 	public:
 		WindowFocusEvent() = default;
@@ -79,7 +79,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowLostFocusEvent : public Event
+	class WindowLostFocusEvent : public Event
 	{
 	public:
 		WindowLostFocusEvent() = default;
@@ -88,7 +88,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowMinimizedEvent : public Event
+	class WindowMinimizedEvent : public Event
 	{
 	public:
 		WindowMinimizedEvent() = default;
@@ -97,7 +97,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowMaximizedEvent : public Event
+	class WindowMaximizedEvent : public Event
 	{
 	public:
 		WindowMaximizedEvent() = default;
@@ -106,7 +106,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowRestoredEvent : public Event
+	class WindowRestoredEvent : public Event
 	{
 	public:
 		WindowRestoredEvent() = default;
@@ -115,7 +115,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowShownEvent : public Event
+	class WindowShownEvent : public Event
 	{
 	public:
 		WindowShownEvent() = default;
@@ -124,7 +124,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowHiddenEvent : public Event
+	class WindowHiddenEvent : public Event
 	{
 	public:
 		WindowHiddenEvent() = default;
@@ -133,7 +133,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowExposedEvent : public Event
+	class WindowExposedEvent : public Event
 	{
 	public:
 		WindowExposedEvent() = default;
@@ -142,7 +142,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowOccludedEvent : public Event
+	class WindowOccludedEvent : public Event
 	{
 	public:
 		WindowOccludedEvent() = default;
@@ -151,7 +151,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowMouseEnterEvent : public Event
+	class WindowMouseEnterEvent : public Event
 	{
 	public:
 		WindowMouseEnterEvent() = default;
@@ -160,7 +160,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowMouseLeaveEvent : public Event
+	class WindowMouseLeaveEvent : public Event
 	{
 	public:
 		WindowMouseLeaveEvent() = default;
@@ -169,7 +169,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowEnterFullscreenEvent : public Event
+	class WindowEnterFullscreenEvent : public Event
 	{
 	public:
 		WindowEnterFullscreenEvent() = default;
@@ -178,7 +178,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API WindowLeaveFullscreenEvent : public Event
+	class WindowLeaveFullscreenEvent : public Event
 	{
 	public:
 		WindowLeaveFullscreenEvent() = default;
@@ -187,7 +187,7 @@ namespace Ignition
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 	};
 
-	class IGNITION_API FileDroppedEvent : public Event
+	class FileDroppedEvent : public Event
 	{
 	public:
 		FileDroppedEvent(std::string path, float x, float y) : m_Path(std::move(path)), m_X(x), m_Y(y) {}
@@ -205,7 +205,7 @@ namespace Ignition
 		float m_Y = 0.0f;
 	};
 
-	class IGNITION_API TextDroppedEvent : public Event
+	class TextDroppedEvent : public Event
 	{
 	public:
 		TextDroppedEvent(std::string text, float x, float y) : m_Text(std::move(text)), m_X(x), m_Y(y) {}

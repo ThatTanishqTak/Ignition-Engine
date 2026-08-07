@@ -27,7 +27,7 @@ namespace Ignition
 
 		bool IsValid() const { return m_VulkanFrameContext != nullptr; }
 
-		void SetClearColor(float r, float g, float b);
+		void SetClearColor(float r, float g, float b, float a = 1.0f);
 
 		void BeginFrame();
 		void EndFrame();

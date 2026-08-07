@@ -5,6 +5,7 @@
 #include "Ignition/Events/KeyEvent.h"
 #include "Ignition/Events/MouseEvent.h"
 #include "Ignition/Events/WindowEvent.h"
+#include "Ignition/Renderer/Renderer.h"
 
 #include <utility>
 
@@ -22,6 +23,8 @@ namespace Sandbox
 		void OnInitialize() override
 		{
 			IG_APP_INFO("------- INITIALIZING SANDBOX -------");
+
+			GetRenderer()->SetClearColor(0.01f, 0.01f, 0.01f);
 
 			IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 		}

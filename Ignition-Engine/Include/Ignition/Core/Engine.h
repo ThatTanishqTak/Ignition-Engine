@@ -23,11 +23,14 @@ namespace Ignition
 		void Shutdown();
 
 		void PollEvents();
-		void Render();
+
+		void BeginFrame();
+		void EndFrame();
 
 		void OnEvent(Event& event);
 
 		EventQueue& GetEventQueue() { return m_EventQueue; }
+		Renderer* GetRenderer() const { return m_Renderer.get(); }
 
 		bool IsRunning() const;
 
