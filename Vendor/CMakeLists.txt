@@ -25,6 +25,14 @@ add_subdirectory(SDL SYSTEM EXCLUDE_FROM_ALL)
 add_subdirectory(VulkanMemoryAllocator SYSTEM EXCLUDE_FROM_ALL)
 # --------------
 
+# glm ---------
+set(GLM_BUILD_TESTS OFF)
+set(GLM_BUILD_LIBRARY OFF)
+set(GLM_BUILD_INSTALL OFF)
+
+add_subdirectory(glm SYSTEM EXCLUDE_FROM_ALL)
+# --------------
+
 # spdlog -------
 set(SPDLOG_BUILD_SHARED OFF)
 set(SPDLOG_BUILD_PIC ON)
@@ -37,4 +45,4 @@ set(SPDLOG_INSTALL OFF)
 set(SPDLOG_USE_STD_FORMAT ON)
 
 add_subdirectory(spdlog SYSTEM EXCLUDE_FROM_ALL)
-#--------------
+# --------------

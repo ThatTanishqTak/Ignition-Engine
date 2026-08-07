@@ -111,7 +111,7 @@ namespace Ignition
 		IGNITION_API bool IsPressed(const std::string& name) const;
 		IGNITION_API bool IsReleased(const std::string& name) const;
 		IGNITION_API float GetAxis1D(const std::string& name) const;
-		IGNITION_API Float2 GetAxis2D(const std::string& name) const;
+		IGNITION_API glm::vec2 GetAxis2D(const std::string& name) const;
 
 	private:
 		enum class ButtonQuery

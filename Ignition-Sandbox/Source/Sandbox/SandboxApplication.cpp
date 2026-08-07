@@ -9,6 +9,8 @@
 #include "Ignition/Input/Input.h"
 #include "Ignition/Renderer/Renderer.h"
 
+#include <glm/vec2.hpp>
+
 #include <memory>
 #include <utility>
 
@@ -51,11 +53,11 @@ namespace Sandbox
 				}
 			}
 
-			const Ignition::Float2 move = m_Actions->GetAxis2D("Move");
+			const glm::vec2 move = m_Actions->GetAxis2D("Move");
 
-			if (move.X != 0.0f || move.Y != 0.0f)
+			if (move.x != 0.0f || move.y != 0.0f)
 			{
-				IG_APP_TRACE("Move: ({}, {})", move.X, move.Y);
+				IG_APP_TRACE("Move: ({}, {})", move.x, move.y);
 			}
 		}
 

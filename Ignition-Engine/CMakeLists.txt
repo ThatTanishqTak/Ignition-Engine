@@ -44,6 +44,9 @@ target_compile_definitions(Ignition PRIVATE
     VMA_STATIC_VULKAN_FUNCTIONS=1
     VMA_DYNAMIC_VULKAN_FUNCTIONS=0
     VMA_VULKAN_VERSION=1004000
+PUBLIC
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+    GLM_FORCE_RADIANS
 )
 
 target_link_libraries(Ignition PRIVATE
@@ -51,4 +54,6 @@ target_link_libraries(Ignition PRIVATE
     Vulkan::Vulkan
     GPUOpen::VulkanMemoryAllocator
     spdlog::spdlog
+PUBLIC
+    glm::glm
 )

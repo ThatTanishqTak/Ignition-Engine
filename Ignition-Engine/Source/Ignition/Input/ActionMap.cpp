@@ -1,5 +1,7 @@
 #include "Ignition/Input/ActionMap.h"
 
+#include <glm/glm.hpp>
+
 #include <cmath>
 
 namespace Ignition
@@ -266,54 +268,53 @@ namespace Ignition
 		return best;
 	}
 
-	Float2 ActionMap::GetAxis2D(const std::string& name) const
+	glm::vec2 ActionMap::GetAxis2D(const std::string& name) const
 	{
 		if (!m_Enabled || !m_Input)
 		{
-			return {};
+			return glm::vec2(0.0f);
 		}
 
 		const auto it = m_Axes2D.find(name);
 
 		if (it == m_Axes2D.end())
 		{
-			return {};
+			return glm::vec2(0.0f);
 		}
 
-		Float2 best{};
+		glm::vec2 best(0.0f);
 		float bestMagnitudeSquared = 0.0f;
 
 		for (const Axis2DAction::Binding& binding : it->second.m_Bindings)
 		{
-			const Float2 value = std::visit([&](const auto& bound) -> Float2
+			const glm::vec2 value = std::visit([&](const auto& bound) -> glm::vec2
 			{
 				using T = std::decay_t<decltype(bound)>;
 
 				if constexpr (std::is_same_v<T, Axis2DAction::CompositeBinding>)
 				{
-					Float2 composite{};
-					composite.X = (m_Input->IsKeyDown(bound.Right) ? 1.0f : 0.0f) - (m_Input->IsKeyDown(bound.Left) ? 1.0f : 0.0f);
-					composite.Y = (m_Input->IsKeyDown(bound.Up) ? 1.0f : 0.0f) - (m_Input->IsKeyDown(bound.Down) ? 1.0f : 0.0f);
+					glm::vec2 composite(0.0f);
+					composite.x = (m_Input->IsKeyDown(bound.Right) ? 1.0f : 0.0f) - (m_Input->IsKeyDown(bound.Left) ? 1.0f : 0.0f);
+					composite.y = (m_Input->IsKeyDown(bound.Up) ? 1.0f : 0.0f) - (m_Input->IsKeyDown(bound.Down) ? 1.0f : 0.0f);
 
 					// Normalize so diagonals are not faster than cardinals
-					const float length = std::sqrt(composite.X * composite.X + composite.Y * composite.Y);
+					const float length = glm::length(composite);
 
 					if (length > 1.0f)
 					{
-						composite.X /= length;
-						composite.Y /= length;
+						composite /= length;
 					}
 
 					return composite;
 				}
 				else
 				{
-					const auto readStick = [&](GamepadID gamepadID) -> Float2
+					const auto readStick = [&](GamepadID gamepadID) -> glm::vec2
 					{
-						const Float2 stick = m_Input->GetGamepadStick(gamepadID, bound.Stick);
+						const glm::vec2 stick = m_Input->GetGamepadStick(gamepadID, bound.Stick);
 
 						// SDL sticks are Y down-positive; convert to the map's Y up-positive convention
-						return { stick.X, -stick.Y };
+						return { stick.x, -stick.y };
 					};
 
 					if (bound.Gamepad != AnyGamepad)
@@ -321,13 +322,13 @@ namespace Ignition
 						return readStick(bound.Gamepad);
 					}
 
-					Float2 largest{};
+					glm::vec2 largest(0.0f);
 					float largestMagnitudeSquared = 0.0f;
 
 					for (GamepadID gamepadID : m_Input->GetConnectedGamepads())
 					{
-						const Float2 candidate = readStick(gamepadID);
-						const float magnitudeSquared = candidate.X * candidate.X + candidate.Y * candidate.Y;
+						const glm::vec2 candidate = readStick(gamepadID);
+						const float magnitudeSquared = glm::dot(candidate, candidate);
 
 						if (magnitudeSquared > largestMagnitudeSquared)
 						{
@@ -340,7 +341,7 @@ namespace Ignition
 				}
 			}, binding);
 
-			const float magnitudeSquared = value.X * value.X + value.Y * value.Y;
+			const float magnitudeSquared = glm::dot(value, value);
 
 			if (magnitudeSquared > bestMagnitudeSquared)
 			{

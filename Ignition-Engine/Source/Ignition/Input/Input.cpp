@@ -15,13 +15,13 @@
 
 namespace
 {
-	Ignition::Float2 ApplyRadialDeadzone(float x, float y, float deadzone)
+	glm::vec2 ApplyRadialDeadzone(float x, float y, float deadzone)
 	{
 		const float magnitude = std::sqrt(x * x + y * y);
 
 		if (magnitude < deadzone)
 		{
-			return {};
+			return glm::vec2(0.0f);
 		}
 
 		// Remap so output runs continuously from 0 at the deadzone edge to 1 at full deflection
@@ -85,8 +85,8 @@ namespace Ignition
 
 		m_MousePressed.fill(false);
 		m_MouseReleased.fill(false);
-		m_MouseDelta = {};
-		m_MouseWheel = {};
+		m_MouseDelta = glm::vec2(0.0f);
+		m_MouseWheel = glm::vec2(0.0f);
 
 		for (auto& [gamepadID, state] : m_Gamepads)
 		{
@@ -142,16 +142,16 @@ namespace Ignition
 		dispatcher.Dispatch<MouseMovedEvent>([this](MouseMovedEvent& mouseEvent)
 		{
 			m_MousePosition = { mouseEvent.GetX(), mouseEvent.GetY() };
-			m_MouseDelta.X += mouseEvent.GetDeltaX();
-			m_MouseDelta.Y += mouseEvent.GetDeltaY();
+			m_MouseDelta.x += mouseEvent.GetDeltaX();
+			m_MouseDelta.y += mouseEvent.GetDeltaY();
 
 			return false;
 		});
 
 		dispatcher.Dispatch<MouseScrolledEvent>([this](MouseScrolledEvent& mouseEvent)
 		{
-			m_MouseWheel.X += mouseEvent.GetXOffset();
-			m_MouseWheel.Y += mouseEvent.GetYOffset();
+			m_MouseWheel.x += mouseEvent.GetXOffset();
+			m_MouseWheel.y += mouseEvent.GetYOffset();
 
 			return false;
 		});
@@ -307,17 +307,17 @@ namespace Ignition
 		return m_KeyCodesReleased.contains(keyCode);
 	}
 
-	Float2 Input::GetMousePosition() const
+	glm::vec2 Input::GetMousePosition() const
 	{
 		return m_MousePosition;
 	}
 
-	Float2 Input::GetMouseDelta() const
+	glm::vec2 Input::GetMouseDelta() const
 	{
 		return m_MouseDelta;
 	}
 
-	Float2 Input::GetMouseWheel() const
+	glm::vec2 Input::GetMouseWheel() const
 	{
 		return m_MouseWheel;
 	}
@@ -426,10 +426,10 @@ namespace Ignition
 	{
 		switch (axis)
 		{
-			case GamepadAxis::LEFTX: return GetGamepadStick(gamepadID, GamepadStick::Left).X;
-			case GamepadAxis::LEFTY: return GetGamepadStick(gamepadID, GamepadStick::Left).Y;
-			case GamepadAxis::RIGHTX: return GetGamepadStick(gamepadID, GamepadStick::Right).X;
-			case GamepadAxis::RIGHTY: return GetGamepadStick(gamepadID, GamepadStick::Right).Y;
+			case GamepadAxis::LEFTX: return GetGamepadStick(gamepadID, GamepadStick::Left).x;
+			case GamepadAxis::LEFTY: return GetGamepadStick(gamepadID, GamepadStick::Left).y;
+			case GamepadAxis::RIGHTX: return GetGamepadStick(gamepadID, GamepadStick::Right).x;
+			case GamepadAxis::RIGHTY: return GetGamepadStick(gamepadID, GamepadStick::Right).y;
 			case GamepadAxis::LEFT_TRIGGER:
 			case GamepadAxis::RIGHT_TRIGGER: return ApplyThresholdDeadzone(GetGamepadAxisRaw(gamepadID, axis), m_TriggerDeadzone);
 			default: return 0.0f;
@@ -449,13 +449,13 @@ namespace Ignition
 		return state->Axes[index];
 	}
 
-	Float2 Input::GetGamepadStick(GamepadID gamepadID, GamepadStick stick) const
+	glm::vec2 Input::GetGamepadStick(GamepadID gamepadID, GamepadStick stick) const
 	{
 		const GamepadState* state = FindGamepad(gamepadID);
 
 		if (!state)
 		{
-			return {};
+			return glm::vec2(0.0f);
 		}
 
 		const bool left = stick == GamepadStick::Left;

@@ -7,6 +7,8 @@
 #include "Ignition/Events/MouseCodes.h"
 #include "Ignition/Events/ScanCodes.h"
 
+#include <glm/vec2.hpp>
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -20,13 +22,6 @@ namespace Ignition
 {
 	class Event;
 	class Window;
-
-	// Placeholder math type until glm is wired up.
-	struct Float2
-	{
-		float X = 0.0f;
-		float Y = 0.0f;
-	};
 
 	class Input
 	{
@@ -51,9 +46,9 @@ namespace Ignition
 		IGNITION_API bool IsKeyPressed(KeyCode keyCode) const;
 		IGNITION_API bool IsKeyReleased(KeyCode keyCode) const;
 
-		IGNITION_API Float2 GetMousePosition() const;
-		IGNITION_API Float2 GetMouseDelta() const;
-		IGNITION_API Float2 GetMouseWheel() const;
+		IGNITION_API glm::vec2 GetMousePosition() const;
+		IGNITION_API glm::vec2 GetMouseDelta() const;
+		IGNITION_API glm::vec2 GetMouseWheel() const;
 
 		IGNITION_API bool IsMouseButtonDown(MouseCode button) const;
 		IGNITION_API bool IsMouseButtonPressed(MouseCode button) const;
@@ -74,7 +69,7 @@ namespace Ignition
 
 		IGNITION_API float GetGamepadAxis(GamepadID gamepadID, GamepadAxis axis) const;
 		IGNITION_API float GetGamepadAxisRaw(GamepadID gamepadID, GamepadAxis axis) const;
-		IGNITION_API Float2 GetGamepadStick(GamepadID gamepadID, GamepadStick stick) const;
+		IGNITION_API glm::vec2 GetGamepadStick(GamepadID gamepadID, GamepadStick stick) const;
 
 		IGNITION_API bool SetGamepadRumble(GamepadID gamepadID, float lowFrequency, float highFrequency, uint32_t durationMilliseconds);
 
@@ -111,9 +106,9 @@ namespace Ignition
 		std::unordered_set<KeyCode> m_KeyCodesPressed;
 		std::unordered_set<KeyCode> m_KeyCodesReleased;
 
-		Float2 m_MousePosition{};
-		Float2 m_MouseDelta{};
-		Float2 m_MouseWheel{};
+		glm::vec2 m_MousePosition{ 0.0f, 0.0f };
+		glm::vec2 m_MouseDelta{ 0.0f, 0.0f };
+		glm::vec2 m_MouseWheel{ 0.0f, 0.0f };
 
 		std::array<bool, 8> m_MouseDown{};
 		std::array<bool, 8> m_MousePressed{};
