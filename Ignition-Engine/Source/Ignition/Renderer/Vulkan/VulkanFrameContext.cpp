@@ -103,7 +103,10 @@ namespace Ignition
 		commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		commandPoolCreateInfo.queueFamilyIndex = graphicsQueueFamily;
 
-		Utilities::VulkanUtilities::VKCheck(vkCreateCommandPool(m_Device, &commandPoolCreateInfo, nullptr, &m_CommandPool), "Failed vkCreateCommandPool");
+		if (Utilities::VulkanUtilities::VKCheck(vkCreateCommandPool(m_Device, &commandPoolCreateInfo, nullptr, &m_CommandPool), "Failed vkCreateCommandPool"))
+		{
+			return;
+		}
 
 		IG_CORE_TRACE("Command Pool Created");
 	}
@@ -120,7 +123,10 @@ namespace Ignition
 		allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocateInfo.commandBufferCount = MaximumFramesInFlight;
 
-		Utilities::VulkanUtilities::VKCheck(vkAllocateCommandBuffers(m_Device, &allocateInfo, m_CommandBuffers.data()), "Failed vkAllocateCommandBuffers");
+		if (Utilities::VulkanUtilities::VKCheck(vkAllocateCommandBuffers(m_Device, &allocateInfo, m_CommandBuffers.data()), "Failed vkAllocateCommandBuffers"))
+		{
+			return;
+		}
 
 		IG_CORE_TRACE("Allocated {} Command Buffers", MaximumFramesInFlight);
 	}
@@ -141,8 +147,10 @@ namespace Ignition
 
 		for (uint32_t i = 0; i < MaximumFramesInFlight; ++i)
 		{
-			Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphores[i]), "Failed vkCreateSemaphore");
-			Utilities::VulkanUtilities::VKCheck(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_InFlightFences[i]), "Failed vkCreateFence");
+			if (Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphores[i]), "Failed vkCreateSemaphore") || Utilities::VulkanUtilities::VKCheck(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_InFlightFences[i]), "Failed vkCreateFence"))
+			{
+				return;
+			}
 		}
 
 		IG_CORE_TRACE("Created Sync Objects For {} Frames In Flight", MaximumFramesInFlight);

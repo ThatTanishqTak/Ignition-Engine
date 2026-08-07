@@ -127,7 +127,10 @@ namespace Ignition
 		VkDebugUtilsMessengerCreateInfoEXT createInfo{};
 		PopulateCreateInfo(createInfo);
 
-		Utilities::VulkanUtilities::VKCheck(createFunction(m_Instance, &createInfo, nullptr, &m_DebugMessenger), "Failed vkCreateDebugUtilsMessengerEXT");
+		if (Utilities::VulkanUtilities::VKCheck(createFunction(m_Instance, &createInfo, nullptr, &m_DebugMessenger), "Failed vkCreateDebugUtilsMessengerEXT"))
+		{
+			return;
+		}
 
 		IG_CORE_INFO("------- VULKAN DEBUG MESSENGER INITIALIZED -------");
 	}

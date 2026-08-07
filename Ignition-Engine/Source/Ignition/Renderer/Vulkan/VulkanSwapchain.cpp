@@ -158,7 +158,7 @@ namespace Ignition
 		IG_CORE_TRACE("Creating Swapchain");
 
 		VkSurfaceCapabilitiesKHR capabilities{};
-		if (Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_PhysicalDevice, m_Surface, &capabilities), "Failed vkGetPhysicalDeviceSurfaceCapabilitiesKHR") != VK_SUCCESS)
+		if (Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_PhysicalDevice, m_Surface, &capabilities), "Failed vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
 		{
 			DestroySwapchain();
 
@@ -224,11 +224,10 @@ namespace Ignition
 		}
 
 		VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
-		const VkResult createResult = Utilities::VulkanUtilities::VKCheck(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain), "Failed vkCreateSwapchainKHR");
 
 		DestroySwapchain();
 
-		if (createResult != VK_SUCCESS)
+		if (Utilities::VulkanUtilities::VKCheck(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain), "Failed vkCreateSwapchainKHR"))
 		{
 			return;
 		}
@@ -269,7 +268,7 @@ namespace Ignition
 			imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
 			imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-			if (Utilities::VulkanUtilities::VKCheck(vkCreateImageView(m_Device, &imageViewCreateInfo, nullptr, &m_ImageViews[i]), "Failed vkCreateImageView") != VK_SUCCESS)
+			if (Utilities::VulkanUtilities::VKCheck(vkCreateImageView(m_Device, &imageViewCreateInfo, nullptr, &m_ImageViews[i]), "Failed vkCreateImageView"))
 			{
 				DestroyImageViews();
 				DestroySwapchain();
@@ -292,7 +291,7 @@ namespace Ignition
 
 		for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); ++i)
 		{
-			if (Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphores[i]), "Failed vkCreateSemaphore") != VK_SUCCESS)
+			if (Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphores[i]), "Failed vkCreateSemaphore"))
 			{
 				DestroySemaphores();
 				DestroyImageViews();

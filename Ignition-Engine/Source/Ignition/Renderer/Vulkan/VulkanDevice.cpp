@@ -102,16 +102,16 @@ namespace
 
 	bool HasRequiredFeatures(VkPhysicalDevice physicalDevice)
 	{
-		VkPhysicalDeviceVulkan13Features features13{};
-		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features{};
+		physicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 
 		VkPhysicalDeviceFeatures2 features2{};
 		features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		features2.pNext = &features13;
+		features2.pNext = &physicalDeviceVulkan13Features;
 
 		vkGetPhysicalDeviceFeatures2(physicalDevice, &features2);
 
-		return features13.dynamicRendering == VK_TRUE && features13.synchronization2 == VK_TRUE;
+		return physicalDeviceVulkan13Features.dynamicRendering == VK_TRUE && physicalDeviceVulkan13Features.synchronization2 == VK_TRUE;
 	}
 
 	uint32_t ScoreDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
@@ -121,15 +121,15 @@ namespace
 			return 0;
 		}
 
-		VkPhysicalDeviceProperties properties{};
-		vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+		VkPhysicalDeviceProperties physicalDeviceProperties{};
+		vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 
-		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		if (physicalDeviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 		{
 			return 1000;
 		}
 
-		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+		if (physicalDeviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
 		{
 			return 100;
 		}
@@ -196,13 +196,13 @@ namespace Ignition
 		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
 		uint32_t bestScore = 0;
-		for (VkPhysicalDevice l_Device : devices)
+		for (VkPhysicalDevice device : devices)
 		{
-			const uint32_t l_Score = ScoreDevice(l_Device, surface);
-			if (l_Score > bestScore)
+			const uint32_t score = ScoreDevice(device, surface);
+			if (score > bestScore)
 			{
-				bestScore = l_Score;
-				m_PhysicalDevice = l_Device;
+				bestScore = score;
+				m_PhysicalDevice = device;
 			}
 		}
 
@@ -213,10 +213,10 @@ namespace Ignition
 			return;
 		}
 
-		VkPhysicalDeviceProperties properties{};
-		vkGetPhysicalDeviceProperties(m_PhysicalDevice, &properties);
+		VkPhysicalDeviceProperties physicalDeviceProperties{};
+		vkGetPhysicalDeviceProperties(m_PhysicalDevice, &physicalDeviceProperties);
 
-		IG_CORE_TRACE("Selected GPU: {}", properties.deviceName);
+		IG_CORE_TRACE("Selected GPU: {}", physicalDeviceProperties.deviceName);
 
 		const QueueFamilyIndices indices = FindQueueFamilies(m_PhysicalDevice, surface);
 		m_GraphicsQueueFamily = indices.Graphics;
@@ -241,7 +241,7 @@ namespace Ignition
 			return;
 		}
 
-		const float l_QueuePriority = 1.0f;
+		const float queuePriority = 1.0f;
 
 		std::vector<uint32_t> uniqueQueueFamilies;
 		uniqueQueueFamilies.push_back(m_GraphicsQueueFamily);
@@ -258,24 +258,24 @@ namespace Ignition
 			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 			queueCreateInfo.queueFamilyIndex = family;
 			queueCreateInfo.queueCount = 1;
-			queueCreateInfo.pQueuePriorities = &l_QueuePriority;
+			queueCreateInfo.pQueuePriorities = &queuePriority;
 
 			queueCreateInfos.push_back(queueCreateInfo);
 		}
 
-		VkPhysicalDeviceFeatures deviceFeatures{};
+		VkPhysicalDeviceFeatures physicalDeviceFeatures{};
 
-		VkPhysicalDeviceVulkan13Features features13{};
-		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-		features13.dynamicRendering = VK_TRUE;
-		features13.synchronization2 = VK_TRUE;
+		VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features{};
+		physicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		physicalDeviceVulkan13Features.dynamicRendering = VK_TRUE;
+		physicalDeviceVulkan13Features.synchronization2 = VK_TRUE;
 
 		VkDeviceCreateInfo deviceCreateInfo{};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		deviceCreateInfo.pNext = &features13;
+		deviceCreateInfo.pNext = &physicalDeviceVulkan13Features;
 		deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		deviceCreateInfo.pQueueCreateInfos = queueCreateInfos.data();
-		deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
+		deviceCreateInfo.pEnabledFeatures = &physicalDeviceFeatures;
 		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(std::size(s_RequiredDeviceExtensions));
 		deviceCreateInfo.ppEnabledExtensionNames = s_RequiredDeviceExtensions;
 
@@ -284,7 +284,10 @@ namespace Ignition
 			IG_CORE_TRACE("Enabling Device Extension: {}", extension);
 		}
 
-		Utilities::VulkanUtilities::VKCheck(vkCreateDevice(m_PhysicalDevice, &deviceCreateInfo, nullptr, &m_Device), "Failed vkCreateDevice");
+		if (Utilities::VulkanUtilities::VKCheck(vkCreateDevice(m_PhysicalDevice, &deviceCreateInfo, nullptr, &m_Device), "Failed vkCreateDevice"))
+		{
+			return;
+		}
 
 		if (m_Device == VK_NULL_HANDLE)
 		{

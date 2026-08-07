@@ -243,7 +243,7 @@ namespace Ignition
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer") != VK_SUCCESS)
+		if (Utilities::VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer"))
 		{
 			return;
 		}
@@ -301,7 +301,7 @@ namespace Ignition
 
 		TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
 
-		if (Utilities::VulkanUtilities::VKCheck(vkEndCommandBuffer(commandBuffer), "Failed vkEndCommandBuffer") != VK_SUCCESS)
+		if (Utilities::VulkanUtilities::VKCheck(vkEndCommandBuffer(commandBuffer), "Failed vkEndCommandBuffer"))
 		{
 			m_FrameStarted = false;
 
@@ -335,10 +335,9 @@ namespace Ignition
 		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
 		vkResetFences(device, 1, &fence);
 
-		if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, fence), "Failed vkQueueSubmit2") != VK_SUCCESS)
+		if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, fence), "Failed vkQueueSubmit2"))
 		{
 			IG_CORE_CRITICAL("Queue submission failed, the device may be lost");
-			std::abort();
 		}
 
 		const VkSemaphore renderFinished = m_VulkanSwapchain->GetRenderFinishedSemaphore(m_ImageIndex);

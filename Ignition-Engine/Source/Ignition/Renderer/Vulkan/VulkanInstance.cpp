@@ -111,7 +111,7 @@ namespace Ignition
 		instanceCreateInfo.ppEnabledLayerNames = layers.empty() ? nullptr : layers.data();
 		instanceCreateInfo.pNext = m_ValidationEnabled ? &debugCreateInfo : nullptr;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateInstance(&instanceCreateInfo, nullptr, &m_Instance), "Failed vkCreateInstance") != VK_SUCCESS)
+		if (Utilities::VulkanUtilities::VKCheck(vkCreateInstance(&instanceCreateInfo, nullptr, &m_Instance), "Failed vkCreateInstance"))
 		{
 			return;
 		}
