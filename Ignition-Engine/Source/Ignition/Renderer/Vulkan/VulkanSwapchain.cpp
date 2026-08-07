@@ -225,9 +225,10 @@ namespace Ignition
 
 		VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
 
+		const bool createFailed = Utilities::VulkanUtilities::VKCheck(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain), "Failed vkCreateSwapchainKHR");
 		DestroySwapchain();
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain), "Failed vkCreateSwapchainKHR"))
+		if (createFailed)
 		{
 			return;
 		}
