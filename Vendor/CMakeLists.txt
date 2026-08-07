@@ -21,8 +21,12 @@ set(SDL_DISABLE_UNINSTALL ON)
 add_subdirectory(SDL SYSTEM EXCLUDE_FROM_ALL)
 # --------------
 
+# VulkanMemoryAllocator
+add_subdirectory(VulkanMemoryAllocator SYSTEM EXCLUDE_FROM_ALL)
+# --------------
+
 # spdlog -------
-set(SPDLOG_BUILD_SHARED OFF)
+set(SPDLOG_BUILD_SHARED ON)
 set(SPDLOG_BUILD_EXAMPLE OFF)
 set(SPDLOG_BUILD_EXAMPLE_HO OFF)
 set(SPDLOG_BUILD_TESTS OFF)
@@ -32,4 +36,10 @@ set(SPDLOG_INSTALL OFF)
 set(SPDLOG_USE_STD_FORMAT ON)
 
 add_subdirectory(spdlog SYSTEM EXCLUDE_FROM_ALL)
+
+# spdlog.dll must sit next to Sandbox.exe
+set_target_properties(spdlog PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${BASE_OUTPUT_DIRECTORY}"
+    LIBRARY_OUTPUT_DIRECTORY "${BASE_OUTPUT_DIRECTORY}"
+)
 #--------------

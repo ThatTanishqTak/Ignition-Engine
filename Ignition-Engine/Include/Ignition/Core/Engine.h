@@ -8,6 +8,7 @@ namespace Ignition
 {
 	class Event;
 	class Window;
+	class Renderer;
 
 	class Engine
 	{
@@ -21,7 +22,8 @@ namespace Ignition
 		void Initialize(const char* title, int width, int height);
 		void Shutdown();
 
-		void Update();
+		void PollEvents();
+		void Render();
 
 		void OnEvent(Event& event);
 
@@ -31,6 +33,7 @@ namespace Ignition
 
 	private:
 		std::unique_ptr<Window> m_Window;
+		std::unique_ptr<Renderer> m_Renderer;
 		EventQueue m_EventQueue;
 	};
 }

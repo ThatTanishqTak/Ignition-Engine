@@ -5,6 +5,9 @@ project(Ignition)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+set(SDL_FORCE_STATIC_VCRT OFF)
+
 set(ARCH_NAME ${CMAKE_SYSTEM_PROCESSOR})
 if(ARCH_NAME MATCHES "AMD64|amd64|x86_64")
     set(ARCH_NAME "x86_64")
@@ -23,4 +26,4 @@ add_subdirectory(Vendor)
 add_subdirectory(Ignition-Engine)
 add_subdirectory(Ignition-Sandbox)
 
-set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT Sandbox)
+set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT Ignition-Sandbox)

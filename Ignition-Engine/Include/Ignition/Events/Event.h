@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Ignition/Core/Export.h"
 #include "Ignition/Events/GamepadCodes.h"
 #include "Ignition/Events/KeyCodes.h"
 #include "Ignition/Events/MouseCodes.h"
@@ -16,7 +15,6 @@ namespace Ignition
 
 		WindowClose,
 		WindowResize,
-		WindowPixelSizeChanged,
 		WindowDisplayScaleChanged,
 		WindowDisplayChanged,
 		WindowMoved,
@@ -65,7 +63,7 @@ namespace Ignition
 		EventCategoryGamepad = 1 << 5
 	};
 
-	class IGNITION_API Event
+	class Event
 	{
 	public:
 		virtual ~Event() = default;
@@ -76,7 +74,7 @@ namespace Ignition
 
 		bool IsInCategory(EventCategory category) const { return (GetCategoryFlags() & category) != 0; }
 
-		bool Handled = false;
+		bool m_Handled = false;
 	};
 
 	class EventDispatcher
@@ -92,7 +90,7 @@ namespace Ignition
 				return false;
 			}
 
-			m_Event.Handled = m_Event.Handled || function(static_cast<T&>(m_Event));
+			m_Event.m_Handled = m_Event.m_Handled || function(static_cast<T&>(m_Event));
 
 			return true;
 		}

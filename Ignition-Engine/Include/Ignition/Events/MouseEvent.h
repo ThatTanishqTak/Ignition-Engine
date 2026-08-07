@@ -4,7 +4,7 @@
 
 namespace Ignition
 {
-	class IGNITION_API MouseMovedEvent : public Event
+	class MouseMovedEvent : public Event
 	{
 	public:
 		MouseMovedEvent(float x, float y) : m_X(x), m_Y(y) {}
@@ -20,7 +20,7 @@ namespace Ignition
 		float m_Y = 0.0f;
 	};
 
-	class IGNITION_API MouseScrolledEvent : public Event
+	class MouseScrolledEvent : public Event
 	{
 	public:
 		MouseScrolledEvent(float xOffset, float yOffset) : m_XOffset(xOffset), m_YOffset(yOffset) {}
@@ -36,7 +36,7 @@ namespace Ignition
 		float m_YOffset = 0.0f;
 	};
 
-	class IGNITION_API MouseButtonEvent : public Event
+	class MouseButtonEvent : public Event
 	{
 	public:
 		MouseCode GetMouseButton() const { return m_Button; }
@@ -49,7 +49,7 @@ namespace Ignition
 		MouseCode m_Button = MouseCode::UNKNOWN;
 	};
 
-	class IGNITION_API MouseButtonPressedEvent : public MouseButtonEvent
+	class MouseButtonPressedEvent : public MouseButtonEvent
 	{
 	public:
 		explicit MouseButtonPressedEvent(MouseCode button) : MouseButtonEvent(button) {}
@@ -57,7 +57,7 @@ namespace Ignition
 		IGNITION_EVENT_CLASS_TYPE(MouseButtonPressed)
 	};
 
-	class IGNITION_API MouseButtonReleasedEvent : public MouseButtonEvent
+	class MouseButtonReleasedEvent : public MouseButtonEvent
 	{
 	public:
 		explicit MouseButtonReleasedEvent(MouseCode button) : MouseButtonEvent(button) {}

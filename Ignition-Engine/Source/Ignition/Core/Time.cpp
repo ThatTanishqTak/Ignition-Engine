@@ -61,8 +61,6 @@ namespace Ignition
 		g_SampleFrames = 0;
 		g_FramesPerSecond = 0.0f;
 		g_AverageFrameTime = 0.0f;
-
-		CORE_TRACE("Time initialized");
 	}
 
 	void Time::Update()
@@ -134,7 +132,7 @@ namespace Ignition
 	{
 		if (timeScale < 0.0f)
 		{
-			CORE_WARN("Negative time scale requested ({}), clamping to zero", timeScale);
+			IG_CORE_WARN("Negative time scale requested ({}), clamping to zero", timeScale);
 			timeScale = 0.0f;
 		}
 
@@ -150,7 +148,7 @@ namespace Ignition
 	{
 		if (maximumDeltaTime <= 0.0f)
 		{
-			CORE_WARN("Invalid maximum delta time ({}), ignoring", maximumDeltaTime);
+			IG_CORE_WARN("Invalid maximum delta time ({}), ignoring", maximumDeltaTime);
 
 			return;
 		}
@@ -167,7 +165,7 @@ namespace Ignition
 	{
 		if (fixedTimeStep <= 0.0f)
 		{
-			CORE_WARN("Invalid fixed time step ({}), ignoring", fixedTimeStep);
+			IG_CORE_WARN("Invalid fixed time step ({}), ignoring", fixedTimeStep);
 
 			return;
 		}
@@ -184,7 +182,7 @@ namespace Ignition
 
 		if (g_FixedStepsThisFrame >= c_MaximumFixedStepsPerFrame)
 		{
-			CORE_WARN("Fixed step budget exhausted, discarding {} seconds of accumulated time", g_FixedAccumulator);
+			IG_CORE_WARN("Fixed step budget exhausted, discarding {} seconds of accumulated time", g_FixedAccumulator);
 			g_FixedAccumulator = 0.0f;
 
 			return false;

@@ -1,13 +1,11 @@
 #pragma once
 
-#include "Ignition/Events/Event.h"
-
 #include <string>
 #include <utility>
 
 namespace Ignition
 {
-	class IGNITION_API TextInputEvent : public Event
+	class TextInputEvent : public Event
 	{
 	public:
 		explicit TextInputEvent(std::string text) : m_Text(std::move(text)) {}
@@ -21,7 +19,7 @@ namespace Ignition
 		std::string m_Text;
 	};
 
-	class IGNITION_API KeyEvent : public Event
+	class KeyEvent : public Event
 	{
 	public:
 		KeyCode GetKeyCode() const { return m_KeyCode; }
@@ -36,7 +34,7 @@ namespace Ignition
 		ScanCode m_ScanCode = ScanCode::UNKNOWN;
 	};
 
-	class IGNITION_API KeyPressedEvent : public KeyEvent
+	class KeyPressedEvent : public KeyEvent
 	{
 	public:
 		KeyPressedEvent(KeyCode keyCode, ScanCode scanCode, bool isRepeat) : KeyEvent(keyCode, scanCode), m_IsRepeat(isRepeat) {}
@@ -49,7 +47,7 @@ namespace Ignition
 		bool m_IsRepeat = false;
 	};
 
-	class IGNITION_API KeyReleasedEvent : public KeyEvent
+	class KeyReleasedEvent : public KeyEvent
 	{
 	public:
 		KeyReleasedEvent(KeyCode keyCode, ScanCode scanCode) : KeyEvent(keyCode, scanCode) {}

@@ -18,19 +18,19 @@ namespace Ignition
 
 	void Application::Initialize()
 	{
-		CORE_INFO("------- INITIALIZING APPLICATION -------");
+		IG_CORE_INFO("------- INITIALIZING APPLICATION -------");
 
 		m_Engine = std::make_unique<Engine>();
 		m_Engine->Initialize(m_Specification.Title, m_Specification.Width, m_Specification.Height);
 
 		OnInitialize();
 
-		CORE_INFO("------- APPLICATION INITIALIZED -------");
+		IG_CORE_INFO("------- APPLICATION INITIALIZED -------");
 	}
 
 	void Application::Shutdown()
 	{
-		CORE_INFO("------- SHUTTING DOWN APPLICATION -------");
+		IG_CORE_INFO("------- SHUTTING DOWN APPLICATION -------");
 
 		OnShutdown();
 
@@ -40,14 +40,14 @@ namespace Ignition
 			m_Engine.reset();
 		}
 
-		CORE_INFO("------- APPLICATION SHUTDOWN COMPLETE -------");
+		IG_CORE_INFO("------- APPLICATION SHUTDOWN COMPLETE -------");
 	}
 
 	void Application::Run()
 	{
 		if (!m_Engine)
 		{
-			CORE_CRITICAL("Application::Run called before Initialize");
+			IG_CORE_CRITICAL("Application::Run called before Initialize");
 
 			return;
 		}
@@ -56,13 +56,13 @@ namespace Ignition
 		{
 			Time::Update();
 
-			m_Engine->Update();
+			m_Engine->PollEvents();
 
 			for (auto& queuedEvent : m_Engine->GetEventQueue())
 			{
 				m_Engine->OnEvent(*queuedEvent);
 
-				if (!queuedEvent->Handled)
+				if (!queuedEvent->m_Handled)
 				{
 					OnEvent(*queuedEvent);
 				}
@@ -76,6 +76,13 @@ namespace Ignition
 			}
 
 			OnUpdate(Time::GetDeltaTime());
+
+			if (!m_Engine->IsRunning())
+			{
+				break;
+			}
+
+			m_Engine->Render();
 		}
 	}
 }

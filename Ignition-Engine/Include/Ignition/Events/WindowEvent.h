@@ -18,33 +18,17 @@ namespace Ignition
 	class IGNITION_API WindowResizeEvent : public Event
 	{
 	public:
-		WindowResizeEvent(int width, int height) : m_Width(width), m_Height(height) {}
+		WindowResizeEvent(int pixelWidth, int pixelHeight) : m_PixelWidth(pixelWidth), m_PixelHeight(pixelHeight) {}
 
-		int GetWidth() const { return m_Width; }
-		int GetHeight() const { return m_Height; }
+		int GetPixelWidth() const { return m_PixelWidth; }
+		int GetPixelHeight() const { return m_PixelHeight; }
 
 		IGNITION_EVENT_CLASS_TYPE(WindowResize)
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
 
 	private:
-		int m_Width = 0;
-		int m_Height = 0;
-	};
-
-	class IGNITION_API WindowPixelSizeChangedEvent : public Event
-	{
-	public:
-		WindowPixelSizeChangedEvent(int width, int height) : m_Width(width), m_Height(height) {}
-
-		int GetWidth() const { return m_Width; }
-		int GetHeight() const { return m_Height; }
-
-		IGNITION_EVENT_CLASS_TYPE(WindowPixelSizeChanged)
-			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryApplication)
-
-	private:
-		int m_Width = 0;
-		int m_Height = 0;
+		int m_PixelWidth = 0;
+		int m_PixelHeight = 0;
 	};
 
 	class IGNITION_API WindowDisplayScaleChangedEvent : public Event

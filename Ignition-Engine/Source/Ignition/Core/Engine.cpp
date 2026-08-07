@@ -1,8 +1,10 @@
 #include "Ignition/Core/Engine.h"
 
 #include "Ignition/Core/Log.h"
+#include "Ignition/Events/Event.h"
 #include "Ignition/Events/WindowEvent.h"
 #include "Ignition/Window/Window.h"
+#include "Ignition/Renderer/Renderer.h"
 
 namespace Ignition
 {
@@ -11,17 +13,26 @@ namespace Ignition
 
 	void Engine::Initialize(const char* title, int width, int height)
 	{
-		CORE_INFO("------- INITIALIZING IGNITION -------");
+		IG_CORE_INFO("------- INITIALIZING IGNITION -------");
 
 		m_Window = std::make_unique<Window>();
 		m_Window->Initialize(title, width, height);
 
-		CORE_INFO("------- IGNITION INITIALIZED -------");
+		m_Renderer = std::make_unique<Renderer>();
+		m_Renderer->Initialize(m_Window->GetNativeWindow());
+
+		IG_CORE_INFO("------- IGNITION INITIALIZED -------");
 	}
 
 	void Engine::Shutdown()
 	{
-		CORE_INFO("------- IGNITION SHUTTING DOWN -------");
+		IG_CORE_INFO("------- SHUTTING DOWN IGNITION -------");
+
+		if (m_Renderer)
+		{
+			m_Renderer->Shutdown();
+			m_Renderer.reset();
+		}
 
 		if (m_Window)
 		{
@@ -29,10 +40,10 @@ namespace Ignition
 			m_Window.reset();
 		}
 
-		CORE_INFO("------- IGNITION SHUTDOWN COMPLETE -------");
+		IG_CORE_INFO("------- IGNITION SHUTDOWN COMPLETE -------");
 	}
 
-	void Engine::Update()
+	void Engine::PollEvents()
 	{
 		if (m_Window)
 		{
@@ -40,13 +51,26 @@ namespace Ignition
 		}
 	}
 
+	void Engine::Render()
+	{
+		if (m_Renderer)
+		{
+			m_Renderer->DrawFrame(0.01f, 0.01f, 0.01f);
+		}
+	}
+
 	void Engine::OnEvent(Event& event)
 	{
 		EventDispatcher dispatcher(event);
 
-		dispatcher.Dispatch<WindowResizeEvent>([](WindowResizeEvent& resizeEvent)
+		dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& resizeEvent)
 		{
-			CORE_TRACE("Window resized to {}x{}", resizeEvent.GetWidth(), resizeEvent.GetHeight());
+			IG_CORE_TRACE("Window Resized To: {}x{} pixels", resizeEvent.GetPixelWidth(), resizeEvent.GetPixelHeight());
+
+			if (m_Renderer)
+			{
+				m_Renderer->OnResize();
+			}
 
 			return false;
 		});

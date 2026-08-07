@@ -6,7 +6,7 @@ namespace Ignition
 {
 	using GamepadID = uint32_t;
 
-	class IGNITION_API GamepadEvent : public Event
+	class GamepadEvent : public Event
 	{
 	public:
 		GamepadID GetGamepadID() const { return m_GamepadID; }
@@ -19,7 +19,7 @@ namespace Ignition
 		GamepadID m_GamepadID = 0;
 	};
 
-	class IGNITION_API GamepadConnectedEvent : public GamepadEvent
+	class GamepadConnectedEvent : public GamepadEvent
 	{
 	public:
 		explicit GamepadConnectedEvent(GamepadID gamepadID) : GamepadEvent(gamepadID) {}
@@ -27,7 +27,7 @@ namespace Ignition
 		IGNITION_EVENT_CLASS_TYPE(GamepadConnected)
 	};
 
-	class IGNITION_API GamepadDisconnectedEvent : public GamepadEvent
+	class GamepadDisconnectedEvent : public GamepadEvent
 	{
 	public:
 		explicit GamepadDisconnectedEvent(GamepadID gamepadID) : GamepadEvent(gamepadID) {}
@@ -35,7 +35,7 @@ namespace Ignition
 		IGNITION_EVENT_CLASS_TYPE(GamepadDisconnected)
 	};
 
-	class IGNITION_API GamepadRemappedEvent : public GamepadEvent
+	class GamepadRemappedEvent : public GamepadEvent
 	{
 	public:
 		explicit GamepadRemappedEvent(GamepadID gamepadID) : GamepadEvent(gamepadID) {}
@@ -43,7 +43,7 @@ namespace Ignition
 		IGNITION_EVENT_CLASS_TYPE(GamepadRemapped)
 	};
 
-	class IGNITION_API GamepadButtonEvent : public GamepadEvent
+	class GamepadButtonEvent : public GamepadEvent
 	{
 	public:
 		GamepadButton GetButton() const { return m_Button; }
@@ -54,7 +54,7 @@ namespace Ignition
 		GamepadButton m_Button = GamepadButton::INVALID;
 	};
 
-	class IGNITION_API GamepadButtonPressedEvent : public GamepadButtonEvent
+	class GamepadButtonPressedEvent : public GamepadButtonEvent
 	{
 	public:
 		GamepadButtonPressedEvent(GamepadID gamepadID, GamepadButton button) : GamepadButtonEvent(gamepadID, button) {}
@@ -62,7 +62,7 @@ namespace Ignition
 		IGNITION_EVENT_CLASS_TYPE(GamepadButtonPressed)
 	};
 
-	class IGNITION_API GamepadButtonReleasedEvent : public GamepadButtonEvent
+	class GamepadButtonReleasedEvent : public GamepadButtonEvent
 	{
 	public:
 		GamepadButtonReleasedEvent(GamepadID gamepadID, GamepadButton button) : GamepadButtonEvent(gamepadID, button) {}
@@ -70,7 +70,7 @@ namespace Ignition
 		IGNITION_EVENT_CLASS_TYPE(GamepadButtonReleased)
 	};
 
-	class IGNITION_API GamepadAxisMovedEvent : public GamepadEvent
+	class GamepadAxisMovedEvent : public GamepadEvent
 	{
 	public:
 		GamepadAxisMovedEvent(GamepadID gamepadID, GamepadAxis axis, float value, int16_t rawValue) : GamepadEvent(gamepadID), m_Axis(axis), m_Value(value), m_RawValue(rawValue)

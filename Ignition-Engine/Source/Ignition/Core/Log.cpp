@@ -29,4 +29,14 @@ namespace Ignition
         s_CoreLogger.reset();
         spdlog::drop_all();
     }
+
+    spdlog::logger* Log::GetCoreLogger()
+    {
+        return s_CoreLogger.get();
+    }
+
+    spdlog::logger* Log::GetClientLogger()
+    {
+        return s_ClientLogger.get();
+    }
 }

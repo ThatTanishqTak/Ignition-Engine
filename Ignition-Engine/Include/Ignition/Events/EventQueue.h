@@ -19,7 +19,7 @@ namespace Ignition
 		{
 			if (m_Events.size() >= c_MaximumQueuedEvents)
 			{
-				CORE_WARN("Event queue full ({} events), dropping event", c_MaximumQueuedEvents);
+				IG_CORE_WARN("Event queue full ({} events), dropping event", c_MaximumQueuedEvents);
 
 				return;
 			}

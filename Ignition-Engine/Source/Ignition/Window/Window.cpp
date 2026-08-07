@@ -39,11 +39,11 @@ namespace Ignition
 
 	void Window::Initialize(const char* title, int width, int height)
 	{
-		CORE_TRACE("Initializing Window");
+		IG_CORE_TRACE("Initializing Window");
 
 		if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD))
 		{
-			CORE_CRITICAL("Failed to initialize SDL: {}", SDL_GetError());
+			IG_CORE_CRITICAL("Failed to initialize SDL: {}", SDL_GetError());
 
 			return;
 		}
@@ -51,7 +51,7 @@ namespace Ignition
 		m_SDLWindow = SDL_CreateWindow(title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 		if (!m_SDLWindow)
 		{
-			CORE_CRITICAL("Failed to create SDL window: {}", SDL_GetError());
+			IG_CORE_CRITICAL("Failed to create SDL window: {}", SDL_GetError());
 			SDL_Quit();
 
 			return;
@@ -59,24 +59,28 @@ namespace Ignition
 
 		m_IsOpen = true;
 
-		CORE_TRACE("Window Initialized");
+		IG_CORE_TRACE("Window Initialized");
 	}
 
 	void Window::Shutdown()
 	{
-		CORE_TRACE("Shutting Down Window");
+		IG_CORE_TRACE("Shutting Down Window");
 
 		if (m_SDLWindow)
 		{
 			SDL_DestroyWindow(m_SDLWindow);
 			m_SDLWindow = nullptr;
+		}
 
+		if (m_SDLInitialized)
+		{
 			SDL_Quit();
+			m_SDLInitialized = false;
 		}
 
 		m_IsOpen = false;
 
-		CORE_TRACE("Window Shutdown Complete");
+		IG_CORE_TRACE("Window Shutdown Complete");
 	}
 
 	void Window::PollEvents(EventQueue& eventQueue)
@@ -100,12 +104,8 @@ namespace Ignition
 					}
 					break;
 
-				case SDL_EVENT_WINDOW_RESIZED:
-					eventQueue.Push<WindowResizeEvent>(event.window.data1, event.window.data2);
-					break;
-
 				case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-					eventQueue.Push<WindowPixelSizeChangedEvent>(event.window.data1, event.window.data2);
+					eventQueue.Push<WindowResizeEvent>(event.window.data1, event.window.data2);
 					break;
 
 				case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
@@ -196,12 +196,12 @@ namespace Ignition
 				case SDL_EVENT_GAMEPAD_ADDED:
 					if (SDL_OpenGamepad(event.gdevice.which))
 					{
-						CORE_INFO("Gamepad connected (id {})", event.gdevice.which);
+						IG_CORE_INFO("Gamepad connected (id {})", event.gdevice.which);
 						eventQueue.Push<GamepadConnectedEvent>(event.gdevice.which);
 					}
 					else
 					{
-						CORE_WARN("Failed to open gamepad {}: {}", event.gdevice.which, SDL_GetError());
+						IG_CORE_WARN("Failed to open gamepad {}: {}", event.gdevice.which, SDL_GetError());
 					}
 					break;
 
@@ -213,7 +213,7 @@ namespace Ignition
 						SDL_CloseGamepad(gamepad);
 					}
 
-					CORE_INFO("Gamepad disconnected (id {})", event.gdevice.which);
+					IG_CORE_INFO("Gamepad disconnected (id {})", event.gdevice.which);
 					eventQueue.Push<GamepadDisconnectedEvent>(event.gdevice.which);
 					break;
 				}

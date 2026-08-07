@@ -36,6 +36,7 @@ namespace Ignition
 
 	private:
 		SDL_Window* m_SDLWindow = nullptr;
+		bool m_SDLInitialized = false;
 		bool m_IsOpen = false;
 	};
 }

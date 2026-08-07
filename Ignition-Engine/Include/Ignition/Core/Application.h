@@ -16,19 +16,19 @@ namespace Ignition
 	class Engine;
 	class Event;
 
-	class IGNITION_API Application
+	class Application
 	{
 	public:
-		Application();
-		explicit Application(const ApplicationSpecification& specification);
-		virtual ~Application();
+		IGNITION_API Application();
+		IGNITION_API explicit Application(const ApplicationSpecification& specification);
+		IGNITION_API virtual ~Application();
 
 		Application(const Application&) = delete;
 		Application& operator=(const Application&) = delete;
 
-		void Initialize();
-		void Shutdown();
-		void Run();
+		IGNITION_API void Initialize();
+		IGNITION_API void Shutdown();
+		IGNITION_API void Run();
 
 	protected:
 		virtual void OnInitialize() {}

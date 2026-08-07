@@ -1,10 +1,10 @@
-#include <Ignition/Core/Application.h>
-#include <Ignition/Core/EntryPoint.h>
-#include <Ignition/Core/Log.h>
-#include <Ignition/Events/Event.h>
-#include <Ignition/Events/KeyEvent.h>
-#include <Ignition/Events/MouseEvent.h>
-#include <Ignition/Events/WindowEvent.h>
+#include "Ignition/Core/Application.h"
+#include "Ignition/Core/EntryPoint.h"
+#include "Ignition/Core/Log.h"
+#include "Ignition/Events/Event.h"
+#include "Ignition/Events/KeyEvent.h"
+#include "Ignition/Events/MouseEvent.h"
+#include "Ignition/Events/WindowEvent.h"
 
 #include <utility>
 
@@ -21,19 +21,21 @@ namespace Sandbox
 	protected:
 		void OnInitialize() override
 		{
-			APP_INFO("------- INITIALIZING SANDBOX -------");
+			IG_APP_INFO("------- INITIALIZING SANDBOX -------");
 
-			APP_INFO("------- SANDBOX INITIALIZED -------");
+			IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 		}
 
 		void OnUpdate(float deltaTime) override
 		{
-			//APP_TRACE("DeltaTime: {}", deltaTime);
+			(void)deltaTime;
+			//IG_APP_TRACE("DeltaTime: {}", deltaTime);
 		}
 
 		void OnFixedUpdate(float fixedTimeStep) override
 		{
-			//APP_TRACE("FixedTimestep: {}", fixedTimeStep);
+			(void)fixedTimeStep;
+			//IG_APP_TRACE("FixedTimestep: {}", fixedTimeStep);
 		}
 
 		void OnEvent(Ignition::Event& event) override
@@ -42,7 +44,7 @@ namespace Sandbox
 
 			dispatcher.Dispatch<Ignition::KeyPressedEvent>([](Ignition::KeyPressedEvent& keyEvent)
 			{
-				APP_TRACE("Key pressed: {} (scancode {})", std::to_underlying(keyEvent.GetKeyCode()), std::to_underlying(keyEvent.GetScanCode()));
+				IG_APP_TRACE("Key pressed: {} (scancode {})", std::to_underlying(keyEvent.GetKeyCode()), std::to_underlying(keyEvent.GetScanCode()));
 
 				return false;
 			});
@@ -50,9 +52,9 @@ namespace Sandbox
 
 		void OnShutdown() override
 		{
-			APP_INFO("------- SHUTTING DOWN SANDBOX -------");
+			IG_APP_INFO("------- SHUTTING DOWN SANDBOX -------");
 
-			APP_INFO("------- SANDBOX SHUTDOWN COMPLETE -------");
+			IG_APP_INFO("------- SANDBOX SHUTDOWN COMPLETE -------");
 		}
 
 	private:

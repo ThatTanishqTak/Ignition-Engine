@@ -13,7 +13,7 @@ int main(int argc, char** argv)
 
 	if (!application)
 	{
-		CORE_CRITICAL("CreateApplication returned null");
+		IG_CORE_CRITICAL("CreateApplication returned null");
 		Ignition::Log::Shutdown();
 
 		return 1;

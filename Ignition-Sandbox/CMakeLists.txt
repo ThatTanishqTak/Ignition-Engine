@@ -21,6 +21,12 @@ target_include_directories(Sandbox PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Include"
 )
 
+if(MSVC)
+    target_compile_options(Sandbox PRIVATE /W4 /permissive- /Zc:__cplusplus /MP)
+else()
+    target_compile_options(Sandbox PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 target_link_libraries(Sandbox PRIVATE Ignition)
 
 set_target_properties(Sandbox PROPERTIES
