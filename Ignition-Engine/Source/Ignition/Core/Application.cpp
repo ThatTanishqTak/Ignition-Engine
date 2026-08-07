@@ -23,6 +23,14 @@ namespace Ignition
 		m_Engine = std::make_unique<Engine>();
 		m_Engine->Initialize(m_Specification.Title, m_Specification.Width, m_Specification.Height);
 
+		if (!m_Engine->IsRunning())
+		{
+			IG_CORE_CRITICAL("Application initialization failed, the application will not run");
+			m_Engine.reset();
+
+			return;
+		}
+
 		OnInitialize();
 
 		IG_CORE_INFO("------- APPLICATION INITIALIZED -------");
@@ -58,7 +66,9 @@ namespace Ignition
 
 			m_Engine->PollEvents();
 
-			for (auto& queuedEvent : m_Engine->GetEventQueue())
+			const auto queuedEvents = m_Engine->GetEventQueue().Take();
+
+			for (const auto& queuedEvent : queuedEvents)
 			{
 				m_Engine->OnEvent(*queuedEvent);
 
@@ -67,8 +77,6 @@ namespace Ignition
 					OnEvent(*queuedEvent);
 				}
 			}
-
-			m_Engine->GetEventQueue().Clear();
 
 			while (Time::NextFixedStep())
 			{

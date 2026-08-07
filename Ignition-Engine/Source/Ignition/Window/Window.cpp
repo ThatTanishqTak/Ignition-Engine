@@ -15,9 +15,10 @@ namespace Ignition
 	Window::Window() = default;
 	Window::~Window() = default;
 
-	Window::Window(Window&& other) noexcept : m_SDLWindow(other.m_SDLWindow), m_IsOpen(other.m_IsOpen)
+	Window::Window(Window&& other) noexcept : m_SDLWindow(other.m_SDLWindow), m_SDLInitialized(other.m_SDLInitialized), m_IsOpen(other.m_IsOpen)
 	{
 		other.m_SDLWindow = nullptr;
+		other.m_SDLInitialized = false;
 		other.m_IsOpen = false;
 	}
 
@@ -28,9 +29,11 @@ namespace Ignition
 			Shutdown();
 
 			m_SDLWindow = other.m_SDLWindow;
+			m_SDLInitialized = other.m_SDLInitialized;
 			m_IsOpen = other.m_IsOpen;
 
 			other.m_SDLWindow = nullptr;
+			other.m_SDLInitialized = false;
 			other.m_IsOpen = false;
 		}
 
@@ -48,11 +51,13 @@ namespace Ignition
 			return;
 		}
 
+		m_SDLInitialized = true;
 		m_SDLWindow = SDL_CreateWindow(title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 		if (!m_SDLWindow)
 		{
 			IG_CORE_CRITICAL("Failed to create SDL window: {}", SDL_GetError());
 			SDL_Quit();
+			m_SDLInitialized = false;
 
 			return;
 		}

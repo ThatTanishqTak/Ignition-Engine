@@ -22,10 +22,34 @@ namespace Ignition
 		m_Device = device;
 
 		CreateCommandPool(graphicsQueueFamily);
+
+		if (m_CommandPool == VK_NULL_HANDLE)
+		{
+			return;
+		}
+
 		AllocateCommandBuffers();
 		CreateSyncObjects();
 
 		IG_CORE_INFO("------- VULKAN FRAME CONTEXT INITIALIZED -------");
+	}
+
+	bool VulkanFrameContext::IsValid() const
+	{
+		if (m_CommandPool == VK_NULL_HANDLE || m_CommandBuffers.size() != MaximumFramesInFlight || m_ImageAvailableSemaphores.size() != MaximumFramesInFlight || m_InFlightFences.size() != MaximumFramesInFlight)
+		{
+			return false;
+		}
+
+		for (uint32_t i = 0; i < MaximumFramesInFlight; ++i)
+		{
+			if (m_CommandBuffers[i] == VK_NULL_HANDLE || m_ImageAvailableSemaphores[i] == VK_NULL_HANDLE || m_InFlightFences[i] == VK_NULL_HANDLE)
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	void VulkanFrameContext::Shutdown()
@@ -74,12 +98,12 @@ namespace Ignition
 	{
 		IG_CORE_TRACE("Creating Command Pool");
 
-		VkCommandPoolCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		createInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		createInfo.queueFamilyIndex = graphicsQueueFamily;
+		VkCommandPoolCreateInfo commandPoolCreateInfo{};
+		commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		commandPoolCreateInfo.queueFamilyIndex = graphicsQueueFamily;
 
-		Utilities::VulkanUtilities::VKCheck(vkCreateCommandPool(m_Device, &createInfo, nullptr, &m_CommandPool), "Failed vkCreateCommandPool");
+		Utilities::VulkanUtilities::VKCheck(vkCreateCommandPool(m_Device, &commandPoolCreateInfo, nullptr, &m_CommandPool), "Failed vkCreateCommandPool");
 
 		IG_CORE_TRACE("Command Pool Created");
 	}
@@ -88,25 +112,25 @@ namespace Ignition
 	{
 		IG_CORE_TRACE("Allocating Command Buffers");
 
-		m_CommandBuffers.resize(c_MaximumFramesInFlight, VK_NULL_HANDLE);
+		m_CommandBuffers.resize(MaximumFramesInFlight, VK_NULL_HANDLE);
 
 		VkCommandBufferAllocateInfo allocateInfo{};
 		allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocateInfo.commandPool = m_CommandPool;
 		allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocateInfo.commandBufferCount = c_MaximumFramesInFlight;
+		allocateInfo.commandBufferCount = MaximumFramesInFlight;
 
 		Utilities::VulkanUtilities::VKCheck(vkAllocateCommandBuffers(m_Device, &allocateInfo, m_CommandBuffers.data()), "Failed vkAllocateCommandBuffers");
 
-		IG_CORE_TRACE("Allocated {} Command Buffers", c_MaximumFramesInFlight);
+		IG_CORE_TRACE("Allocated {} Command Buffers", MaximumFramesInFlight);
 	}
 
 	void VulkanFrameContext::CreateSyncObjects()
 	{
 		IG_CORE_TRACE("Creating Sync Objects");
 
-		m_ImageAvailableSemaphores.resize(c_MaximumFramesInFlight, VK_NULL_HANDLE);
-		m_InFlightFences.resize(c_MaximumFramesInFlight, VK_NULL_HANDLE);
+		m_ImageAvailableSemaphores.resize(MaximumFramesInFlight, VK_NULL_HANDLE);
+		m_InFlightFences.resize(MaximumFramesInFlight, VK_NULL_HANDLE);
 
 		VkSemaphoreCreateInfo semaphoreCreateInfo{};
 		semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -115,12 +139,12 @@ namespace Ignition
 		fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-		for (uint32_t i = 0; i < c_MaximumFramesInFlight; ++i)
+		for (uint32_t i = 0; i < MaximumFramesInFlight; ++i)
 		{
 			Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphores[i]), "Failed vkCreateSemaphore");
 			Utilities::VulkanUtilities::VKCheck(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_InFlightFences[i]), "Failed vkCreateFence");
 		}
 
-		IG_CORE_TRACE("Created Sync Objects For {} Frames In Flight", c_MaximumFramesInFlight);
+		IG_CORE_TRACE("Created Sync Objects For {} Frames In Flight", MaximumFramesInFlight);
 	}
 }

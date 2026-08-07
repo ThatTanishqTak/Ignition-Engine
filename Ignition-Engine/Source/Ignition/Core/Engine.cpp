@@ -18,8 +18,24 @@ namespace Ignition
 		m_Window = std::make_unique<Window>();
 		m_Window->Initialize(title, width, height);
 
+		if (!m_Window->IsOpen())
+		{
+			IG_CORE_CRITICAL("Engine initialization failed: could not create window");
+			Shutdown();
+
+			return;
+		}
+
 		m_Renderer = std::make_unique<Renderer>();
 		m_Renderer->Initialize(m_Window->GetNativeWindow());
+
+		if (!m_Renderer->IsValid())
+		{
+			IG_CORE_CRITICAL("Engine initialization failed: could not create renderer");
+			Shutdown();
+
+			return;
+		}
 
 		IG_CORE_INFO("------- IGNITION INITIALIZED -------");
 	}

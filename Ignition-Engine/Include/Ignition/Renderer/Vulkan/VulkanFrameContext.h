@@ -10,7 +10,7 @@ namespace Ignition
 	class VulkanFrameContext
 	{
 	public:
-		static constexpr uint32_t c_MaximumFramesInFlight = 2;
+		static constexpr uint32_t MaximumFramesInFlight = 2;
 
 		VulkanFrameContext();
 		~VulkanFrameContext();
@@ -20,6 +20,8 @@ namespace Ignition
 
 		void Initialize(VkDevice device, uint32_t graphicsQueueFamily);
 		void Shutdown();
+
+		bool IsValid() const;
 
 		VkCommandBuffer GetCommandBuffer(uint32_t frameIndex) const { return m_CommandBuffers[frameIndex]; }
 		VkSemaphore GetImageAvailableSemaphore(uint32_t frameIndex) const { return m_ImageAvailableSemaphores[frameIndex]; }

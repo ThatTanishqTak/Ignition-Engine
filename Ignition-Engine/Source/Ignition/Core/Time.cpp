@@ -3,6 +3,7 @@
 #include "Ignition/Core/Log.h"
 
 #include <chrono>
+#include <cmath>
 
 namespace Ignition
 {
@@ -10,7 +11,7 @@ namespace Ignition
 	{
 		using Clock = std::chrono::steady_clock;
 
-		constexpr int c_MaximumFixedStepsPerFrame = 8;
+		constexpr int MaximumFixedStepsPerFrame = 8;
 
 		Clock::time_point g_StartTime{};
 		Clock::time_point g_LastFrameTime{};
@@ -180,10 +181,11 @@ namespace Ignition
 			return false;
 		}
 
-		if (g_FixedStepsThisFrame >= c_MaximumFixedStepsPerFrame)
+		if (g_FixedStepsThisFrame >= MaximumFixedStepsPerFrame)
 		{
-			IG_CORE_WARN("Fixed step budget exhausted, discarding {} seconds of accumulated time", g_FixedAccumulator);
-			g_FixedAccumulator = 0.0f;
+			const float remainder = std::fmod(g_FixedAccumulator, g_FixedTimeStep);
+			IG_CORE_WARN("Fixed step budget exhausted, discarding {} seconds of accumulated time", g_FixedAccumulator - remainder);
+			g_FixedAccumulator = remainder;
 
 			return false;
 		}

@@ -28,9 +28,14 @@ namespace Ignition
 		allocatorCreateInfo.device = device;
 		allocatorCreateInfo.vulkanApiVersion = apiVersion;
 
-		Utilities::VulkanUtilities::VKCheck(vmaCreateAllocator(&allocatorCreateInfo, &m_Allocator), "Failed vmaCreateAllocator");
+		if (Utilities::VulkanUtilities::VKCheck(vmaCreateAllocator(&allocatorCreateInfo, &m_Allocator), "Failed vmaCreateAllocator") != VK_SUCCESS)
+		{
+			m_Allocator = VK_NULL_HANDLE;
 
-		IG_CORE_INFO("------- VULKAN MEMEORY ALLOCATOR INITIALIZED -------");
+			return;
+		}
+
+		IG_CORE_INFO("------- VULKAN MEMORY ALLOCATOR INITIALIZED -------");
 	}
 
 	void VulkanAllocator::Shutdown()

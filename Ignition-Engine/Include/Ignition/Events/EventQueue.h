@@ -29,6 +29,8 @@ namespace Ignition
 
 		void Clear() { m_Events.clear(); }
 
+		std::vector<std::unique_ptr<Event>> Take() { return std::exchange(m_Events, {}); }
+
 		bool IsEmpty() const { return m_Events.empty(); }
 		size_t GetCount() const { return m_Events.size(); }
 

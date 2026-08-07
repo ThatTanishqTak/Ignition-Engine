@@ -11,7 +11,7 @@ namespace Ignition
 		class IGNITION_API VulkanUtilities
 		{
 		public:
-			static void VKCheck(VkResult result, const char* message);
+			static VkResult VKCheck(VkResult result, const char* message);
 		};
 	}
 }

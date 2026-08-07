@@ -2,19 +2,18 @@
 
 #include "Ignition/Core/Log.h"
 
-#include <cstdlib>
-
 namespace Ignition
 {
 	namespace Utilities
 	{
-		void VulkanUtilities::VKCheck(VkResult result, const char* message)
+		VkResult VulkanUtilities::VKCheck(VkResult result, const char* message)
 		{
 			if (result != VK_SUCCESS)
 			{
-				IG_CORE_CRITICAL("[VULKAN]: {}", message);
-				std::abort();
+				IG_CORE_ERROR("[VULKAN]: {} (VkResult: {})", message, static_cast<int>(result));
 			}
+
+			return result;
 		}
 	}
 }

@@ -17,6 +17,8 @@ namespace Ignition
 		void Initialize(SDL_Window* window);
 		void Shutdown();
 
+		bool IsValid() const;
+
 		void DrawFrame(float r, float g, float b);
 		void OnResize();
 

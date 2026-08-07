@@ -19,6 +19,11 @@ namespace Ignition
 		IG_CORE_INFO("------- RENDERER INITIALIZED -------");
 	}
 
+	bool Renderer::IsValid() const
+	{
+		return m_VulkanRenderer && m_VulkanRenderer->IsValid();
+	}
+
 	void Renderer::Shutdown()
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN RENDERER -------");

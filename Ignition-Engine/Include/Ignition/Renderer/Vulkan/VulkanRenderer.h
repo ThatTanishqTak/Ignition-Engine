@@ -25,6 +25,8 @@ namespace Ignition
 		void Initialize(SDL_Window* window);
 		void Shutdown();
 
+		bool IsValid() const { return m_VulkanFrameContext != nullptr; }
+
 		void SetClearColor(float r, float g, float b);
 
 		void BeginFrame();

@@ -12,6 +12,8 @@
 
 #include <SDL3/SDL_video.h>
 
+#include <cstdlib>
+
 namespace Ignition
 {
 	VulkanRenderer::VulkanRenderer() = default;
@@ -26,14 +28,42 @@ namespace Ignition
 		m_VulkanInstance = std::make_unique<VulkanInstance>();
 		m_VulkanInstance->Initialize();
 
+		if (m_VulkanInstance->GetInstance() == VK_NULL_HANDLE)
+		{
+			IG_CORE_CRITICAL("Vulkan renderer initialization aborted: no instance");
+
+			return;
+		}
+
 		m_VulkanSurface = std::make_unique<VulkanSurface>();
 		m_VulkanSurface->Initialize(m_VulkanInstance->GetInstance(), window);
+
+		if (!m_VulkanSurface->IsValid())
+		{
+			IG_CORE_CRITICAL("Vulkan renderer initialization aborted: no surface");
+
+			return;
+		}
 
 		m_VulkanDevice = std::make_unique<VulkanDevice>();
 		m_VulkanDevice->Initialize(m_VulkanInstance->GetInstance(), m_VulkanSurface->GetSurface());
 
+		if (m_VulkanDevice->GetDevice() == VK_NULL_HANDLE)
+		{
+			IG_CORE_CRITICAL("Vulkan renderer initialization aborted: no device");
+
+			return;
+		}
+
 		m_VulkanAllocator = std::make_unique<VulkanAllocator>();
 		m_VulkanAllocator->Initialize(m_VulkanInstance->GetInstance(), m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanInstance->GetAPIVersion());
+
+		if (m_VulkanAllocator->GetAllocator() == VK_NULL_HANDLE)
+		{
+			IG_CORE_CRITICAL("Vulkan renderer initialization aborted: no allocator");
+
+			return;
+		}
 
 		uint32_t width = 0;
 		uint32_t height = 0;
@@ -44,6 +74,16 @@ namespace Ignition
 
 		m_VulkanFrameContext = std::make_unique<VulkanFrameContext>();
 		m_VulkanFrameContext->Initialize(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueueFamily());
+
+		if (!m_VulkanFrameContext->IsValid())
+		{
+			IG_CORE_CRITICAL("Vulkan renderer initialization aborted: no frame context");
+
+			m_VulkanFrameContext->Shutdown();
+			m_VulkanFrameContext.reset();
+
+			return;
+		}
 
 		IG_CORE_INFO("------- VULKAN RENDERER INITIALIZED -------");
 	}
@@ -196,8 +236,6 @@ namespace Ignition
 			return;
 		}
 
-		vkResetFences(device, 1, &fence);
-
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
 		vkResetCommandBuffer(commandBuffer, 0);
 
@@ -205,7 +243,10 @@ namespace Ignition
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		Utilities::VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer");
+		if (Utilities::VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer") != VK_SUCCESS)
+		{
+			return;
+		}
 
 		TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
@@ -260,7 +301,12 @@ namespace Ignition
 
 		TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
 
-		Utilities::VulkanUtilities::VKCheck(vkEndCommandBuffer(commandBuffer), "Failed vkEndCommandBuffer");
+		if (Utilities::VulkanUtilities::VKCheck(vkEndCommandBuffer(commandBuffer), "Failed vkEndCommandBuffer") != VK_SUCCESS)
+		{
+			m_FrameStarted = false;
+
+			return;
+		}
 
 		VkSemaphoreSubmitInfo waitSemaphoreSubmitInfo{};
 		waitSemaphoreSubmitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -285,7 +331,15 @@ namespace Ignition
 		submitInfo.signalSemaphoreInfoCount = 1;
 		submitInfo.pSignalSemaphoreInfos = &signalSemaphoreSubmitInfo;
 
-		Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, m_VulkanFrameContext->GetInFlightFence(m_FrameIndex)), "Failed vkQueueSubmit2");
+		const VkDevice device = m_VulkanDevice->GetDevice();
+		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
+		vkResetFences(device, 1, &fence);
+
+		if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, fence), "Failed vkQueueSubmit2") != VK_SUCCESS)
+		{
+			IG_CORE_CRITICAL("Queue submission failed, the device may be lost");
+			std::abort();
+		}
 
 		const VkSemaphore renderFinished = m_VulkanSwapchain->GetRenderFinishedSemaphore(m_ImageIndex);
 		const VkSwapchainKHR swapchain = m_VulkanSwapchain->GetSwapchain();
@@ -310,6 +364,6 @@ namespace Ignition
 		}
 
 		m_FrameStarted = false;
-		m_FrameIndex = (m_FrameIndex + 1) % VulkanFrameContext::c_MaximumFramesInFlight;
+		m_FrameIndex = (m_FrameIndex + 1) % VulkanFrameContext::MaximumFramesInFlight;
 	}
 }

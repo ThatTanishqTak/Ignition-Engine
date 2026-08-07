@@ -15,6 +15,13 @@ namespace
 		std::vector<VkSurfaceFormatKHR> formats(formatCount);
 		vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats.data());
 
+		if (formats.empty())
+		{
+			IG_CORE_ERROR("No surface formats available");
+
+			return { VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
+		}
+
 		for (const VkSurfaceFormatKHR& format : formats)
 		{
 			if (format.format == VK_FORMAT_B8G8R8A8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
@@ -151,7 +158,12 @@ namespace Ignition
 		IG_CORE_TRACE("Creating Swapchain");
 
 		VkSurfaceCapabilitiesKHR capabilities{};
-		Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_PhysicalDevice, m_Surface, &capabilities), "Failed vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+		if (Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_PhysicalDevice, m_Surface, &capabilities), "Failed vkGetPhysicalDeviceSurfaceCapabilitiesKHR") != VK_SUCCESS)
+		{
+			DestroySwapchain();
+
+			return;
+		}
 
 		const VkExtent2D extent = ChooseExtent(capabilities, width, height);
 
@@ -167,6 +179,14 @@ namespace Ignition
 		}
 
 		const VkSurfaceFormatKHR surfaceFormat = ChooseSurfaceFormat(m_PhysicalDevice, m_Surface);
+
+		if (surfaceFormat.format == VK_FORMAT_UNDEFINED)
+		{
+			DestroySwapchain();
+
+			return;
+		}
+
 		const VkPresentModeKHR presentMode = ChoosePresentMode(m_PhysicalDevice, m_Surface);
 
 		uint32_t imageCount = capabilities.minImageCount + 1;
@@ -204,9 +224,14 @@ namespace Ignition
 		}
 
 		VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
-		Utilities::VulkanUtilities::VKCheck(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain), "Failed vkCreateSwapchainKHR");
+		const VkResult createResult = Utilities::VulkanUtilities::VKCheck(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain), "Failed vkCreateSwapchainKHR");
 
 		DestroySwapchain();
+
+		if (createResult != VK_SUCCESS)
+		{
+			return;
+		}
 
 		m_Swapchain = newSwapchain;
 		m_ImageFormat = surfaceFormat.format;
@@ -244,7 +269,13 @@ namespace Ignition
 			imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
 			imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-			Utilities::VulkanUtilities::VKCheck(vkCreateImageView(m_Device, &imageViewCreateInfo, nullptr, &m_ImageViews[i]), "Failed vkCreateImageView");
+			if (Utilities::VulkanUtilities::VKCheck(vkCreateImageView(m_Device, &imageViewCreateInfo, nullptr, &m_ImageViews[i]), "Failed vkCreateImageView") != VK_SUCCESS)
+			{
+				DestroyImageViews();
+				DestroySwapchain();
+
+				return;
+			}
 		}
 
 		IG_CORE_TRACE("Created {} Swapchain Image Views", m_ImageViews.size());
@@ -261,7 +292,14 @@ namespace Ignition
 
 		for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); ++i)
 		{
-			Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphores[i]), "Failed vkCreateSemaphore");
+			if (Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphores[i]), "Failed vkCreateSemaphore") != VK_SUCCESS)
+			{
+				DestroySemaphores();
+				DestroyImageViews();
+				DestroySwapchain();
+
+				return;
+			}
 		}
 
 		IG_CORE_TRACE("Created {} Render Finished Semaphores", m_RenderFinishedSemaphores.size());
