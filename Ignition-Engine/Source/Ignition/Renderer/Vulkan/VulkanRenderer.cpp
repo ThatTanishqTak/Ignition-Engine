@@ -217,7 +217,7 @@ namespace Ignition
 		const VkDevice device = m_VulkanDevice->GetDevice();
 		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
 
-		vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+		Utilities::VulkanUtilities::VKCheck(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed vkWaitForFences");
 
 		const VkSemaphore imageAvailable = m_VulkanFrameContext->GetImageAvailableSemaphore(m_FrameIndex);
 		const VkResult acquireResult = vkAcquireNextImageKHR(device, m_VulkanSwapchain->GetSwapchain(), UINT64_MAX, imageAvailable, VK_NULL_HANDLE, &m_ImageIndex);
@@ -231,13 +231,16 @@ namespace Ignition
 
 		if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR)
 		{
-			IG_CORE_ERROR("Failed vkAcquireNextImageKHR");
+			Utilities::VulkanUtilities::VKCheck(acquireResult, "Failed vkAcquireNextImageKHR");
 
 			return;
 		}
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
-		vkResetCommandBuffer(commandBuffer, 0);
+		if (Utilities::VulkanUtilities::VKCheck(vkResetCommandBuffer(commandBuffer, 0), "Failed vkResetCommandBuffer"))
+		{
+			return;
+		}
 
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -333,7 +336,7 @@ namespace Ignition
 
 		const VkDevice device = m_VulkanDevice->GetDevice();
 		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
-		vkResetFences(device, 1, &fence);
+		Utilities::VulkanUtilities::VKCheck(vkResetFences(device, 1, &fence), "Failed vkResetFences");
 
 		if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, fence), "Failed vkQueueSubmit2"))
 		{
@@ -359,7 +362,7 @@ namespace Ignition
 		}
 		else if (presentResult != VK_SUCCESS)
 		{
-			IG_CORE_ERROR("Failed vkQueuePresentKHR");
+			Utilities::VulkanUtilities::VKCheck(presentResult, "Failed vkQueuePresentKHR");
 		}
 
 		m_FrameStarted = false;

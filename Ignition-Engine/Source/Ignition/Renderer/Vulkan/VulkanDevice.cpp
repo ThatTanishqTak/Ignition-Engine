@@ -39,7 +39,7 @@ namespace
 			}
 
 			VkBool32 presentSupported = VK_FALSE;
-			vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupported);
+			Ignition::Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupported), "Failed vkGetPhysicalDeviceSurfaceSupportKHR");
 
 			if (presentSupported == VK_TRUE && indices.Present == UINT32_MAX)
 			{
@@ -61,10 +61,10 @@ namespace
 	bool CheckDeviceExtensionSupport(VkPhysicalDevice physicalDevice)
 	{
 		uint32_t extensionCount = 0;
-		vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr);
+		Ignition::Utilities::VulkanUtilities::VKCheck(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr), "Failed vkEnumerateDeviceExtensionProperties");
 
 		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-		vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, availableExtensions.data());
+		Ignition::Utilities::VulkanUtilities::VKCheck(vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, availableExtensions.data()), "Failed vkEnumerateDeviceExtensionProperties");
 
 		for (const char* requiredDeviceExtension : s_RequiredDeviceExtensions)
 		{
@@ -92,10 +92,10 @@ namespace
 	bool HasAdequateSurfaceSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 	{
 		uint32_t formatCount = 0;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr);
+		Ignition::Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr), "Failed vkGetPhysicalDeviceSurfaceFormatsKHR");
 
 		uint32_t presentModeCount = 0;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
+		Ignition::Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr), "Failed vkGetPhysicalDeviceSurfacePresentModesKHR");
 
 		return formatCount > 0 && presentModeCount > 0;
 	}
@@ -183,7 +183,7 @@ namespace Ignition
 		IG_CORE_TRACE("Selecting Physical Device");
 
 		uint32_t deviceCount = 0;
-		vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+		Utilities::VulkanUtilities::VKCheck(vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr), "Failed vkEnumeratePhysicalDevices");
 
 		if (deviceCount == 0)
 		{
@@ -193,7 +193,7 @@ namespace Ignition
 		}
 
 		std::vector<VkPhysicalDevice> devices(deviceCount);
-		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+		Utilities::VulkanUtilities::VKCheck(vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data()), "Failed vkEnumeratePhysicalDevices");
 
 		uint32_t bestScore = 0;
 		for (VkPhysicalDevice device : devices)
@@ -309,7 +309,7 @@ namespace Ignition
 			return;
 		}
 
-		vkDeviceWaitIdle(m_Device);
+		Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_Device), "Failed vkDeviceWaitIdle");
 		vkDestroyDevice(m_Device, nullptr);
 
 		m_Device = VK_NULL_HANDLE;

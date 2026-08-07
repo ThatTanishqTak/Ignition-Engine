@@ -61,7 +61,7 @@ namespace Ignition
 			return;
 		}
 
-		vkDeviceWaitIdle(m_Device);
+		Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_Device), "Failed vkDeviceWaitIdle");
 
 		for (VkFence fence : m_InFlightFences)
 		{

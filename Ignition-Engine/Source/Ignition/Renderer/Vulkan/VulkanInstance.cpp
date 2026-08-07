@@ -52,7 +52,7 @@ namespace Ignition
 		applicationInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
 
 		uint32_t instanceVersion = VK_API_VERSION_1_0;
-		if (vkEnumerateInstanceVersion(&instanceVersion) != VK_SUCCESS)
+		if (Utilities::VulkanUtilities::VKCheck(vkEnumerateInstanceVersion(&instanceVersion), "Failed vkEnumerateInstanceVersion"))
 		{
 			instanceVersion = VK_API_VERSION_1_0;
 		}

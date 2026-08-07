@@ -19,10 +19,10 @@ namespace
 	bool IsValidationLayerAvailable()
 	{
 		uint32_t layerCount = 0;
-		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+		Ignition::Utilities::VulkanUtilities::VKCheck(vkEnumerateInstanceLayerProperties(&layerCount, nullptr), "Failed vkEnumerateInstanceLayerProperties");
 
 		std::vector<VkLayerProperties> availableLayers(layerCount);
-		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+		Ignition::Utilities::VulkanUtilities::VKCheck(vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data()), "Failed vkEnumerateInstanceLayerProperties");
 
 		for (const VkLayerProperties& layer : availableLayers)
 		{
