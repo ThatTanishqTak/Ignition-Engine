@@ -237,17 +237,35 @@ namespace Ignition
 		}
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
-		if (Utilities::VulkanUtilities::VKCheck(vkResetCommandBuffer(commandBuffer, 0), "Failed vkResetCommandBuffer"))
-		{
-			return;
-		}
 
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer"))
+		if (Utilities::VulkanUtilities::VKCheck(vkResetCommandBuffer(commandBuffer, 0), "Failed vkResetCommandBuffer") || Utilities::VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer"))
 		{
+			VkSemaphoreSubmitInfo drainWaitSubmitInfo{};
+			drainWaitSubmitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+			drainWaitSubmitInfo.semaphore = imageAvailable;
+			drainWaitSubmitInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+			VkSubmitInfo2 drainSubmitInfo{};
+			drainSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+			drainSubmitInfo.waitSemaphoreInfoCount = 1;
+			drainSubmitInfo.pWaitSemaphoreInfos = &drainWaitSubmitInfo;
+
+			if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &drainSubmitInfo, VK_NULL_HANDLE), "Failed vkQueueSubmit2 while aborting acquired frame"))
+			{
+				IG_CORE_CRITICAL("Could not recover the image available semaphore, disabling the renderer");
+
+				m_VulkanFrameContext->Shutdown();
+				m_VulkanFrameContext.reset();
+
+				return;
+			}
+
+			RecreateSwapchain();
+
 			return;
 		}
 
@@ -336,11 +354,24 @@ namespace Ignition
 
 		const VkDevice device = m_VulkanDevice->GetDevice();
 		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
-		Utilities::VulkanUtilities::VKCheck(vkResetFences(device, 1, &fence), "Failed vkResetFences");
+
+		if (Utilities::VulkanUtilities::VKCheck(vkResetFences(device, 1, &fence), "Failed vkResetFences"))
+		{
+			m_FrameStarted = false;
+
+			return;
+		}
 
 		if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, fence), "Failed vkQueueSubmit2"))
 		{
-			IG_CORE_CRITICAL("Queue submission failed, the device may be lost");
+			IG_CORE_CRITICAL("Queue submission failed, the device may be lost, disabling the renderer");
+
+			m_VulkanFrameContext->Shutdown();
+			m_VulkanFrameContext.reset();
+
+			m_FrameStarted = false;
+
+			return;
 		}
 
 		const VkSemaphore renderFinished = m_VulkanSwapchain->GetRenderFinishedSemaphore(m_ImageIndex);

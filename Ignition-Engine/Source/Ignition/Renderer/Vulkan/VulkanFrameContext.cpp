@@ -31,6 +31,11 @@ namespace Ignition
 		AllocateCommandBuffers();
 		CreateSyncObjects();
 
+		if (!IsValid())
+		{
+			return;
+		}
+
 		IG_CORE_INFO("------- VULKAN FRAME CONTEXT INITIALIZED -------");
 	}
 

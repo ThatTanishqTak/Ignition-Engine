@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Ignition/Events/Event.h"
+
 #include <string>
 #include <utility>
 

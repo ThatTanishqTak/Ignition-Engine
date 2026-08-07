@@ -101,6 +101,11 @@ namespace Ignition
 		CreateImageViews();
 		CreateSemaphores();
 
+		if (!IsValid())
+		{
+			return;
+		}
+
 		IG_CORE_INFO("------- VULKAN SWAPCHAIN INITIALIZED -------");
 	}
 

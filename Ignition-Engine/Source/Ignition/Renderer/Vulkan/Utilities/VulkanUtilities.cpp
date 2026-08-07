@@ -6,14 +6,21 @@ namespace Ignition
 {
 	namespace Utilities
 	{
-		VkResult VulkanUtilities::VKCheck(VkResult result, const char* message)
+		bool VulkanUtilities::VKCheck(VkResult result, const char* message)
 		{
-			if (result != VK_SUCCESS)
+			if (result < 0)
 			{
 				IG_CORE_ERROR("[VULKAN]: {} (VkResult: {})", message, static_cast<int>(result));
+
+				return true;
 			}
 
-			return result;
+			if (result != VK_SUCCESS)
+			{
+				IG_CORE_TRACE("[VULKAN]: {} (VkResult: {})", message, static_cast<int>(result));
+			}
+
+			return false;
 		}
 	}
 }

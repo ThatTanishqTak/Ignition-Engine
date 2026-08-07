@@ -30,6 +30,11 @@ namespace Ignition
 		m_Instance = instance;
 		CreateSurface(m_Instance, nativeWindow);
 
+		if (!IsValid())
+		{
+			return;
+		}
+
 		IG_CORE_INFO("------- VULKAN SURFACE INITIALIZED -------");
 	}
 

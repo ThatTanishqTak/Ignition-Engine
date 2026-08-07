@@ -32,8 +32,6 @@ namespace Ignition
 		bool IsOpen() const { return m_IsOpen; }
 		SDL_Window* GetNativeWindow() const { return m_SDLWindow; }
 
-		static const char* const* GetRequiredVulkanExtensions(uint32_t* outCount);
-
 	private:
 		SDL_Window* m_SDLWindow = nullptr;
 		bool m_SDLInitialized = false;

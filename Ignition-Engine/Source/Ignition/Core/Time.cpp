@@ -38,7 +38,7 @@ namespace Ignition
 
 		double CurrentSeconds()
 		{
-			return std::chrono::duration<double>(Clock::now() - g_StartTime).count();
+			return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
 		}
 	}
 

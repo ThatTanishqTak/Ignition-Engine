@@ -13,7 +13,7 @@ namespace Ignition
 
 	void VulkanAllocator::Initialize(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t apiVersion)
 	{
-		IG_CORE_INFO("------- INITIALIZING VULKAN MEMEORY ALLOCATOR -------");
+		IG_CORE_INFO("------- INITIALIZING VULKAN MEMORY ALLOCATOR -------");
 		
 		if (instance == VK_NULL_HANDLE || physicalDevice == VK_NULL_HANDLE || device == VK_NULL_HANDLE)
 		{

@@ -19,6 +19,11 @@ namespace Ignition
 
 		CreateInstance();
 
+		if (m_Instance == VK_NULL_HANDLE)
+		{
+			return;
+		}
+
 		m_DebugMessenger = std::make_unique<VulkanDebugMessenger>();
 		m_DebugMessenger->Initialize(m_Instance);
 

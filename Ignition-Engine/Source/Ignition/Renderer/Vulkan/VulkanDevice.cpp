@@ -166,6 +166,11 @@ namespace Ignition
 		PickPhysicalDevice(instance, surface);
 		CreateLogicalDevice();
 
+		if (m_Device == VK_NULL_HANDLE)
+		{
+			return;
+		}
+
 		IG_CORE_INFO("------- VULKAN DEVICE INITIALIZED -------");
 	}
 

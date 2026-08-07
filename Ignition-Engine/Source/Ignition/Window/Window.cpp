@@ -8,7 +8,6 @@
 #include "Ignition/Events/WindowEvent.h"
 
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
 
 namespace Ignition
 {
@@ -79,6 +78,22 @@ namespace Ignition
 
 		if (m_SDLInitialized)
 		{
+			int gamepadCount = 0;
+			SDL_JoystickID* gamepadIDs = SDL_GetGamepads(&gamepadCount);
+
+			if (gamepadIDs)
+			{
+				for (int i = 0; i < gamepadCount; ++i)
+				{
+					if (SDL_Gamepad* gamepad = SDL_GetGamepadFromID(gamepadIDs[i]))
+					{
+						SDL_CloseGamepad(gamepad);
+					}
+				}
+
+				SDL_free(gamepadIDs);
+			}
+
 			SDL_Quit();
 			m_SDLInitialized = false;
 		}
@@ -90,10 +105,17 @@ namespace Ignition
 
 	void Window::PollEvents(EventQueue& eventQueue)
 	{
+		const SDL_WindowID windowID = m_SDLWindow ? SDL_GetWindowID(m_SDLWindow) : 0;
+
 		SDL_Event event;
 
 		while (SDL_PollEvent(&event))
 		{
+			if (event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST && event.window.windowID != windowID)
+			{
+				continue;
+			}
+
 			switch (event.type)
 			{
 				case SDL_EVENT_QUIT:
@@ -102,11 +124,8 @@ namespace Ignition
 					break;
 
 				case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-					if (m_SDLWindow && event.window.windowID == SDL_GetWindowID(m_SDLWindow))
-					{
-						m_IsOpen = false;
-						eventQueue.Push<WindowCloseEvent>();
-					}
+					m_IsOpen = false;
+					eventQueue.Push<WindowCloseEvent>();
 					break;
 
 				case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -299,10 +318,5 @@ namespace Ignition
 		{
 			SDL_StopTextInput(m_SDLWindow);
 		}
-	}
-
-	const char* const* Window::GetRequiredVulkanExtensions(uint32_t* outCount)
-	{
-		return SDL_Vulkan_GetInstanceExtensions(outCount);
 	}
 }
