@@ -47,4 +47,12 @@ namespace Ignition
 		RIGHT_TRIGGER = 5,
 		COUNT = 6
 	};
+
+	enum class GamepadStick
+	{
+		Left = 0,
+		Right
+	};
+
+	using GamepadID = uint32_t;
 }

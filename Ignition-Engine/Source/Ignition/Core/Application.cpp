@@ -102,4 +102,9 @@ namespace Ignition
 	{
 		return m_Engine ? m_Engine->GetRenderer() : nullptr;
 	}
+
+	Input* Application::GetInput() const
+	{
+		return m_Engine ? m_Engine->GetInput() : nullptr;
+	}
 }

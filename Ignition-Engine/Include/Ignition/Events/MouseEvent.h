@@ -7,10 +7,13 @@ namespace Ignition
 	class MouseMovedEvent : public Event
 	{
 	public:
-		MouseMovedEvent(float x, float y) : m_X(x), m_Y(y) {}
+		MouseMovedEvent(float x, float y, float deltaX, float deltaY) : m_X(x), m_Y(y), m_DeltaX(deltaX), m_DeltaY(deltaY) {}
 
 		float GetX() const { return m_X; }
 		float GetY() const { return m_Y; }
+
+		float GetDeltaX() const { return m_DeltaX; }
+		float GetDeltaY() const { return m_DeltaY; }
 
 		IGNITION_EVENT_CLASS_TYPE(MouseMoved)
 			IGNITION_EVENT_CLASS_CATEGORY(EventCategoryMouse | EventCategoryInput)
@@ -18,6 +21,8 @@ namespace Ignition
 	private:
 		float m_X = 0.0f;
 		float m_Y = 0.0f;
+		float m_DeltaX = 0.0f;
+		float m_DeltaY = 0.0f;
 	};
 
 	class MouseScrolledEvent : public Event

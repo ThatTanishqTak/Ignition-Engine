@@ -5,8 +5,11 @@
 #include "Ignition/Events/KeyEvent.h"
 #include "Ignition/Events/MouseEvent.h"
 #include "Ignition/Events/WindowEvent.h"
+#include "Ignition/Input/ActionMap.h"
+#include "Ignition/Input/Input.h"
 #include "Ignition/Renderer/Renderer.h"
 
+#include <memory>
 #include <utility>
 
 namespace Sandbox
@@ -26,13 +29,34 @@ namespace Sandbox
 
 			GetRenderer()->SetClearColor(0.01f, 0.01f, 0.01f);
 
+			m_Actions = std::make_unique<Ignition::ActionMap>(GetInput());
+
+			m_Actions->AddButton("Jump").Bind(Ignition::ScanCode::SPACE).Bind(Ignition::GamepadButton::SOUTH);
+			m_Actions->AddAxis2D("Move").BindKeys(Ignition::ScanCode::W, Ignition::ScanCode::S, Ignition::ScanCode::A, Ignition::ScanCode::D).BindStick(Ignition::GamepadStick::Left);
+
 			IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 		}
 
 		void OnUpdate(float deltaTime) override
 		{
 			(void)deltaTime;
-			//IG_APP_TRACE("DeltaTime: {}", deltaTime);
+
+			if (m_Actions->IsPressed("Jump"))
+			{
+				IG_APP_INFO("Jump");
+
+				for (Ignition::GamepadID gamepadID : GetInput()->GetConnectedGamepads())
+				{
+					GetInput()->SetGamepadRumble(gamepadID, 0.5f, 0.5f, 200);
+				}
+			}
+
+			const Ignition::Float2 move = m_Actions->GetAxis2D("Move");
+
+			if (move.X != 0.0f || move.Y != 0.0f)
+			{
+				IG_APP_TRACE("Move: ({}, {})", move.X, move.Y);
+			}
 		}
 
 		void OnFixedUpdate(float fixedTimeStep) override
@@ -70,6 +94,8 @@ namespace Sandbox
 
 			return specification;
 		}
+
+		std::unique_ptr<Ignition::ActionMap> m_Actions;
 	};
 }
 

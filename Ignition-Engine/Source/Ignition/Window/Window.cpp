@@ -14,11 +14,12 @@ namespace Ignition
 	Window::Window() = default;
 	Window::~Window() = default;
 
-	Window::Window(Window&& other) noexcept : m_SDLWindow(other.m_SDLWindow), m_SDLInitialized(other.m_SDLInitialized), m_IsOpen(other.m_IsOpen)
+	Window::Window(Window&& other) noexcept : m_SDLWindow(other.m_SDLWindow), m_SDLInitialized(other.m_SDLInitialized), m_IsOpen(other.m_IsOpen), m_CursorMode(other.m_CursorMode)
 	{
 		other.m_SDLWindow = nullptr;
 		other.m_SDLInitialized = false;
 		other.m_IsOpen = false;
+		other.m_CursorMode = CursorMode::Normal;
 	}
 
 	Window& Window::operator=(Window&& other) noexcept
@@ -30,10 +31,12 @@ namespace Ignition
 			m_SDLWindow = other.m_SDLWindow;
 			m_SDLInitialized = other.m_SDLInitialized;
 			m_IsOpen = other.m_IsOpen;
+			m_CursorMode = other.m_CursorMode;
 
 			other.m_SDLWindow = nullptr;
 			other.m_SDLInitialized = false;
 			other.m_IsOpen = false;
+			other.m_CursorMode = CursorMode::Normal;
 		}
 
 		return *this;
@@ -78,22 +81,6 @@ namespace Ignition
 
 		if (m_SDLInitialized)
 		{
-			int gamepadCount = 0;
-			SDL_JoystickID* gamepadIDs = SDL_GetGamepads(&gamepadCount);
-
-			if (gamepadIDs)
-			{
-				for (int i = 0; i < gamepadCount; ++i)
-				{
-					if (SDL_Gamepad* gamepad = SDL_GetGamepadFromID(gamepadIDs[i]))
-					{
-						SDL_CloseGamepad(gamepad);
-					}
-				}
-
-				SDL_free(gamepadIDs);
-			}
-
 			SDL_Quit();
 			m_SDLInitialized = false;
 		}
@@ -218,29 +205,12 @@ namespace Ignition
 					break;
 
 				case SDL_EVENT_GAMEPAD_ADDED:
-					if (SDL_OpenGamepad(event.gdevice.which))
-					{
-						IG_CORE_INFO("Gamepad connected (id {})", event.gdevice.which);
-						eventQueue.Push<GamepadConnectedEvent>(event.gdevice.which);
-					}
-					else
-					{
-						IG_CORE_WARN("Failed to open gamepad {}: {}", event.gdevice.which, SDL_GetError());
-					}
+					eventQueue.Push<GamepadConnectedEvent>(event.gdevice.which);
 					break;
 
 				case SDL_EVENT_GAMEPAD_REMOVED:
-				{
-					SDL_Gamepad* gamepad = SDL_GetGamepadFromID(event.gdevice.which);
-					if (gamepad)
-					{
-						SDL_CloseGamepad(gamepad);
-					}
-
-					IG_CORE_INFO("Gamepad disconnected (id {})", event.gdevice.which);
 					eventQueue.Push<GamepadDisconnectedEvent>(event.gdevice.which);
 					break;
-				}
 
 				case SDL_EVENT_GAMEPAD_REMAPPED:
 					eventQueue.Push<GamepadRemappedEvent>(event.gdevice.which);
@@ -290,7 +260,7 @@ namespace Ignition
 					break;
 
 				case SDL_EVENT_MOUSE_MOTION:
-					eventQueue.Push<MouseMovedEvent>(event.motion.x, event.motion.y);
+					eventQueue.Push<MouseMovedEvent>(event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel);
 					break;
 
 				case SDL_EVENT_MOUSE_WHEEL:
@@ -317,6 +287,43 @@ namespace Ignition
 		else
 		{
 			SDL_StopTextInput(m_SDLWindow);
+		}
+	}
+
+	void Window::SetCursorMode(CursorMode mode)
+	{
+		if (!m_SDLWindow)
+		{
+			return;
+		}
+
+		m_CursorMode = mode;
+
+		switch (mode)
+		{
+			case CursorMode::Normal:
+				if (!SDL_SetWindowRelativeMouseMode(m_SDLWindow, false))
+				{
+					IG_CORE_WARN("Failed SDL_SetWindowRelativeMouseMode: {}", SDL_GetError());
+				}
+				SDL_ShowCursor();
+				break;
+
+			case CursorMode::Hidden:
+				if (!SDL_SetWindowRelativeMouseMode(m_SDLWindow, false))
+				{
+					IG_CORE_WARN("Failed SDL_SetWindowRelativeMouseMode: {}", SDL_GetError());
+				}
+				SDL_HideCursor();
+				break;
+
+			case CursorMode::Captured:
+				SDL_HideCursor();
+				if (!SDL_SetWindowRelativeMouseMode(m_SDLWindow, true))
+				{
+					IG_CORE_WARN("Failed SDL_SetWindowRelativeMouseMode: {}", SDL_GetError());
+				}
+				break;
 		}
 	}
 }

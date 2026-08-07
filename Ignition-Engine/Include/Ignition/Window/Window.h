@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Ignition/Core/Export.h"
+#include "Ignition/Input/CursorMode.h"
 
 #include <cstdint>
 
@@ -29,6 +30,9 @@ namespace Ignition
 
 		void SetTextInputEnabled(bool enabled);
 
+		void SetCursorMode(CursorMode mode);
+		CursorMode GetCursorMode() const { return m_CursorMode; }
+
 		bool IsOpen() const { return m_IsOpen; }
 		SDL_Window* GetNativeWindow() const { return m_SDLWindow; }
 
@@ -36,5 +40,6 @@ namespace Ignition
 		SDL_Window* m_SDLWindow = nullptr;
 		bool m_SDLInitialized = false;
 		bool m_IsOpen = false;
+		CursorMode m_CursorMode = CursorMode::Normal;
 	};
 }

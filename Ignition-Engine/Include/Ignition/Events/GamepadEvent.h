@@ -4,8 +4,6 @@
 
 namespace Ignition
 {
-	using GamepadID = uint32_t;
-
 	class GamepadEvent : public Event
 	{
 	public:

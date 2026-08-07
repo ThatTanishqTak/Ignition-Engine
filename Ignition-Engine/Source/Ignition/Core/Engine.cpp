@@ -3,6 +3,7 @@
 #include "Ignition/Core/Log.h"
 #include "Ignition/Events/Event.h"
 #include "Ignition/Events/WindowEvent.h"
+#include "Ignition/Input/Input.h"
 #include "Ignition/Window/Window.h"
 #include "Ignition/Renderer/Renderer.h"
 
@@ -25,6 +26,9 @@ namespace Ignition
 
 			return;
 		}
+
+		m_Input = std::make_unique<Input>();
+		m_Input->Initialize(m_Window.get());
 
 		m_Renderer = std::make_unique<Renderer>();
 		m_Renderer->Initialize(m_Window->GetNativeWindow());
@@ -50,6 +54,12 @@ namespace Ignition
 			m_Renderer.reset();
 		}
 
+		if (m_Input)
+		{
+			m_Input->Shutdown();
+			m_Input.reset();
+		}
+
 		if (m_Window)
 		{
 			m_Window->Shutdown();
@@ -61,6 +71,11 @@ namespace Ignition
 
 	void Engine::PollEvents()
 	{
+		if (m_Input)
+		{
+			m_Input->NewFrame();
+		}
+
 		if (m_Window)
 		{
 			m_Window->PollEvents(m_EventQueue);
@@ -87,6 +102,11 @@ namespace Ignition
 
 	void Engine::OnEvent(Event& event)
 	{
+		if (m_Input)
+		{
+			m_Input->OnEvent(event);
+		}
+
 		EventDispatcher dispatcher(event);
 
 		dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& resizeEvent)

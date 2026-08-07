@@ -16,6 +16,7 @@ namespace Ignition
 	class Engine;
 	class Event;
 	class Renderer;
+	class Input;
 
 	class Application
 	{
@@ -40,6 +41,7 @@ namespace Ignition
 		virtual void OnShutdown() {}
 
 		IGNITION_API Renderer* GetRenderer() const;
+		IGNITION_API Input* GetInput() const;
 
 	private:
 		ApplicationSpecification m_Specification;

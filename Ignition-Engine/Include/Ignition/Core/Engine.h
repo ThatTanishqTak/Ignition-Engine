@@ -9,6 +9,7 @@ namespace Ignition
 	class Event;
 	class Window;
 	class Renderer;
+	class Input;
 
 	class Engine
 	{
@@ -31,11 +32,13 @@ namespace Ignition
 
 		EventQueue& GetEventQueue() { return m_EventQueue; }
 		Renderer* GetRenderer() const { return m_Renderer.get(); }
+		Input* GetInput() const { return m_Input.get(); }
 
 		bool IsRunning() const;
 
 	private:
 		std::unique_ptr<Window> m_Window;
+		std::unique_ptr<Input> m_Input;
 		std::unique_ptr<Renderer> m_Renderer;
 		EventQueue m_EventQueue;
 	};
