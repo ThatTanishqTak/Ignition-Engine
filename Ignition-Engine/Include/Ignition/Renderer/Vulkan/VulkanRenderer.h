@@ -2,8 +2,13 @@
 
 #include <vulkan/vulkan.h>
 
+#include "Ignition/Renderer/Vertex.h"
+
+#include <glm/mat4x4.hpp>
+
 #include <memory>
 #include <cstdint>
+#include <vector>
 
 struct SDL_Window;
 
@@ -16,6 +21,7 @@ namespace Ignition
 	class VulkanSwapchain;
 	class VulkanFrameContext;
 	class VulkanPipeline;
+	class VulkanMesh;
 
 	class VulkanRenderer
 	{
@@ -33,7 +39,13 @@ namespace Ignition
 		void BeginFrame();
 		void EndFrame();
 
-		void DrawDemoTriangle();
+		void WaitIdle();
+
+		std::unique_ptr<VulkanMesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+
+		void BeginScene(const glm::mat4& viewProjection);
+		void Submit(const VulkanMesh& mesh, const glm::mat4& transform);
+		void EndScene();
 
 		void OnResize();
 
@@ -53,6 +65,9 @@ namespace Ignition
 		std::unique_ptr<VulkanSwapchain> m_VulkanSwapchain;
 		std::unique_ptr<VulkanFrameContext> m_VulkanFrameContext;
 		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;
+
+		glm::mat4 m_SceneViewProjection{ 1.0f };
+		bool m_SceneActive = false;
 
 		uint32_t m_FrameIndex = 0;
 		uint32_t m_ImageIndex = 0;

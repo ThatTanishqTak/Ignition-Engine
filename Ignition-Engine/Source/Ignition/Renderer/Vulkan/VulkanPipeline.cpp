@@ -1,10 +1,12 @@
 #include "Ignition/Renderer/Vulkan/VulkanPipeline.h"
 
+#include "Ignition/Renderer/Vertex.h"
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
 #include "Ignition/Core/Utilities.h"
 #include "Ignition/Core/Log.h"
 
 #include <array>
+#include <cstddef>
 #include <vector>
 
 namespace Ignition
@@ -39,8 +41,29 @@ namespace Ignition
 		stages[1].module = shaderModule;
 		stages[1].pName = "fragmentMain";
 
+		VkVertexInputBindingDescription bindingDescription{};
+		bindingDescription.binding = 0;
+		bindingDescription.stride = sizeof(Vertex);
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+		attributeDescriptions[0].location = 0;
+		attributeDescriptions[0].binding = 0;
+		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[0].offset = static_cast<uint32_t>(offsetof(Vertex, Position));
+
+		attributeDescriptions[1].location = 1;
+		attributeDescriptions[1].binding = 0;
+		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[1].offset = static_cast<uint32_t>(offsetof(Vertex, Color));
+
 		VkPipelineVertexInputStateCreateInfo vertexInputState{};
 		vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertexInputState.vertexBindingDescriptionCount = 1;
+		vertexInputState.pVertexBindingDescriptions = &bindingDescription;
+		vertexInputState.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+		vertexInputState.pVertexAttributeDescriptions = attributeDescriptions.data();
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
 		inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -54,7 +77,7 @@ namespace Ignition
 		VkPipelineRasterizationStateCreateInfo rasterizationState{};
 		rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-		rasterizationState.cullMode = VK_CULL_MODE_NONE;
+		rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
 		rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasterizationState.lineWidth = 1.0f;
 
@@ -78,8 +101,15 @@ namespace Ignition
 		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
 		dynamicState.pDynamicStates = dynamicStates.data();
 
+		VkPushConstantRange pushConstantRange{};
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = 64;
+
 		VkPipelineLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		layoutInfo.pushConstantRangeCount = 1;
+		layoutInfo.pPushConstantRanges = &pushConstantRange;
 
 		if (Utilities::VulkanUtilities::VKCheck(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_PipelineLayout), "Failed vkCreatePipelineLayout"))
 		{

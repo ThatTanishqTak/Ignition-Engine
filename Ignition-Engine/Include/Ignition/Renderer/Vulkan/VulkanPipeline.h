@@ -20,6 +20,8 @@ namespace Ignition
 
 		bool IsValid() const { return m_Pipeline != VK_NULL_HANDLE; }
 
+		VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
+
 		void Bind(VkCommandBuffer commandBuffer) const;
 
 	private:

@@ -4,6 +4,7 @@
 #include "Ignition/Core/Log.h"
 #include "Ignition/Core/Time.h"
 #include "Ignition/Events/EventQueue.h"
+#include "Ignition/Renderer/Renderer.h"
 
 namespace Ignition
 {
@@ -39,6 +40,11 @@ namespace Ignition
 	void Application::Shutdown()
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN APPLICATION -------");
+
+		if (GetRenderer())
+		{
+			GetRenderer()->WaitIdle();
+		}
 
 		OnShutdown();
 

@@ -1,6 +1,9 @@
 #include "Ignition/Renderer/Renderer.h"
 
+#include "Ignition/Renderer/Camera.h"
+#include "Ignition/Renderer/Mesh.h"
 #include "Ignition/Renderer/Vulkan/VulkanRenderer.h"
+#include "Ignition/Renderer/Vulkan/VulkanMesh.h"
 
 #include "Ignition/Core/Log.h"
 
@@ -63,11 +66,52 @@ namespace Ignition
 		}
 	}
 
-	void Renderer::DrawDemoTriangle()
+	std::shared_ptr<Mesh> Renderer::CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+	{
+		if (!m_VulkanRenderer)
+		{
+			return nullptr;
+		}
+
+		auto vulkanMesh = m_VulkanRenderer->CreateMesh(vertices, indices);
+
+		if (!vulkanMesh)
+		{
+			return nullptr;
+		}
+
+		return std::shared_ptr<Mesh>(new Mesh(std::move(vulkanMesh)));
+	}
+
+	void Renderer::BeginScene(const Camera& camera)
 	{
 		if (m_VulkanRenderer)
 		{
-			m_VulkanRenderer->DrawDemoTriangle();
+			m_VulkanRenderer->BeginScene(camera.GetViewProjection());
+		}
+	}
+
+	void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform)
+	{
+		if (m_VulkanRenderer && mesh && mesh->GetVulkanMesh())
+		{
+			m_VulkanRenderer->Submit(*mesh->GetVulkanMesh(), transform);
+		}
+	}
+
+	void Renderer::EndScene()
+	{
+		if (m_VulkanRenderer)
+		{
+			m_VulkanRenderer->EndScene();
+		}
+	}
+
+	void Renderer::WaitIdle()
+	{
+		if (m_VulkanRenderer)
+		{
+			m_VulkanRenderer->WaitIdle();
 		}
 	}
 

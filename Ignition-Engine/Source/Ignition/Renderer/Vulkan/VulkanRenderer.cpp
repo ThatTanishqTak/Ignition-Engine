@@ -7,6 +7,7 @@
 #include "Ignition/Renderer/Vulkan/VulkanFrameContext.h"
 #include "Ignition/Renderer/Vulkan/VulkanAllocator.h"
 #include "Ignition/Renderer/Vulkan/VulkanPipeline.h"
+#include "Ignition/Renderer/Vulkan/VulkanMesh.h"
 
 #include "Ignition/Core/Log.h"
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
@@ -14,7 +15,9 @@
 #include <SDL3/SDL_video.h>
 #include <SDL3/SDL_filesystem.h>
 
+#include <array>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 namespace Ignition
@@ -94,14 +97,14 @@ namespace Ignition
 		}
 
 		const char* basePath = SDL_GetBasePath();
-		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Triangle.spv";
+		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Quad.spv";
 
 		m_VulkanPipeline = std::make_unique<VulkanPipeline>();
 		m_VulkanPipeline->Initialize(m_VulkanDevice->GetDevice(), m_VulkanSwapchain->GetImageFormat(), shaderPath);
 
 		if (!m_VulkanPipeline->IsValid())
 		{
-			IG_CORE_ERROR("Demo pipeline unavailable, the triangle will not draw");
+			IG_CORE_ERROR("Vulkan renderer: demo pipeline unavailable, the quad will not draw");
 		}
 
 		IG_CORE_INFO("------- VULKAN RENDERER INITIALIZED -------");
@@ -323,9 +326,9 @@ namespace Ignition
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
-		viewport.y = 0.0f;
+		viewport.y = static_cast<float>(extent.height);
 		viewport.width = static_cast<float>(extent.width);
-		viewport.height = static_cast<float>(extent.height);
+		viewport.height = -static_cast<float>(extent.height);
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 
@@ -430,17 +433,70 @@ namespace Ignition
 		m_FrameIndex = (m_FrameIndex + 1) % VulkanFrameContext::MaximumFramesInFlight;
 	}
 
-	void VulkanRenderer::DrawDemoTriangle()
+	void VulkanRenderer::WaitIdle()
 	{
+		if (m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
+		{
+			Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()), "Failed vkDeviceWaitIdle");
+		}
+	}
+
+	std::unique_ptr<VulkanMesh> VulkanRenderer::CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+	{
+		if (!IsValid() || !m_VulkanAllocator)
+		{
+			return nullptr;
+		}
+
+		auto mesh = std::make_unique<VulkanMesh>();
+		mesh->Initialize(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), vertices, indices);
+
+		if (!mesh->IsValid())
+		{
+			mesh->Shutdown();
+
+			return nullptr;
+		}
+
+		return mesh;
+	}
+
+	void VulkanRenderer::BeginScene(const glm::mat4& viewProjection)
+	{
+		m_SceneActive = false;
+
 		if (!m_FrameStarted || !m_VulkanPipeline || !m_VulkanPipeline->IsValid())
+		{
+			return;
+		}
+
+		m_SceneViewProjection = viewProjection;
+
+		m_VulkanPipeline->Bind(m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex));
+
+		m_SceneActive = true;
+	}
+
+	void VulkanRenderer::Submit(const VulkanMesh& mesh, const glm::mat4& transform)
+	{
+		if (!m_SceneActive || !mesh.IsValid())
 		{
 			return;
 		}
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
 
-		m_VulkanPipeline->Bind(commandBuffer);
+		const glm::mat4 mvp = m_SceneViewProjection * transform;
 
-		vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+		vkCmdPushConstants(commandBuffer, m_VulkanPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &mvp);
+
+		mesh.Bind(commandBuffer);
+
+		vkCmdDrawIndexed(commandBuffer, mesh.GetIndexCount(), 1, 0, 0, 0);
+	}
+
+	void VulkanRenderer::EndScene()
+	{
+		m_SceneActive = false;
 	}
 }
