@@ -14,7 +14,7 @@ namespace Ignition
 	Window::Window() = default;
 	Window::~Window() = default;
 
-	Window::Window(Window&& other) noexcept : m_SDLWindow(other.m_SDLWindow), m_SDLInitialized(other.m_SDLInitialized), m_IsOpen(other.m_IsOpen), m_CursorMode(other.m_CursorMode)
+	Window::Window(Window&& other) noexcept : m_SDLWindow(other.m_SDLWindow), m_SDLInitialized(other.m_SDLInitialized), m_IsOpen(other.m_IsOpen), m_CursorMode(other.m_CursorMode), m_RawEventCallback(std::move(other.m_RawEventCallback))
 	{
 		other.m_SDLWindow = nullptr;
 		other.m_SDLInitialized = false;
@@ -32,6 +32,7 @@ namespace Ignition
 			m_SDLInitialized = other.m_SDLInitialized;
 			m_IsOpen = other.m_IsOpen;
 			m_CursorMode = other.m_CursorMode;
+			m_RawEventCallback = std::move(other.m_RawEventCallback);
 
 			other.m_SDLWindow = nullptr;
 			other.m_SDLInitialized = false;
@@ -98,6 +99,11 @@ namespace Ignition
 
 		while (SDL_PollEvent(&event))
 		{
+			if (m_RawEventCallback)
+			{
+				m_RawEventCallback(&event);
+			}
+
 			if (event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST && event.window.windowID != windowID)
 			{
 				continue;

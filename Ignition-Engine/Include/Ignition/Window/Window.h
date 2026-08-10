@@ -4,6 +4,7 @@
 #include "Ignition/Input/CursorMode.h"
 
 #include <cstdint>
+#include <functional>
 
 struct SDL_Window;
 
@@ -27,6 +28,9 @@ namespace Ignition
 		void Shutdown();
 
 		void PollEvents(EventQueue& eventQueue);
+		
+		using RawEventCallback = std::function<void(const void*)>;
+		void SetRawEventCallback(RawEventCallback callback) { m_RawEventCallback = std::move(callback); }
 
 		void SetTextInputEnabled(bool enabled);
 
@@ -41,5 +45,6 @@ namespace Ignition
 		bool m_SDLInitialized = false;
 		bool m_IsOpen = false;
 		CursorMode m_CursorMode = CursorMode::Normal;
+		RawEventCallback m_RawEventCallback;
 	};
 }

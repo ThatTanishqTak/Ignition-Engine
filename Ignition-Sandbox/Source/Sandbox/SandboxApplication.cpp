@@ -63,7 +63,7 @@ namespace Sandbox
 		{
 			(void)deltaTime;
 
-			if (m_Actions->IsPressed("Jump"))
+			if (!GetRenderer()->WantCaptureKeyboard() && m_Actions->IsPressed("Jump"))
 			{
 				IG_APP_INFO("Jump");
 

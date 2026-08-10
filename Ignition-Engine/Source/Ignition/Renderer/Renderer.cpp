@@ -107,6 +107,37 @@ namespace Ignition
 		}
 	}
 
+	void Renderer::ProcessImGuiEvent(const void* sdlEvent)
+	{
+		if (m_VulkanRenderer)
+		{
+			m_VulkanRenderer->ProcessImGuiEvent(sdlEvent);
+		}
+	}
+
+	void Renderer::BeginImGuiFrame()
+	{
+		if (m_VulkanRenderer)
+		{
+			m_VulkanRenderer->BeginImGuiFrame();
+		}
+	}
+
+	bool Renderer::IsImGuiFrameActive() const
+	{
+		return m_VulkanRenderer && m_VulkanRenderer->IsImGuiFrameActive();
+	}
+
+	bool Renderer::WantCaptureMouse() const
+	{
+		return m_VulkanRenderer && m_VulkanRenderer->WantCaptureMouse();
+	}
+
+	bool Renderer::WantCaptureKeyboard() const
+	{
+		return m_VulkanRenderer && m_VulkanRenderer->WantCaptureKeyboard();
+	}
+
 	void Renderer::WaitIdle()
 	{
 		if (m_VulkanRenderer)

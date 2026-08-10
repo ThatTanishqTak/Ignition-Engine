@@ -34,6 +34,13 @@ namespace Ignition
 
 		void WaitIdle();
 
+		void ProcessImGuiEvent(const void* sdlEvent);
+		void BeginImGuiFrame();
+		bool IsImGuiFrameActive() const;
+
+		IGNITION_API bool WantCaptureMouse() const;
+		IGNITION_API bool WantCaptureKeyboard() const;
+
 		IGNITION_API std::shared_ptr<Mesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 
 		IGNITION_API void BeginScene(const Camera& camera);

@@ -54,6 +54,7 @@ target_link_libraries(Ignition PRIVATE
     Vulkan::Vulkan
     GPUOpen::VulkanMemoryAllocator
     spdlog::spdlog
+    imgui
 PUBLIC
     glm::glm
 )

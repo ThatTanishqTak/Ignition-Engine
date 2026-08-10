@@ -8,6 +8,7 @@
 #include "Ignition/Renderer/Vulkan/VulkanAllocator.h"
 #include "Ignition/Renderer/Vulkan/VulkanPipeline.h"
 #include "Ignition/Renderer/Vulkan/VulkanMesh.h"
+#include "Ignition/Renderer/Vulkan/VulkanImGui.h"
 
 #include "Ignition/Core/Log.h"
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
@@ -107,6 +108,14 @@ namespace Ignition
 			IG_CORE_ERROR("Vulkan renderer: demo pipeline unavailable, the quad will not draw");
 		}
 
+		m_VulkanImGui = std::make_unique<VulkanImGui>();
+		m_VulkanImGui->Initialize(window, m_VulkanInstance->GetInstance(), m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanSwapchain->GetImageCount(), m_VulkanSwapchain->GetImageFormat());
+
+		if (!m_VulkanImGui->IsValid())
+		{
+			IG_CORE_ERROR("Vulkan renderer: ImGui unavailable, debug UI disabled");
+		}
+
 		IG_CORE_INFO("------- VULKAN RENDERER INITIALIZED -------");
 	}
 
@@ -117,6 +126,12 @@ namespace Ignition
 		if (m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
 		{
 			Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()), "Failed vkDeviceWaitIdle");
+		}
+
+		if (m_VulkanImGui)
+		{
+			m_VulkanImGui->Shutdown();
+			m_VulkanImGui.reset();
 		}
 
 		if (m_VulkanPipeline)
@@ -351,6 +366,12 @@ namespace Ignition
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
 
+		if (m_ImGuiFrameActive)
+		{
+			m_VulkanImGui->Render(commandBuffer);
+			m_ImGuiFrameActive = false;
+		}
+
 		vkCmdEndRendering(commandBuffer);
 
 		TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
@@ -431,6 +452,35 @@ namespace Ignition
 
 		m_FrameStarted = false;
 		m_FrameIndex = (m_FrameIndex + 1) % VulkanFrameContext::MaximumFramesInFlight;
+	}
+
+	void VulkanRenderer::ProcessImGuiEvent(const void* sdlEvent)
+	{
+		if (m_VulkanImGui)
+		{
+			m_VulkanImGui->ProcessEvent(sdlEvent);
+		}
+	}
+
+	void VulkanRenderer::BeginImGuiFrame()
+	{
+		if (!m_FrameStarted || !m_VulkanImGui || !m_VulkanImGui->IsValid())
+		{
+			return;
+		}
+
+		m_VulkanImGui->BeginFrame();
+		m_ImGuiFrameActive = true;
+	}
+
+	bool VulkanRenderer::WantCaptureMouse() const
+	{
+		return m_VulkanImGui && m_VulkanImGui->WantCaptureMouse();
+	}
+
+	bool VulkanRenderer::WantCaptureKeyboard() const
+	{
+		return m_VulkanImGui && m_VulkanImGui->WantCaptureKeyboard();
 	}
 
 	void VulkanRenderer::WaitIdle()

@@ -22,6 +22,7 @@ namespace Ignition
 	class VulkanFrameContext;
 	class VulkanPipeline;
 	class VulkanMesh;
+	class VulkanImGui;
 
 	class VulkanRenderer
 	{
@@ -40,6 +41,13 @@ namespace Ignition
 		void EndFrame();
 
 		void WaitIdle();
+
+		void ProcessImGuiEvent(const void* sdlEvent);
+		void BeginImGuiFrame();
+		bool IsImGuiFrameActive() const { return m_ImGuiFrameActive; }
+
+		bool WantCaptureMouse() const;
+		bool WantCaptureKeyboard() const;
 
 		std::unique_ptr<VulkanMesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 
@@ -65,9 +73,11 @@ namespace Ignition
 		std::unique_ptr<VulkanSwapchain> m_VulkanSwapchain;
 		std::unique_ptr<VulkanFrameContext> m_VulkanFrameContext;
 		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;
+		std::unique_ptr<VulkanImGui> m_VulkanImGui;
 
 		glm::mat4 m_SceneViewProjection{ 1.0f };
 		bool m_SceneActive = false;
+		bool m_ImGuiFrameActive = false;
 
 		uint32_t m_FrameIndex = 0;
 		uint32_t m_ImageIndex = 0;

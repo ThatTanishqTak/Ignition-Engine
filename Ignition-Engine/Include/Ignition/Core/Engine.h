@@ -37,6 +37,9 @@ namespace Ignition
 		bool IsRunning() const;
 
 	private:
+		void DrawDebugWindows();
+
+	private:
 		std::unique_ptr<Window> m_Window;
 		std::unique_ptr<Input> m_Input;
 		std::unique_ptr<Renderer> m_Renderer;
