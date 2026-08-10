@@ -12,7 +12,7 @@ namespace Ignition
 {
 	class EventQueue;
 
-	class IGNITION_API Window
+	class Window
 	{
 	public:
 		Window();
@@ -24,21 +24,21 @@ namespace Ignition
 		Window(Window&& other) noexcept;
 		Window& operator=(Window&& other) noexcept;
 
-		void Initialize(const char* title, int width, int height);
-		void Shutdown();
+		IGNITION_API void Initialize(const char* title, int width, int height);
+		IGNITION_API void Shutdown();
 
-		void PollEvents(EventQueue& eventQueue);
+		IGNITION_API void PollEvents(EventQueue& eventQueue);
 		
 		using RawEventCallback = std::function<void(const void*)>;
-		void SetRawEventCallback(RawEventCallback callback) { m_RawEventCallback = std::move(callback); }
+		IGNITION_API void SetRawEventCallback(RawEventCallback callback) { m_RawEventCallback = std::move(callback); }
 
-		void SetTextInputEnabled(bool enabled);
+		IGNITION_API void SetTextInputEnabled(bool enabled);
 
-		void SetCursorMode(CursorMode mode);
-		CursorMode GetCursorMode() const { return m_CursorMode; }
+		IGNITION_API void SetCursorMode(CursorMode mode);
+		IGNITION_API CursorMode GetCursorMode() const { return m_CursorMode; }
 
-		bool IsOpen() const { return m_IsOpen; }
-		SDL_Window* GetNativeWindow() const { return m_SDLWindow; }
+		IGNITION_API bool IsOpen() const { return m_IsOpen; }
+		IGNITION_API SDL_Window* GetNativeWindow() const { return m_SDLWindow; }
 
 	private:
 		SDL_Window* m_SDLWindow = nullptr;
