@@ -10,6 +10,8 @@
 #include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Camera.h"
 #include "Ignition/Renderer/Mesh.h"
+#include "Ignition/Renderer/Texture.h"
+#include "Ignition/Renderer/Material.h"
 #include "Ignition/Renderer/Vertex.h"
 #include "Ignition/Core/Time.h"
 
@@ -43,15 +45,18 @@ namespace Sandbox
 			m_Actions->AddAxis2D("Move").BindKeys(Ignition::ScanCode::W, Ignition::ScanCode::S, Ignition::ScanCode::A, Ignition::ScanCode::D).BindStick(Ignition::GamepadStick::Left);
 
 			const std::vector<Ignition::Vertex> vertices = {
-				{ { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-				{ {  0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-				{ {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-				{ { -0.5f,  0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f } },
+				{ { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f } },
+				{ {  0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f } },
+				{ {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
+				{ { -0.5f,  0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
 			};
 
 			const std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0 };
 
 			m_QuadMesh = GetRenderer()->CreateMesh(vertices, indices);
+
+			m_TestTexture = GetRenderer()->CreateTexture("Assets/Test.png");
+			m_QuadMaterial.Albedo = m_TestTexture;
 
 			m_Camera.SetPerspective(glm::radians(60.0f), 1920.0f / 1080.0f, 0.1f, 100.0f);
 			m_Camera.LookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f));
@@ -94,7 +99,7 @@ namespace Sandbox
 			const glm::mat4 orbiting = glm::rotate(glm::mat4(1.0f), -angle, glm::vec3(0.0f, 0.0f, 1.0f)) * glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, -0.5f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.35f));
 
 			GetRenderer()->BeginScene(m_Camera);
-			GetRenderer()->Submit(m_QuadMesh, spinning);
+			GetRenderer()->Submit(m_QuadMesh, m_QuadMaterial, spinning);
 			GetRenderer()->Submit(m_QuadMesh, orbiting);
 			GetRenderer()->EndScene();
 		}
@@ -115,6 +120,8 @@ namespace Sandbox
 		{
 			IG_APP_INFO("------- SHUTTING DOWN SANDBOX -------");
 
+			m_QuadMaterial.Albedo.reset();
+			m_TestTexture.reset();
 			m_QuadMesh.reset();
 
 			IG_APP_INFO("------- SANDBOX SHUTDOWN COMPLETE -------");
@@ -133,6 +140,8 @@ namespace Sandbox
 
 		std::unique_ptr<Ignition::ActionMap> m_Actions;
 		std::shared_ptr<Ignition::Mesh> m_QuadMesh;
+		std::shared_ptr<Ignition::Texture> m_TestTexture;
+		Ignition::Material m_QuadMaterial;
 		Ignition::Camera m_Camera;
 	};
 }

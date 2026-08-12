@@ -56,6 +56,11 @@ target_link_libraries(imgui PRIVATE SDL3::SDL3-static Vulkan::Vulkan)
 set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # --------------
 
+# stb (header-only) -------
+add_library(stb INTERFACE)
+target_include_directories(stb SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/stb")
+# --------------
+
 # spdlog -------
 set(SPDLOG_BUILD_SHARED OFF)
 set(SPDLOG_BUILD_PIC ON)

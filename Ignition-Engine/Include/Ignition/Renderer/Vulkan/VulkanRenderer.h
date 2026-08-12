@@ -5,9 +5,11 @@
 #include "Ignition/Renderer/Vertex.h"
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec4.hpp>
 
 #include <memory>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 struct SDL_Window;
@@ -23,6 +25,8 @@ namespace Ignition
 	class VulkanPipeline;
 	class VulkanMesh;
 	class VulkanImGui;
+	class VulkanDescriptorAllocator;
+	class VulkanTexture;
 
 	class VulkanRenderer
 	{
@@ -50,9 +54,11 @@ namespace Ignition
 		bool WantCaptureKeyboard() const;
 
 		std::unique_ptr<VulkanMesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+		std::unique_ptr<VulkanTexture> CreateTexture(const std::string& filepath);
 
 		void BeginScene(const glm::mat4& viewProjection);
 		void Submit(const VulkanMesh& mesh, const glm::mat4& transform);
+		void Submit(const VulkanMesh& mesh, const VulkanTexture* texture, const glm::vec4& tint, const glm::mat4& transform);
 		void EndScene();
 
 		void OnResize();
@@ -60,8 +66,6 @@ namespace Ignition
 	private:
 		void RecreateSwapchain();
 		void GetWindowPixelSize(uint32_t& outWidth, uint32_t& outHeight) const;
-
-		void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess);
 
 	private:
 		SDL_Window* m_Window = nullptr;
@@ -72,7 +76,9 @@ namespace Ignition
 		std::unique_ptr<VulkanAllocator> m_VulkanAllocator;
 		std::unique_ptr<VulkanSwapchain> m_VulkanSwapchain;
 		std::unique_ptr<VulkanFrameContext> m_VulkanFrameContext;
+		std::unique_ptr<VulkanDescriptorAllocator> m_VulkanDescriptorAllocator;
 		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;
+		std::unique_ptr<VulkanTexture> m_WhiteTexture;
 		std::unique_ptr<VulkanImGui> m_VulkanImGui;
 
 		glm::mat4 m_SceneViewProjection{ 1.0f };

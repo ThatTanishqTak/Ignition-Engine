@@ -84,5 +84,32 @@ namespace Ignition
 
 			return succeeded;
 		}
+
+		void VulkanUtilities::TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageAspectFlags aspectMask, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess)
+		{
+			VkImageMemoryBarrier2 imageMemoryBarrier{};
+			imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+			imageMemoryBarrier.srcStageMask = sourceStage;
+			imageMemoryBarrier.srcAccessMask = sourceAccess;
+			imageMemoryBarrier.dstStageMask = destinationStage;
+			imageMemoryBarrier.dstAccessMask = destinationAccess;
+			imageMemoryBarrier.oldLayout = oldLayout;
+			imageMemoryBarrier.newLayout = newLayout;
+			imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			imageMemoryBarrier.image = image;
+			imageMemoryBarrier.subresourceRange.aspectMask = aspectMask;
+			imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemoryBarrier.subresourceRange.levelCount = 1;
+			imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemoryBarrier.subresourceRange.layerCount = 1;
+
+			VkDependencyInfo dependencyInfo{};
+			dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+			dependencyInfo.imageMemoryBarrierCount = 1;
+			dependencyInfo.pImageMemoryBarriers = &imageMemoryBarrier;
+
+			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+		}
 	}
 }

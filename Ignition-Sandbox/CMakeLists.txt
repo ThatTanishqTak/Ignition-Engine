@@ -31,6 +31,14 @@ target_link_libraries(Sandbox PRIVATE Ignition)
 
 add_dependencies(Sandbox IgnitionShaders)
 
+add_custom_command(TARGET Sandbox POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/Assets"
+        "${BASE_OUTPUT_DIRECTORY}/Assets"
+    COMMENT "Copying Sandbox assets"
+    VERBATIM
+)
+
 set_target_properties(Sandbox PROPERTIES
     CXX_EXTENSIONS OFF
     BUILD_RPATH "$ORIGIN"

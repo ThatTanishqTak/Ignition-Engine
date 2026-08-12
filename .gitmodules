@@ -14,3 +14,6 @@
 	path = Vendor/imgui
 	url = https://github.com/ThatTanishqTak/imgui.git
 	branch = docking
+[submodule "Vendor/stb"]
+	path = Vendor/stb
+	url = https://github.com/ThatTanishqTak/stb.git

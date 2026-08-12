@@ -14,7 +14,7 @@ namespace Ignition
 	VulkanPipeline::VulkanPipeline() = default;
 	VulkanPipeline::~VulkanPipeline() = default;
 
-	void VulkanPipeline::Initialize(VkDevice device, VkFormat colorFormat, const std::string& spirvPath)
+	void VulkanPipeline::Initialize(VkDevice device, VkFormat colorFormat, const std::string& spirvPath, VkDescriptorSetLayout textureSetLayout)
 	{
 		IG_CORE_INFO("------- INITIALIZING VULKAN PIPELINE -------");
 
@@ -46,7 +46,7 @@ namespace Ignition
 		bindingDescription.stride = sizeof(Vertex);
 		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-		std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+		std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
 
 		attributeDescriptions[0].location = 0;
 		attributeDescriptions[0].binding = 0;
@@ -57,6 +57,11 @@ namespace Ignition
 		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 		attributeDescriptions[1].offset = static_cast<uint32_t>(offsetof(Vertex, Color));
+
+		attributeDescriptions[2].location = 2;
+		attributeDescriptions[2].binding = 0;
+		attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[2].offset = static_cast<uint32_t>(offsetof(Vertex, UV));
 
 		VkPipelineVertexInputStateCreateInfo vertexInputState{};
 		vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -102,12 +107,14 @@ namespace Ignition
 		dynamicState.pDynamicStates = dynamicStates.data();
 
 		VkPushConstantRange pushConstantRange{};
-		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 		pushConstantRange.offset = 0;
-		pushConstantRange.size = 64;
+		pushConstantRange.size = 80;
 
 		VkPipelineLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		layoutInfo.setLayoutCount = 1;
+		layoutInfo.pSetLayouts = &textureSetLayout;
 		layoutInfo.pushConstantRangeCount = 1;
 		layoutInfo.pPushConstantRanges = &pushConstantRange;
 

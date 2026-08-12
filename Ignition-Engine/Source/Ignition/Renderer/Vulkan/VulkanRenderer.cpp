@@ -9,6 +9,8 @@
 #include "Ignition/Renderer/Vulkan/VulkanPipeline.h"
 #include "Ignition/Renderer/Vulkan/VulkanMesh.h"
 #include "Ignition/Renderer/Vulkan/VulkanImGui.h"
+#include "Ignition/Renderer/Vulkan/VulkanDescriptorAllocator.h"
+#include "Ignition/Renderer/Vulkan/VulkanTexture.h"
 
 #include "Ignition/Core/Log.h"
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
@@ -26,6 +28,14 @@ namespace Ignition
 	namespace
 	{
 		constexpr const char* ShaderDirectory = "Shaders/";
+
+		struct PushConstantData
+		{
+			glm::mat4 MVP;
+			glm::vec4 Tint;
+		};
+
+		static_assert(sizeof(PushConstantData) == 80, "Push constant block must match the 80-byte range declared in VulkanPipeline");
 	}
 
 	VulkanRenderer::VulkanRenderer() = default;
@@ -97,15 +107,38 @@ namespace Ignition
 			return;
 		}
 
+		m_VulkanDescriptorAllocator = std::make_unique<VulkanDescriptorAllocator>();
+		m_VulkanDescriptorAllocator->Initialize(m_VulkanDevice->GetDevice());
+
+		if (!m_VulkanDescriptorAllocator->IsValid())
+		{
+			IG_CORE_CRITICAL("Vulkan renderer initialization aborted: no descriptor allocator");
+
+			return;
+		}
+
 		const char* basePath = SDL_GetBasePath();
-		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Quad.spv";
+		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Mesh.spv";
 
 		m_VulkanPipeline = std::make_unique<VulkanPipeline>();
-		m_VulkanPipeline->Initialize(m_VulkanDevice->GetDevice(), m_VulkanSwapchain->GetImageFormat(), shaderPath);
+		m_VulkanPipeline->Initialize(m_VulkanDevice->GetDevice(), m_VulkanSwapchain->GetImageFormat(), shaderPath, m_VulkanDescriptorAllocator->GetTextureSetLayout());
 
 		if (!m_VulkanPipeline->IsValid())
 		{
 			IG_CORE_ERROR("Vulkan renderer: demo pipeline unavailable, the quad will not draw");
+		}
+
+		constexpr uint8_t whitePixel[4] = { 255, 255, 255, 255 };
+
+		m_WhiteTexture = std::make_unique<VulkanTexture>();
+		m_WhiteTexture->Initialize(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, whitePixel, 1, 1);
+
+		if (!m_WhiteTexture->IsValid())
+		{
+			IG_CORE_ERROR("Vulkan renderer: white fallback texture unavailable, untextured submits will not draw");
+
+			m_WhiteTexture->Shutdown();
+			m_WhiteTexture.reset();
 		}
 
 		m_VulkanImGui = std::make_unique<VulkanImGui>();
@@ -138,6 +171,18 @@ namespace Ignition
 		{
 			m_VulkanPipeline->Shutdown();
 			m_VulkanPipeline.reset();
+		}
+
+		if (m_WhiteTexture)
+		{
+			m_WhiteTexture->Shutdown();
+			m_WhiteTexture.reset();
+		}
+
+		if (m_VulkanDescriptorAllocator)
+		{
+			m_VulkanDescriptorAllocator->Shutdown();
+			m_VulkanDescriptorAllocator.reset();
 		}
 
 		if (m_VulkanFrameContext)
@@ -216,33 +261,6 @@ namespace Ignition
 		m_ResizeRequested = false;
 	}
 
-	void VulkanRenderer::TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess)
-	{
-		VkImageMemoryBarrier2 imageMemoryBarrier{};
-		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-		imageMemoryBarrier.srcStageMask = sourceStage;
-		imageMemoryBarrier.srcAccessMask = sourceAccess;
-		imageMemoryBarrier.dstStageMask = destinationStage;
-		imageMemoryBarrier.dstAccessMask = destinationAccess;
-		imageMemoryBarrier.oldLayout = oldLayout;
-		imageMemoryBarrier.newLayout = newLayout;
-		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		imageMemoryBarrier.image = image;
-		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-		imageMemoryBarrier.subresourceRange.levelCount = 1;
-		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
-		imageMemoryBarrier.subresourceRange.layerCount = 1;
-
-		VkDependencyInfo dependencyInfo{};
-		dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-		dependencyInfo.imageMemoryBarrierCount = 1;
-		dependencyInfo.pImageMemoryBarriers = &imageMemoryBarrier;
-
-		vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
-	}
-
 	void VulkanRenderer::BeginFrame()
 	{
 		m_FrameStarted = false;
@@ -317,7 +335,7 @@ namespace Ignition
 			return;
 		}
 
-		TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
 		const VkExtent2D extent = m_VulkanSwapchain->GetExtent();
 
@@ -374,7 +392,7 @@ namespace Ignition
 
 		vkCmdEndRendering(commandBuffer);
 
-		TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
+		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
 
 		if (Utilities::VulkanUtilities::VKCheck(vkEndCommandBuffer(commandBuffer), "Failed vkEndCommandBuffer"))
 		{
@@ -527,18 +545,59 @@ namespace Ignition
 		m_SceneActive = true;
 	}
 
+	std::unique_ptr<VulkanTexture> VulkanRenderer::CreateTexture(const std::string& filepath)
+	{
+		if (!IsValid() || !m_VulkanAllocator || !m_VulkanDescriptorAllocator)
+		{
+			return nullptr;
+		}
+
+		const char* basePath = SDL_GetBasePath();
+		const std::string fullPath = std::string(basePath ? basePath : "") + filepath;
+
+		auto texture = std::make_unique<VulkanTexture>();
+		texture->InitializeFromFile(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, fullPath);
+
+		if (!texture->IsValid())
+		{
+			texture->Shutdown();
+
+			return nullptr;
+		}
+
+		return texture;
+	}
+
 	void VulkanRenderer::Submit(const VulkanMesh& mesh, const glm::mat4& transform)
+	{
+		Submit(mesh, nullptr, glm::vec4(1.0f), transform);
+	}
+
+	void VulkanRenderer::Submit(const VulkanMesh& mesh, const VulkanTexture* texture, const glm::vec4& tint, const glm::mat4& transform)
 	{
 		if (!m_SceneActive || !mesh.IsValid())
 		{
 			return;
 		}
 
+		const VulkanTexture* boundTexture = (texture && texture->IsValid()) ? texture : m_WhiteTexture.get();
+
+		if (!boundTexture || !boundTexture->IsValid())
+		{
+			return;
+		}
+
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
 
-		const glm::mat4 mvp = m_SceneViewProjection * transform;
+		const VkDescriptorSet descriptorSet = boundTexture->GetDescriptorSet();
 
-		vkCmdPushConstants(commandBuffer, m_VulkanPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &mvp);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VulkanPipeline->GetPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
+
+		PushConstantData pushConstantData{};
+		pushConstantData.MVP = m_SceneViewProjection * transform;
+		pushConstantData.Tint = tint;
+
+		vkCmdPushConstants(commandBuffer, m_VulkanPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstantData), &pushConstantData);
 
 		mesh.Bind(commandBuffer);
 

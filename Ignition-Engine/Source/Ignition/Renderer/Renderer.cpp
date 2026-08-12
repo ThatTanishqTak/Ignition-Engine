@@ -2,8 +2,11 @@
 
 #include "Ignition/Renderer/Camera.h"
 #include "Ignition/Renderer/Mesh.h"
+#include "Ignition/Renderer/Texture.h"
+#include "Ignition/Renderer/Material.h"
 #include "Ignition/Renderer/Vulkan/VulkanRenderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanMesh.h"
+#include "Ignition/Renderer/Vulkan/VulkanTexture.h"
 
 #include "Ignition/Core/Log.h"
 
@@ -91,11 +94,38 @@ namespace Ignition
 		}
 	}
 
+	std::shared_ptr<Texture> Renderer::CreateTexture(const std::string& filepath)
+	{
+		if (!m_VulkanRenderer)
+		{
+			return nullptr;
+		}
+
+		auto vulkanTexture = m_VulkanRenderer->CreateTexture(filepath);
+
+		if (!vulkanTexture)
+		{
+			return nullptr;
+		}
+
+		return std::shared_ptr<Texture>(new Texture(std::move(vulkanTexture)));
+	}
+
 	void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform)
 	{
 		if (m_VulkanRenderer && mesh && mesh->GetVulkanMesh())
 		{
 			m_VulkanRenderer->Submit(*mesh->GetVulkanMesh(), transform);
+		}
+	}
+
+	void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const Material& material, const glm::mat4& transform)
+	{
+		if (m_VulkanRenderer && mesh && mesh->GetVulkanMesh())
+		{
+			const VulkanTexture* texture = material.Albedo ? material.Albedo->GetVulkanTexture() : nullptr;
+
+			m_VulkanRenderer->Submit(*mesh->GetVulkanMesh(), texture, material.Tint, transform);
 		}
 	}
 
