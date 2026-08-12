@@ -21,7 +21,7 @@ set(SDL_DISABLE_UNINSTALL ON)
 add_subdirectory(SDL SYSTEM EXCLUDE_FROM_ALL)
 # --------------
 
-# VulkanMemoryAllocator
+# VulkanMemoryAllocator -------
 add_subdirectory(VulkanMemoryAllocator SYSTEM EXCLUDE_FROM_ALL)
 # --------------
 
