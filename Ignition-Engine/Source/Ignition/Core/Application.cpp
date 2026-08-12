@@ -2,6 +2,7 @@
 
 #include "Ignition/Core/Engine.h"
 #include "Ignition/Core/Log.h"
+#include "Ignition/UI/ImGuiLayer.h"
 #include "Ignition/Core/Time.h"
 #include "Ignition/Events/EventQueue.h"
 #include "Ignition/Renderer/Renderer.h"
@@ -32,6 +33,10 @@ namespace Ignition
 			return;
 		}
 
+		auto imguiLayer = std::make_unique<ImGuiLayer>(m_Engine->GetRenderer(), m_Engine->GetInput());
+		m_ImGuiLayer = imguiLayer.get();
+		m_LayerStack.PushOverlay(std::move(imguiLayer));
+
 		OnInitialize();
 
 		IG_CORE_INFO("------- APPLICATION INITIALIZED -------");
@@ -47,6 +52,9 @@ namespace Ignition
 		}
 
 		OnShutdown();
+
+		m_ImGuiLayer = nullptr;
+		m_LayerStack.Clear();
 
 		if (m_Engine)
 		{
@@ -80,6 +88,11 @@ namespace Ignition
 
 				if (!queuedEvent->IsHandled())
 				{
+					m_LayerStack.OnEvent(*queuedEvent);
+				}
+
+				if (!queuedEvent->IsHandled())
+				{
 					OnEvent(*queuedEvent);
 				}
 			}
@@ -87,9 +100,11 @@ namespace Ignition
 			while (Time::NextFixedStep())
 			{
 				OnFixedUpdate(Time::GetFixedTimeStep());
+				m_LayerStack.OnFixedUpdate(Time::GetFixedTimeStep());
 			}
 
 			OnUpdate(Time::GetDeltaTime());
+			m_LayerStack.OnUpdate(Time::GetDeltaTime());
 
 			if (!m_Engine->IsRunning())
 			{
@@ -97,11 +112,27 @@ namespace Ignition
 			}
 
 			m_Engine->BeginFrame();
-			
+
+			if (m_ImGuiLayer)
+			{
+				m_ImGuiLayer->BeginFrame();
+			}
+
 			OnRender();
-			
+			m_LayerStack.OnRender();
+
 			m_Engine->EndFrame();
 		}
+	}
+
+	void Application::PushLayer(std::unique_ptr<Layer> layer)
+	{
+		m_LayerStack.PushLayer(std::move(layer));
+	}
+
+	void Application::PushOverlay(std::unique_ptr<Layer> overlay)
+	{
+		m_LayerStack.PushOverlay(std::move(overlay));
 	}
 
 	Renderer* Application::GetRenderer() const
@@ -112,5 +143,10 @@ namespace Ignition
 	Input* Application::GetInput() const
 	{
 		return m_Engine ? m_Engine->GetInput() : nullptr;
+	}
+
+	Window* Application::GetWindow() const
+	{
+		return m_Engine ? m_Engine->GetWindow() : nullptr;
 	}
 }

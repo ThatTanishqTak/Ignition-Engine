@@ -11,6 +11,7 @@
 #include "Ignition/Renderer/Vulkan/VulkanImGui.h"
 #include "Ignition/Renderer/Vulkan/VulkanDescriptorAllocator.h"
 #include "Ignition/Renderer/Vulkan/VulkanTexture.h"
+#include "Ignition/Renderer/Vulkan/VulkanImage.h"
 
 #include "Ignition/Core/Log.h"
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
@@ -28,6 +29,7 @@ namespace Ignition
 	namespace
 	{
 		constexpr const char* ShaderDirectory = "Shaders/";
+		constexpr VkFormat DepthFormat = VK_FORMAT_D32_SFLOAT;
 
 		struct PushConstantData
 		{
@@ -94,6 +96,18 @@ namespace Ignition
 		m_VulkanSwapchain = std::make_unique<VulkanSwapchain>();
 		m_VulkanSwapchain->Initialize(m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanSurface->GetSurface(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanDevice->GetPresentQueueFamily(), width, height);
 
+		const VkExtent2D swapchainExtent = m_VulkanSwapchain->GetExtent();
+
+		m_DepthImage = std::make_unique<VulkanImage>();
+		m_DepthImage->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), swapchainExtent.width, swapchainExtent.height, DepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+		if (!m_DepthImage->IsValid())
+		{
+			IG_CORE_CRITICAL("Vulkan renderer initialization aborted: no depth image");
+
+			return;
+		}
+
 		m_VulkanFrameContext = std::make_unique<VulkanFrameContext>();
 		m_VulkanFrameContext->Initialize(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueueFamily());
 
@@ -121,7 +135,7 @@ namespace Ignition
 		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Mesh.spv";
 
 		m_VulkanPipeline = std::make_unique<VulkanPipeline>();
-		m_VulkanPipeline->Initialize(m_VulkanDevice->GetDevice(), m_VulkanSwapchain->GetImageFormat(), shaderPath, m_VulkanDescriptorAllocator->GetTextureSetLayout());
+		m_VulkanPipeline->Initialize(m_VulkanDevice->GetDevice(), m_VulkanSwapchain->GetImageFormat(), DepthFormat, shaderPath, m_VulkanDescriptorAllocator->GetTextureSetLayout());
 
 		if (!m_VulkanPipeline->IsValid())
 		{
@@ -142,7 +156,7 @@ namespace Ignition
 		}
 
 		m_VulkanImGui = std::make_unique<VulkanImGui>();
-		m_VulkanImGui->Initialize(window, m_VulkanInstance->GetInstance(), m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanSwapchain->GetImageCount(), m_VulkanSwapchain->GetImageFormat());
+		m_VulkanImGui->Initialize(window, m_VulkanInstance->GetInstance(), m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanSwapchain->GetImageCount(), m_VulkanSwapchain->GetImageFormat(), DepthFormat);
 
 		if (!m_VulkanImGui->IsValid())
 		{
@@ -195,6 +209,12 @@ namespace Ignition
 		{
 			m_VulkanSwapchain->Shutdown();
 			m_VulkanSwapchain.reset();
+		}
+
+		if (m_DepthImage)
+		{
+			m_DepthImage->Shutdown();
+			m_DepthImage.reset();
 		}
 
 		if (m_VulkanAllocator)
@@ -259,13 +279,29 @@ namespace Ignition
 
 		m_VulkanSwapchain->Recreate(width, height);
 		m_ResizeRequested = false;
+
+		if (m_DepthImage && m_VulkanSwapchain->IsValid())
+		{
+			const VkExtent2D extent = m_VulkanSwapchain->GetExtent();
+
+			if (extent.width != m_DepthImage->GetExtent().width || extent.height != m_DepthImage->GetExtent().height)
+			{
+				m_DepthImage->Shutdown();
+				m_DepthImage->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), extent.width, extent.height, DepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+				if (!m_DepthImage->IsValid())
+				{
+					IG_CORE_ERROR("Vulkan renderer: depth image recreation failed, rendering paused until the next resize");
+				}
+			}
+		}
 	}
 
 	void VulkanRenderer::BeginFrame()
 	{
 		m_FrameStarted = false;
 
-		if (!m_VulkanSwapchain || !m_VulkanFrameContext || !m_VulkanDevice)
+		if (!m_VulkanSwapchain || !m_VulkanFrameContext || !m_VulkanDevice || !m_DepthImage || !m_DepthImage->IsValid())
 		{
 			return;
 		}
@@ -337,6 +373,8 @@ namespace Ignition
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
+		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_DepthImage->GetImage(), VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+
 		const VkExtent2D extent = m_VulkanSwapchain->GetExtent();
 
 		VkRenderingAttachmentInfo renderingColorAttachmentInfo{};
@@ -347,6 +385,14 @@ namespace Ignition
 		renderingColorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		renderingColorAttachmentInfo.clearValue.color = { { m_ClearColor[0], m_ClearColor[1], m_ClearColor[2], m_ClearColor[3] } };
 
+		VkRenderingAttachmentInfo renderingDepthAttachmentInfo{};
+		renderingDepthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+		renderingDepthAttachmentInfo.imageView = m_DepthImage->GetImageView();
+		renderingDepthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+		renderingDepthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		renderingDepthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		renderingDepthAttachmentInfo.clearValue.depthStencil = { 1.0f, 0 };
+
 		VkRenderingInfo renderingInfo{};
 		renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
 		renderingInfo.renderArea.offset = { 0, 0 };
@@ -354,6 +400,7 @@ namespace Ignition
 		renderingInfo.layerCount = 1;
 		renderingInfo.colorAttachmentCount = 1;
 		renderingInfo.pColorAttachments = &renderingColorAttachmentInfo;
+		renderingInfo.pDepthAttachment = &renderingDepthAttachmentInfo;
 
 		vkCmdBeginRendering(commandBuffer, &renderingInfo);
 

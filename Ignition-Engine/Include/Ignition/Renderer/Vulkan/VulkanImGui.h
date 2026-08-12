@@ -15,7 +15,7 @@ namespace Ignition
 		VulkanImGui(const VulkanImGui&) = delete;
 		VulkanImGui& operator=(const VulkanImGui&) = delete;
 
-		void Initialize(SDL_Window* window, VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t graphicsQueueFamily, VkQueue graphicsQueue, uint32_t swapchainImageCount, VkFormat colorFormat);
+		void Initialize(SDL_Window* window, VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t graphicsQueueFamily, VkQueue graphicsQueue, uint32_t swapchainImageCount, VkFormat colorFormat, VkFormat depthFormat);
 		void Shutdown();
 
 		bool IsValid() const { return m_Initialized; }

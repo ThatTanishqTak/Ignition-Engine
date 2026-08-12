@@ -15,7 +15,7 @@ namespace Ignition
 		VulkanPipeline(const VulkanPipeline&) = delete;
 		VulkanPipeline& operator=(const VulkanPipeline&) = delete;
 
-		void Initialize(VkDevice device, VkFormat colorFormat, const std::string& spirvPath, VkDescriptorSetLayout textureSetLayout);
+		void Initialize(VkDevice device, VkFormat colorFormat, VkFormat depthFormat, const std::string& spirvPath, VkDescriptorSetLayout textureSetLayout);
 		void Shutdown();
 
 		bool IsValid() const { return m_Pipeline != VK_NULL_HANDLE; }

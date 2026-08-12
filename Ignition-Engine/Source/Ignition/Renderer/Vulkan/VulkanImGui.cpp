@@ -9,6 +9,8 @@
 
 #include <SDL3/SDL_events.h>
 
+#include <array>
+
 namespace Ignition
 {
 	namespace
@@ -22,23 +24,25 @@ namespace Ignition
 	VulkanImGui::VulkanImGui() = default;
 	VulkanImGui::~VulkanImGui() = default;
 
-	void VulkanImGui::Initialize(SDL_Window* window, VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t graphicsQueueFamily, VkQueue graphicsQueue, uint32_t swapchainImageCount, VkFormat colorFormat)
+	void VulkanImGui::Initialize(SDL_Window* window, VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, uint32_t graphicsQueueFamily, VkQueue graphicsQueue, uint32_t swapchainImageCount, VkFormat colorFormat, VkFormat depthFormat)
 	{
 		IG_CORE_INFO("------- INITIALIZING IMGUI -------");
 
 		m_Device = device;
 		m_ColorFormat = colorFormat;
 
-		VkDescriptorPoolSize poolSize{};
-		poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSize.descriptorCount = 16;
+		const std::array<VkDescriptorPoolSize, 3> poolSizes = { {
+			{ VK_DESCRIPTOR_TYPE_SAMPLER, 16 },
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16 },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 16 },
+		} };
 
 		VkDescriptorPoolCreateInfo poolCreateInfo{};
 		poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		poolCreateInfo.maxSets = 16;
-		poolCreateInfo.poolSizeCount = 1;
-		poolCreateInfo.pPoolSizes = &poolSize;
+		poolCreateInfo.maxSets = 48;
+		poolCreateInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolCreateInfo.pPoolSizes = poolSizes.data();
 
 		if (Utilities::VulkanUtilities::VKCheck(vkCreateDescriptorPool(m_Device, &poolCreateInfo, nullptr, &m_DescriptorPool), "Failed vkCreateDescriptorPool (ImGui)"))
 		{
@@ -92,6 +96,7 @@ namespace Ignition
 		initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 		initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
 		initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &m_ColorFormat;
+		initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.depthAttachmentFormat = depthFormat;
 
 		if (!ImGui_ImplVulkan_Init(&initInfo))
 		{

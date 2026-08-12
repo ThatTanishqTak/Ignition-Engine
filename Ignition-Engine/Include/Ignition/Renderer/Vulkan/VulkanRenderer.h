@@ -27,6 +27,7 @@ namespace Ignition
 	class VulkanImGui;
 	class VulkanDescriptorAllocator;
 	class VulkanTexture;
+	class VulkanImage;
 
 	class VulkanRenderer
 	{
@@ -75,6 +76,7 @@ namespace Ignition
 		std::unique_ptr<VulkanDevice> m_VulkanDevice;
 		std::unique_ptr<VulkanAllocator> m_VulkanAllocator;
 		std::unique_ptr<VulkanSwapchain> m_VulkanSwapchain;
+		std::unique_ptr<VulkanImage> m_DepthImage;
 		std::unique_ptr<VulkanFrameContext> m_VulkanFrameContext;
 		std::unique_ptr<VulkanDescriptorAllocator> m_VulkanDescriptorAllocator;
 		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;

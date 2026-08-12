@@ -6,9 +6,6 @@
 #include "Ignition/Input/Input.h"
 #include "Ignition/Window/Window.h"
 #include "Ignition/Renderer/Renderer.h"
-#include "Ignition/Core/Time.h"
-
-#include <imgui.h>
 
 namespace Ignition
 {
@@ -102,13 +99,6 @@ namespace Ignition
 
 		m_Renderer->BeginFrame();
 		m_Renderer->BeginImGuiFrame();
-
-		if (m_Renderer->IsImGuiFrameActive())
-		{
-			ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
-
-			DrawDebugWindows();
-		}
 	}
 
 	void Engine::EndFrame()
@@ -117,30 +107,6 @@ namespace Ignition
 		{
 			m_Renderer->EndFrame();
 		}
-	}
-
-	void Engine::DrawDebugWindows()
-	{
-		ImGui::Begin("Stats");
-		ImGui::Text("FPS: %.1f", Time::GetFramesPerSecond());
-		ImGui::Text("Frame Time: %.2f ms", Time::GetAverageFrameTimeMilliseconds());
-		ImGui::End();
-
-		ImGui::Begin("Gamepads");
-
-		const auto gamepads = m_Input->GetConnectedGamepads();
-
-		if (gamepads.empty())
-		{
-			ImGui::TextUnformatted("No gamepads connected");
-		}
-
-		for (const GamepadID gamepadID : gamepads)
-		{
-			ImGui::Text("[%d] %s", static_cast<int>(gamepadID), m_Input->GetGamepadName(gamepadID).c_str());
-		}
-
-		ImGui::End();
 	}
 
 	void Engine::OnEvent(Event& event)

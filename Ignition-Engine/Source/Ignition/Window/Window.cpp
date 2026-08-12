@@ -279,6 +279,17 @@ namespace Ignition
 		}
 	}
 
+	void Window::GetPixelSize(int& outWidth, int& outHeight) const
+	{
+		outWidth = 0;
+		outHeight = 0;
+
+		if (m_SDLWindow)
+		{
+			SDL_GetWindowSizeInPixels(m_SDLWindow, &outWidth, &outHeight);
+		}
+	}
+
 	void Window::SetTextInputEnabled(bool enabled)
 	{
 		if (!m_SDLWindow)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Ignition/Core/Export.h"
+#include "Ignition/Core/LayerStack.h"
 
 #include <memory>
 
@@ -17,6 +18,8 @@ namespace Ignition
 	class Event;
 	class Renderer;
 	class Input;
+	class Window;
+	class ImGuiLayer;
 
 	class Application
 	{
@@ -32,6 +35,9 @@ namespace Ignition
 		IGNITION_API void Shutdown();
 		IGNITION_API void Run();
 
+		IGNITION_API void PushLayer(std::unique_ptr<Layer> layer);
+		IGNITION_API void PushOverlay(std::unique_ptr<Layer> overlay);
+
 	protected:
 		virtual void OnInitialize() {}
 		virtual void OnUpdate(float deltaTime) { (void)deltaTime; }
@@ -42,10 +48,13 @@ namespace Ignition
 
 		IGNITION_API Renderer* GetRenderer() const;
 		IGNITION_API Input* GetInput() const;
+		IGNITION_API Window* GetWindow() const;
 
 	private:
 		ApplicationSpecification m_Specification;
 		std::unique_ptr<Engine> m_Engine;
+		LayerStack m_LayerStack;
+		ImGuiLayer* m_ImGuiLayer = nullptr;
 	};
 
 	std::unique_ptr<Application> CreateApplication(int argc, char** argv);

@@ -14,7 +14,7 @@ namespace Ignition
 	VulkanPipeline::VulkanPipeline() = default;
 	VulkanPipeline::~VulkanPipeline() = default;
 
-	void VulkanPipeline::Initialize(VkDevice device, VkFormat colorFormat, const std::string& spirvPath, VkDescriptorSetLayout textureSetLayout)
+	void VulkanPipeline::Initialize(VkDevice device, VkFormat colorFormat, VkFormat depthFormat, const std::string& spirvPath, VkDescriptorSetLayout textureSetLayout)
 	{
 		IG_CORE_INFO("------- INITIALIZING VULKAN PIPELINE -------");
 
@@ -99,6 +99,12 @@ namespace Ignition
 		colorBlendState.attachmentCount = 1;
 		colorBlendState.pAttachments = &colorBlendAttachment;
 
+		VkPipelineDepthStencilStateCreateInfo depthStencilState{};
+		depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		depthStencilState.depthTestEnable = VK_TRUE;
+		depthStencilState.depthWriteEnable = VK_TRUE;
+		depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+
 		const std::array<VkDynamicState, 2> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
 		VkPipelineDynamicStateCreateInfo dynamicState{};
@@ -129,6 +135,7 @@ namespace Ignition
 		renderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 		renderingCreateInfo.colorAttachmentCount = 1;
 		renderingCreateInfo.pColorAttachmentFormats = &colorFormat;
+		renderingCreateInfo.depthAttachmentFormat = depthFormat;
 
 		VkGraphicsPipelineCreateInfo pipelineInfo{};
 		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -140,6 +147,7 @@ namespace Ignition
 		pipelineInfo.pViewportState = &viewportState;
 		pipelineInfo.pRasterizationState = &rasterizationState;
 		pipelineInfo.pMultisampleState = &multisampleState;
+		pipelineInfo.pDepthStencilState = &depthStencilState;
 		pipelineInfo.pColorBlendState = &colorBlendState;
 		pipelineInfo.pDynamicState = &dynamicState;
 		pipelineInfo.layout = m_PipelineLayout;

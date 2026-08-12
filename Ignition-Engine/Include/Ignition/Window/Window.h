@@ -37,6 +37,8 @@ namespace Ignition
 		IGNITION_API void SetCursorMode(CursorMode mode);
 		IGNITION_API CursorMode GetCursorMode() const { return m_CursorMode; }
 
+		IGNITION_API void GetPixelSize(int& outWidth, int& outHeight) const;
+
 		IGNITION_API bool IsOpen() const { return m_IsOpen; }
 		IGNITION_API SDL_Window* GetNativeWindow() const { return m_SDLWindow; }
 

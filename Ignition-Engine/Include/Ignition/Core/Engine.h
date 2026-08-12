@@ -31,13 +31,11 @@ namespace Ignition
 		void OnEvent(Event& event);
 
 		EventQueue& GetEventQueue() { return m_EventQueue; }
+		Window* GetWindow() const { return m_Window.get(); }
 		Renderer* GetRenderer() const { return m_Renderer.get(); }
 		Input* GetInput() const { return m_Input.get(); }
 
 		bool IsRunning() const;
-
-	private:
-		void DrawDebugWindows();
 
 	private:
 		std::unique_ptr<Window> m_Window;

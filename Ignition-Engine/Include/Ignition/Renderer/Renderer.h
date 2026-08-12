@@ -39,7 +39,7 @@ namespace Ignition
 
 		void ProcessImGuiEvent(const void* sdlEvent);
 		void BeginImGuiFrame();
-		bool IsImGuiFrameActive() const;
+		IGNITION_API bool IsImGuiFrameActive() const;
 
 		IGNITION_API bool WantCaptureMouse() const;
 		IGNITION_API bool WantCaptureKeyboard() const;

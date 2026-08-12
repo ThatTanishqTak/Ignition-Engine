@@ -7,6 +7,7 @@
 #include "Ignition/Events/WindowEvent.h"
 #include "Ignition/Input/ActionMap.h"
 #include "Ignition/Input/Input.h"
+#include "Ignition/Window/Window.h"
 #include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Camera.h"
 #include "Ignition/Renderer/Mesh.h"
@@ -14,6 +15,9 @@
 #include "Ignition/Renderer/Material.h"
 #include "Ignition/Renderer/Vertex.h"
 #include "Ignition/Core/Time.h"
+
+#include "Sandbox/CameraController.h"
+#include "Sandbox/SandboxLayer.h"
 
 #include <glm/vec2.hpp>
 #include <glm/mat4x4.hpp>
@@ -51,22 +55,31 @@ namespace Sandbox
 				{ { -0.5f,  0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
 			};
 
-			const std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0 };
+			const std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0, 2, 1, 0, 0, 3, 2 };
 
 			m_QuadMesh = GetRenderer()->CreateMesh(vertices, indices);
 
 			m_TestTexture = GetRenderer()->CreateTexture("Assets/Test.png");
 			m_QuadMaterial.Albedo = m_TestTexture;
 
-			m_Camera.SetPerspective(glm::radians(60.0f), 1920.0f / 1080.0f, 0.1f, 100.0f);
-			m_Camera.LookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f));
+			int pixelWidth = 0;
+			int pixelHeight = 0;
+			GetWindow()->GetPixelSize(pixelWidth, pixelHeight);
+
+			const float aspectRatio = pixelHeight > 0 ? static_cast<float>(pixelWidth) / static_cast<float>(pixelHeight) : 16.0f / 9.0f;
+
+			m_Camera.SetPerspective(glm::radians(60.0f), aspectRatio, 0.1f, 100.0f);
+
+			m_CameraController = std::make_unique<CameraController>(GetInput(), m_Actions.get());
+
+			PushLayer(std::make_unique<SandboxLayer>(GetRenderer(), &m_QuadMaterial));
 
 			IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 		}
 
 		void OnUpdate(float deltaTime) override
 		{
-			(void)deltaTime;
+			m_CameraController->Update(m_Camera, deltaTime, GetRenderer()->WantCaptureMouse(), GetRenderer()->WantCaptureKeyboard());
 
 			if (!GetRenderer()->WantCaptureKeyboard() && m_Actions->IsPressed("Jump"))
 			{
@@ -108,6 +121,16 @@ namespace Sandbox
 		{
 			Ignition::EventDispatcher dispatcher(event);
 
+			dispatcher.Dispatch<Ignition::WindowResizeEvent>([this](Ignition::WindowResizeEvent& resizeEvent)
+			{
+				if (resizeEvent.GetPixelHeight() > 0)
+				{
+					m_Camera.SetAspectRatio(static_cast<float>(resizeEvent.GetPixelWidth()) / static_cast<float>(resizeEvent.GetPixelHeight()));
+				}
+
+				return false;
+			});
+
 			dispatcher.Dispatch<Ignition::KeyPressedEvent>([](Ignition::KeyPressedEvent& keyEvent)
 			{
 				IG_APP_TRACE("Key pressed: {} (scancode {})", std::to_underlying(keyEvent.GetKeyCode()), std::to_underlying(keyEvent.GetScanCode()));
@@ -139,6 +162,7 @@ namespace Sandbox
 		}
 
 		std::unique_ptr<Ignition::ActionMap> m_Actions;
+		std::unique_ptr<CameraController> m_CameraController;
 		std::shared_ptr<Ignition::Mesh> m_QuadMesh;
 		std::shared_ptr<Ignition::Texture> m_TestTexture;
 		Ignition::Material m_QuadMaterial;
