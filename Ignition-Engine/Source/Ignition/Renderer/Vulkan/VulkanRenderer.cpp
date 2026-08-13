@@ -597,8 +597,7 @@ namespace Ignition
 		}
 
 		m_SceneViewProjection = viewProjection;
-
-		m_VulkanPipeline->Bind(m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex));
+		m_BoundPipelineVariant = -1;
 
 		m_SceneActive = true;
 	}
@@ -626,12 +625,32 @@ namespace Ignition
 		return texture;
 	}
 
-	void VulkanRenderer::Submit(const VulkanMesh& mesh, const glm::mat4& transform)
+	std::unique_ptr<VulkanTexture> VulkanRenderer::CreateTextureFromMemory(const void* data, size_t size)
 	{
-		Submit(mesh, nullptr, glm::vec4(1.0f), transform);
+		if (!IsValid() || !m_VulkanAllocator || !m_VulkanDescriptorAllocator)
+		{
+			return nullptr;
+		}
+
+		auto texture = std::make_unique<VulkanTexture>();
+		texture->InitializeFromMemory(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, data, size);
+
+		if (!texture->IsValid())
+		{
+			texture->Shutdown();
+
+			return nullptr;
+		}
+
+		return texture;
 	}
 
-	void VulkanRenderer::Submit(const VulkanMesh& mesh, const VulkanTexture* texture, const glm::vec4& tint, const glm::mat4& transform)
+	void VulkanRenderer::Submit(const VulkanMesh& mesh, const glm::mat4& transform)
+	{
+		Submit(mesh, nullptr, glm::vec4(1.0f), false, transform);
+	}
+
+	void VulkanRenderer::Submit(const VulkanMesh& mesh, const VulkanTexture* texture, const glm::vec4& tint, bool twoSided, const glm::mat4& transform)
 	{
 		if (!m_SceneActive || !mesh.IsValid())
 		{
@@ -646,6 +665,14 @@ namespace Ignition
 		}
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
+
+		const int pipelineVariant = twoSided ? 1 : 0;
+
+		if (pipelineVariant != m_BoundPipelineVariant)
+		{
+			m_VulkanPipeline->Bind(commandBuffer, twoSided);
+			m_BoundPipelineVariant = pipelineVariant;
+		}
 
 		const VkDescriptorSet descriptorSet = boundTexture->GetDescriptorSet();
 

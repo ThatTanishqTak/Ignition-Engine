@@ -8,6 +8,7 @@
 #include <glm/vec4.hpp>
 
 #include <memory>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <string>
@@ -57,6 +58,7 @@ namespace Ignition
 
 		std::unique_ptr<VulkanMesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 		std::unique_ptr<VulkanTexture> CreateTexture(const std::string& filepath);
+		std::unique_ptr<VulkanTexture> CreateTextureFromMemory(const void* data, size_t size);
 
 		void Retire(std::unique_ptr<VulkanMesh> mesh);
 		void Retire(std::unique_ptr<VulkanTexture> texture);
@@ -65,7 +67,7 @@ namespace Ignition
 
 		void BeginScene(const glm::mat4& viewProjection);
 		void Submit(const VulkanMesh& mesh, const glm::mat4& transform);
-		void Submit(const VulkanMesh& mesh, const VulkanTexture* texture, const glm::vec4& tint, const glm::mat4& transform);
+		void Submit(const VulkanMesh& mesh, const VulkanTexture* texture, const glm::vec4& tint, bool twoSided, const glm::mat4& transform);
 		void EndScene();
 
 		void OnResize();
@@ -101,6 +103,7 @@ namespace Ignition
 		glm::mat4 m_SceneViewProjection{ 1.0f };
 		bool m_SceneActive = false;
 		bool m_ImGuiFrameActive = false;
+		int m_BoundPipelineVariant = -1;
 
 		uint32_t m_FrameIndex = 0;
 		uint32_t m_ImageIndex = 0;

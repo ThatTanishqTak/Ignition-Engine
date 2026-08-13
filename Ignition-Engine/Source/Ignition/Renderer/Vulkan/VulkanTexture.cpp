@@ -163,6 +163,28 @@ namespace Ignition
 		stbi_image_free(pixels);
 	}
 
+	void VulkanTexture::InitializeFromMemory(VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const void* data, size_t size)
+	{
+		stbi_set_flip_vertically_on_load(1);
+
+		int width = 0;
+		int height = 0;
+		int channels = 0;
+
+		stbi_uc* pixels = stbi_load_from_memory(static_cast<const stbi_uc*>(data), static_cast<int>(size), &width, &height, &channels, STBI_rgb_alpha);
+
+		if (!pixels)
+		{
+			IG_CORE_ERROR("Failed to load texture from memory: {}", stbi_failure_reason());
+
+			return;
+		}
+
+		Initialize(device, graphicsQueue, graphicsQueueFamily, allocator, descriptorAllocator, pixels, static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+
+		stbi_image_free(pixels);
+	}
+
 	void VulkanTexture::Shutdown()
 	{
 		if (m_DescriptorSet != VK_NULL_HANDLE && m_DescriptorAllocator)

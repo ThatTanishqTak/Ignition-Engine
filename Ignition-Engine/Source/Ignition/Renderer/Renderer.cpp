@@ -111,6 +111,23 @@ namespace Ignition
 		return std::shared_ptr<Texture>(new Texture(std::move(vulkanTexture), m_VulkanRenderer->GetSelfReference()));
 	}
 
+	std::shared_ptr<Texture> Renderer::CreateTextureFromMemory(const void* data, size_t size)
+	{
+		if (!m_VulkanRenderer)
+		{
+			return nullptr;
+		}
+
+		auto vulkanTexture = m_VulkanRenderer->CreateTextureFromMemory(data, size);
+
+		if (!vulkanTexture)
+		{
+			return nullptr;
+		}
+
+		return std::shared_ptr<Texture>(new Texture(std::move(vulkanTexture), m_VulkanRenderer->GetSelfReference()));
+	}
+
 	void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform)
 	{
 		if (m_VulkanRenderer && mesh && mesh->GetVulkanMesh())
@@ -125,7 +142,7 @@ namespace Ignition
 		{
 			const VulkanTexture* texture = material.Albedo ? material.Albedo->GetVulkanTexture() : nullptr;
 
-			m_VulkanRenderer->Submit(*mesh->GetVulkanMesh(), texture, material.Tint, transform);
+			m_VulkanRenderer->Submit(*mesh->GetVulkanMesh(), texture, material.Tint, material.TwoSided, transform);
 		}
 	}
 

@@ -15,6 +15,7 @@
 #include "Ignition/Renderer/Material.h"
 #include "Ignition/Renderer/Vertex.h"
 #include "Ignition/Scene/Scene.h"
+#include "Ignition/Scene/ModelImporter.h"
 #include "Ignition/Core/Time.h"
 
 #include "Sandbox/CameraController.h"
@@ -51,10 +52,10 @@ namespace Sandbox
 			m_Actions->AddAxis2D("Move").BindKeys(Ignition::ScanCode::W, Ignition::ScanCode::S, Ignition::ScanCode::A, Ignition::ScanCode::D).BindStick(Ignition::GamepadStick::Left);
 
 			const std::vector<Ignition::Vertex> vertices = {
-				{ { -0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f } },
-				{ {  0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f } },
-				{ {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
-				{ { -0.5f,  0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+				{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f } },
+				{ {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f } },
+				{ {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
+				{ { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
 			};
 
 			const std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0, 2, 1, 0, 0, 3, 2 };
@@ -97,6 +98,15 @@ namespace Sandbox
 			m_SpinningEntity.GetTransform().Position = { 0.0f, 0.0f, 0.5f };
 			m_SpinningEntity.GetTransform().Scale = glm::vec3(0.35f);
 			m_SpinningEntity.AddMeshRenderer(m_QuadMesh, {});
+
+			const std::vector<Ignition::Entity> duckEntities = Ignition::ModelImporter::Import(*m_Scene, *GetRenderer(), "Assets/Duck.glb");
+
+			for (Ignition::Entity entity : duckEntities)
+			{
+				Ignition::TransformComponent& transform = entity.GetTransform();
+				transform.Position = { 2.5f, -1.0f, 0.0f };
+				transform.Scale = glm::vec3(1.0f);
+			}
 
 			int pixelWidth = 0;
 			int pixelHeight = 0;

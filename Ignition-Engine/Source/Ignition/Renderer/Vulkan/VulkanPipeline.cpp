@@ -46,7 +46,7 @@ namespace Ignition
 		bindingDescription.stride = sizeof(Vertex);
 		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-		std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+		std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
 
 		attributeDescriptions[0].location = 0;
 		attributeDescriptions[0].binding = 0;
@@ -56,12 +56,17 @@ namespace Ignition
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[1].offset = static_cast<uint32_t>(offsetof(Vertex, Color));
+		attributeDescriptions[1].offset = static_cast<uint32_t>(offsetof(Vertex, Normal));
 
 		attributeDescriptions[2].location = 2;
 		attributeDescriptions[2].binding = 0;
-		attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-		attributeDescriptions[2].offset = static_cast<uint32_t>(offsetof(Vertex, UV));
+		attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[2].offset = static_cast<uint32_t>(offsetof(Vertex, Color));
+
+		attributeDescriptions[3].location = 3;
+		attributeDescriptions[3].binding = 0;
+		attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[3].offset = static_cast<uint32_t>(offsetof(Vertex, UV));
 
 		VkPipelineVertexInputStateCreateInfo vertexInputState{};
 		vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -153,12 +158,25 @@ namespace Ignition
 		pipelineInfo.layout = m_PipelineLayout;
 		pipelineInfo.renderPass = VK_NULL_HANDLE;
 
-		const bool failed = Utilities::VulkanUtilities::VKCheck(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline), "Failed vkCreateGraphicsPipelines");
+		bool failed = Utilities::VulkanUtilities::VKCheck(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline), "Failed vkCreateGraphicsPipelines");
+
+		if (!failed)
+		{
+			rasterizationState.cullMode = VK_CULL_MODE_NONE;
+
+			failed = Utilities::VulkanUtilities::VKCheck(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_PipelineTwoSided), "Failed vkCreateGraphicsPipelines (two-sided)");
+		}
 
 		vkDestroyShaderModule(m_Device, shaderModule, nullptr);
 
 		if (failed)
 		{
+			if (m_Pipeline != VK_NULL_HANDLE)
+			{
+				vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
+				m_Pipeline = VK_NULL_HANDLE;
+			}
+
 			vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
 			m_PipelineLayout = VK_NULL_HANDLE;
 
@@ -171,6 +189,12 @@ namespace Ignition
 	void VulkanPipeline::Shutdown()
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN VULKAN PIPELINE -------");
+
+		if (m_PipelineTwoSided != VK_NULL_HANDLE)
+		{
+			vkDestroyPipeline(m_Device, m_PipelineTwoSided, nullptr);
+			m_PipelineTwoSided = VK_NULL_HANDLE;
+		}
 
 		if (m_Pipeline != VK_NULL_HANDLE)
 		{
@@ -217,8 +241,8 @@ namespace Ignition
 		return shaderModule;
 	}
 
-	void VulkanPipeline::Bind(VkCommandBuffer commandBuffer) const
+	void VulkanPipeline::Bind(VkCommandBuffer commandBuffer, bool twoSided) const
 	{
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, twoSided ? m_PipelineTwoSided : m_Pipeline);
 	}
 }

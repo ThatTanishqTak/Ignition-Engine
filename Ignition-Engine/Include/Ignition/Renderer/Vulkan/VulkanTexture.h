@@ -4,6 +4,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -22,6 +23,7 @@ namespace Ignition
 
 		void Initialize(VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const void* pixels, uint32_t width, uint32_t height);
 		void InitializeFromFile(VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& filepath);
+		void InitializeFromMemory(VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const void* data, size_t size);
 		void Shutdown();
 
 		bool IsValid() const { return m_DescriptorSet != VK_NULL_HANDLE; }

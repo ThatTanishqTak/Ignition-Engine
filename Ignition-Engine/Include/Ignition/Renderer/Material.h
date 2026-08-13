@@ -12,5 +12,6 @@ namespace Ignition
 	{
 		std::shared_ptr<Texture> Albedo;
 		glm::vec4 Tint{ 1.0f };
+		bool TwoSided = false;
 	};
 }

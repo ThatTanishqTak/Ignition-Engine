@@ -57,6 +57,7 @@ target_link_libraries(Ignition PRIVATE
     imgui
     stb
     entt
+    assimp::assimp
 PUBLIC
     glm::glm
 )
