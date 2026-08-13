@@ -33,7 +33,7 @@ namespace Ignition
 
 	struct MeshRendererComponent
 	{
-		std::shared_ptr<Mesh> Mesh;
-		Material Material;
+		std::shared_ptr<Ignition::Mesh> Mesh;
+		Ignition::Material Material;
 	};
 }

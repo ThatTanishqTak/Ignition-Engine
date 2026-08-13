@@ -26,7 +26,7 @@ namespace Ignition
 	{
 		if (m_Renderer && m_Renderer->IsImGuiFrameActive())
 		{
-			DrawDebugWindows();
+			//DrawDebugWindows();
 		}
 	}
 
@@ -50,11 +50,6 @@ namespace Ignition
 
 	void ImGuiLayer::DrawDebugWindows()
 	{
-		ImGui::Begin("Stats");
-		ImGui::Text("FPS: %.1f", Time::GetFramesPerSecond());
-		ImGui::Text("Frame Time: %.2f ms", Time::GetAverageFrameTimeMilliseconds());
-		ImGui::End();
-
 		ImGui::Begin("Gamepads");
 
 		const auto gamepads = m_Input->GetConnectedGamepads();

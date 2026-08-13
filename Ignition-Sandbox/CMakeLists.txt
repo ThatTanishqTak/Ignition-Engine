@@ -27,7 +27,7 @@ else()
     target_compile_options(Sandbox PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-target_link_libraries(Sandbox PRIVATE Ignition imgui)
+target_link_libraries(Sandbox PRIVATE Ignition)
 
 add_dependencies(Sandbox IgnitionShaders)
 
