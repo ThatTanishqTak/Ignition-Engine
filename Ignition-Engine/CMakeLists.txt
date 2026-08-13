@@ -13,6 +13,9 @@ file(GLOB_RECURSE IGNITION_HEADERS CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Include/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/Include/*.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Include/*.inl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Internal/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Internal/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Internal/*.inl"
 )
 
 add_library(Ignition SHARED ${IGNITION_SOURCES} ${IGNITION_HEADERS})
@@ -36,7 +39,7 @@ set_target_properties(Ignition PROPERTIES
 
 target_include_directories(Ignition
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/Include"
-    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Internal"
 )
 
 target_compile_definitions(Ignition PRIVATE 
