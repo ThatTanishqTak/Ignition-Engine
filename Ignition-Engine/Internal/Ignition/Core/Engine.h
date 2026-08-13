@@ -10,6 +10,7 @@ namespace Ignition
 	class Window;
 	class Renderer;
 	class Input;
+	class VulkanRenderer;
 
 	class Engine
 	{
@@ -28,6 +29,8 @@ namespace Ignition
 		void BeginFrame();
 		void EndFrame();
 
+		void WaitIdle();
+
 		void OnEvent(Event& event);
 
 		EventQueue& GetEventQueue() { return m_EventQueue; }
@@ -40,6 +43,7 @@ namespace Ignition
 	private:
 		std::unique_ptr<Window> m_Window;
 		std::unique_ptr<Input> m_Input;
+		std::unique_ptr<VulkanRenderer> m_Backend;
 		std::unique_ptr<Renderer> m_Renderer;
 		EventQueue m_EventQueue;
 	};

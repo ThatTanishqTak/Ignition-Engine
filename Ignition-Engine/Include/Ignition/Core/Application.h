@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Ignition/Core/Export.h"
-#include "Ignition/Core/LayerStack.h"
+#include "Ignition/Core/Layer.h"
 
 #include <memory>
 
@@ -14,12 +14,11 @@ namespace Ignition
 		int Height = 720;
 	};
 
-	class Engine;
 	class Event;
 	class Renderer;
 	class Input;
 	class Window;
-	class ImGuiLayer;
+	struct ApplicationImplementation;
 
 	class Application
 	{
@@ -52,9 +51,7 @@ namespace Ignition
 
 	private:
 		ApplicationSpecification m_Specification;
-		std::unique_ptr<Engine> m_Engine;
-		LayerStack m_LayerStack;
-		ImGuiLayer* m_ImGuiLayer = nullptr;
+		std::unique_ptr<ApplicationImplementation> m_Implementation;
 	};
 
 	std::unique_ptr<Application> CreateApplication(int argc, char** argv);

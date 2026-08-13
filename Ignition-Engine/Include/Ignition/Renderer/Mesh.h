@@ -6,8 +6,7 @@
 
 namespace Ignition
 {
-	class VulkanMesh;
-	class VulkanRenderer;
+	struct MeshImplementation;
 
 	class Mesh
 	{
@@ -17,15 +16,11 @@ namespace Ignition
 		Mesh(const Mesh&) = delete;
 		Mesh& operator=(const Mesh&) = delete;
 
-		VulkanMesh* GetVulkanMesh() const { return m_VulkanMesh.get(); }
-
 	private:
 		friend class Renderer;
 
-		Mesh(std::unique_ptr<VulkanMesh> vulkanMesh, std::weak_ptr<VulkanRenderer*> renderer);
+		Mesh();
 
-	private:
-		std::unique_ptr<VulkanMesh> m_VulkanMesh;
-		std::weak_ptr<VulkanRenderer*> m_Renderer;
+		std::unique_ptr<MeshImplementation> m_Implementation;
 	};
 }

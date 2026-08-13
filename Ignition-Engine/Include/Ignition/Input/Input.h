@@ -9,34 +9,22 @@
 
 #include <glm/vec2.hpp>
 
-#include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
-
-struct SDL_Gamepad;
 
 namespace Ignition
 {
-	class Event;
-	class Window;
+	struct InputImplementation;
 
 	class Input
 	{
 	public:
-		Input();
 		~Input();
 
 		Input(const Input&) = delete;
 		Input& operator=(const Input&) = delete;
-
-		void Initialize(Window* window);
-		void Shutdown();
-
-		void NewFrame();
-		void OnEvent(Event& event);
 
 		IGNITION_API bool IsKeyDown(ScanCode scanCode) const;
 		IGNITION_API bool IsKeyPressed(ScanCode scanCode) const;
@@ -79,46 +67,10 @@ namespace Ignition
 		IGNITION_API void SetTriggerDeadzone(float deadzone);
 
 	private:
-		struct GamepadState
-		{
-			SDL_Gamepad* Handle = nullptr;
-			std::array<bool, static_cast<size_t>(GamepadButton::COUNT)> Down{};
-			std::array<bool, static_cast<size_t>(GamepadButton::COUNT)> Pressed{};
-			std::array<bool, static_cast<size_t>(GamepadButton::COUNT)> Released{};
-			std::array<float, static_cast<size_t>(GamepadAxis::COUNT)> Axes{};
-		};
+		friend class Engine;
 
-		void OpenGamepad(GamepadID gamepadID);
-		void CloseGamepad(GamepadID gamepadID);
-		void ClearHeldState();
+		Input();
 
-		const GamepadState* FindGamepad(GamepadID gamepadID) const;
-		GamepadState* FindGamepad(GamepadID gamepadID);
-
-	private:
-		Window* m_Window = nullptr;
-
-		std::array<bool, static_cast<size_t>(ScanCode::COUNT)> m_KeysDown{};
-		std::array<bool, static_cast<size_t>(ScanCode::COUNT)> m_KeysPressed{};
-		std::array<bool, static_cast<size_t>(ScanCode::COUNT)> m_KeysReleased{};
-
-		std::unordered_set<KeyCode> m_KeyCodesDown;
-		std::unordered_set<KeyCode> m_KeyCodesPressed;
-		std::unordered_set<KeyCode> m_KeyCodesReleased;
-
-		glm::vec2 m_MousePosition{ 0.0f, 0.0f };
-		glm::vec2 m_MouseDelta{ 0.0f, 0.0f };
-		glm::vec2 m_MouseWheel{ 0.0f, 0.0f };
-
-		std::array<bool, 8> m_MouseDown{};
-		std::array<bool, 8> m_MousePressed{};
-		std::array<bool, 8> m_MouseReleased{};
-
-		std::unordered_map<GamepadID, GamepadState> m_Gamepads;
-
-		float m_StickDeadzone = 0.15f;
-		float m_TriggerDeadzone = 0.05f;
-
-		CursorMode m_CursorMode = CursorMode::Normal;
+		std::unique_ptr<InputImplementation> m_Implementation;
 	};
 }

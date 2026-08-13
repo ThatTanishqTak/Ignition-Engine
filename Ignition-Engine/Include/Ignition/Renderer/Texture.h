@@ -6,8 +6,7 @@
 
 namespace Ignition
 {
-	class VulkanTexture;
-	class VulkanRenderer;
+	struct TextureImplementation;
 
 	class Texture
 	{
@@ -17,15 +16,11 @@ namespace Ignition
 		Texture(const Texture&) = delete;
 		Texture& operator=(const Texture&) = delete;
 
-		VulkanTexture* GetVulkanTexture() const { return m_VulkanTexture.get(); }
-
 	private:
 		friend class Renderer;
 
-		Texture(std::unique_ptr<VulkanTexture> vulkanTexture, std::weak_ptr<VulkanRenderer*> renderer);
+		Texture();
 
-	private:
-		std::unique_ptr<VulkanTexture> m_VulkanTexture;
-		std::weak_ptr<VulkanRenderer*> m_Renderer;
+		std::unique_ptr<TextureImplementation> m_Implementation;
 	};
 }

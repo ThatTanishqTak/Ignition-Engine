@@ -10,36 +10,26 @@
 #include <string>
 #include <vector>
 
-struct SDL_Window;
-
 namespace Ignition
 {
-	class VulkanRenderer;
 	class Camera;
 	class Mesh;
 	class Texture;
 	struct Material;
+	struct RendererImplementation;
 
 	class Renderer
 	{
 	public:
-		Renderer();
 		~Renderer();
 
-		void Initialize(SDL_Window* window);
-		void Shutdown();
+		Renderer(const Renderer&) = delete;
+		Renderer& operator=(const Renderer&) = delete;
 
 		IGNITION_API bool IsValid() const;
 
 		IGNITION_API void SetClearColor(float r, float g, float b, float a = 1.0f);
 
-		void BeginFrame();
-		void EndFrame();
-
-		void WaitIdle();
-
-		void ProcessImGuiEvent(const void* sdlEvent);
-		void BeginImGuiFrame();
 		IGNITION_API bool IsImGuiFrameActive() const;
 
 		IGNITION_API bool WantCaptureMouse() const;
@@ -54,9 +44,11 @@ namespace Ignition
 		IGNITION_API void Submit(const std::shared_ptr<Mesh>& mesh, const Material& material, const glm::mat4& transform);
 		IGNITION_API void EndScene();
 
-		void OnResize();
-
 	private:
-		std::unique_ptr<VulkanRenderer> m_VulkanRenderer;
+		friend class Engine;
+
+		Renderer();
+
+		std::unique_ptr<RendererImplementation> m_Implementation;
 	};
 }

@@ -1,5 +1,7 @@
 #include "Ignition/Window/Window.h"
 
+#include "Ignition/Window/WindowImplementation.h"
+
 #include "Ignition/Core/Log.h"
 #include "Ignition/Events/EventQueue.h"
 #include "Ignition/Events/GamepadEvent.h"
@@ -11,39 +13,14 @@
 
 namespace Ignition
 {
-	Window::Window() = default;
+	Window::Window() : m_Implementation(std::make_unique<WindowImplementation>())
+	{
+
+	}
+
 	Window::~Window() = default;
 
-	Window::Window(Window&& other) noexcept : m_SDLWindow(other.m_SDLWindow), m_SDLInitialized(other.m_SDLInitialized), m_IsOpen(other.m_IsOpen), m_CursorMode(other.m_CursorMode), m_RawEventCallback(std::move(other.m_RawEventCallback))
-	{
-		other.m_SDLWindow = nullptr;
-		other.m_SDLInitialized = false;
-		other.m_IsOpen = false;
-		other.m_CursorMode = CursorMode::Normal;
-	}
-
-	Window& Window::operator=(Window&& other) noexcept
-	{
-		if (this != &other)
-		{
-			Shutdown();
-
-			m_SDLWindow = other.m_SDLWindow;
-			m_SDLInitialized = other.m_SDLInitialized;
-			m_IsOpen = other.m_IsOpen;
-			m_CursorMode = other.m_CursorMode;
-			m_RawEventCallback = std::move(other.m_RawEventCallback);
-
-			other.m_SDLWindow = nullptr;
-			other.m_SDLInitialized = false;
-			other.m_IsOpen = false;
-			other.m_CursorMode = CursorMode::Normal;
-		}
-
-		return *this;
-	}
-
-	void Window::Initialize(const char* title, int width, int height)
+	void WindowImplementation::Initialize(const char* title, int width, int height)
 	{
 		IG_CORE_TRACE("Initializing Window");
 
@@ -54,54 +31,54 @@ namespace Ignition
 			return;
 		}
 
-		m_SDLInitialized = true;
-		m_SDLWindow = SDL_CreateWindow(title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-		if (!m_SDLWindow)
+		SDLInitialized = true;
+		SDLWindow = SDL_CreateWindow(title, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+		if (!SDLWindow)
 		{
 			IG_CORE_CRITICAL("Failed to create SDL window: {}", SDL_GetError());
 			SDL_Quit();
-			m_SDLInitialized = false;
+			SDLInitialized = false;
 
 			return;
 		}
 
-		m_IsOpen = true;
+		IsOpen = true;
 
 		IG_CORE_TRACE("Window Initialized");
 	}
 
-	void Window::Shutdown()
+	void WindowImplementation::Shutdown()
 	{
 		IG_CORE_TRACE("Shutting Down Window");
 
-		if (m_SDLWindow)
+		if (SDLWindow)
 		{
-			SDL_DestroyWindow(m_SDLWindow);
-			m_SDLWindow = nullptr;
+			SDL_DestroyWindow(SDLWindow);
+			SDLWindow = nullptr;
 		}
 
-		if (m_SDLInitialized)
+		if (SDLInitialized)
 		{
 			SDL_Quit();
-			m_SDLInitialized = false;
+			SDLInitialized = false;
 		}
 
-		m_IsOpen = false;
+		IsOpen = false;
 
 		IG_CORE_TRACE("Window Shutdown Complete");
 	}
 
-	void Window::PollEvents(EventQueue& eventQueue)
+	void WindowImplementation::PollEvents(EventQueue& eventQueue)
 	{
-		const SDL_WindowID windowID = m_SDLWindow ? SDL_GetWindowID(m_SDLWindow) : 0;
+		const SDL_WindowID windowID = SDLWindow ? SDL_GetWindowID(SDLWindow) : 0;
 
 		SDL_Event event;
 
 		while (SDL_PollEvent(&event))
 		{
-			if (m_RawEventCallback)
+			if (RawCallback)
 			{
-				m_RawEventCallback(&event);
+				RawCallback(&event);
 			}
 
 			if (event.type >= SDL_EVENT_WINDOW_FIRST && event.type <= SDL_EVENT_WINDOW_LAST && event.window.windowID != windowID)
@@ -112,12 +89,12 @@ namespace Ignition
 			switch (event.type)
 			{
 				case SDL_EVENT_QUIT:
-					m_IsOpen = false;
+					IsOpen = false;
 					eventQueue.Push<WindowCloseEvent>();
 					break;
 
 				case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-					m_IsOpen = false;
+					IsOpen = false;
 					eventQueue.Push<WindowCloseEvent>();
 					break;
 
@@ -284,42 +261,42 @@ namespace Ignition
 		outWidth = 0;
 		outHeight = 0;
 
-		if (m_SDLWindow)
+		if (m_Implementation->SDLWindow)
 		{
-			SDL_GetWindowSizeInPixels(m_SDLWindow, &outWidth, &outHeight);
+			SDL_GetWindowSizeInPixels(m_Implementation->SDLWindow, &outWidth, &outHeight);
 		}
 	}
 
 	void Window::SetTextInputEnabled(bool enabled)
 	{
-		if (!m_SDLWindow)
+		if (!m_Implementation->SDLWindow)
 		{
 			return;
 		}
 
 		if (enabled)
 		{
-			SDL_StartTextInput(m_SDLWindow);
+			SDL_StartTextInput(m_Implementation->SDLWindow);
 		}
 		else
 		{
-			SDL_StopTextInput(m_SDLWindow);
+			SDL_StopTextInput(m_Implementation->SDLWindow);
 		}
 	}
 
 	void Window::SetCursorMode(CursorMode mode)
 	{
-		if (!m_SDLWindow)
+		if (!m_Implementation->SDLWindow)
 		{
 			return;
 		}
 
-		m_CursorMode = mode;
+		m_Implementation->Cursor = mode;
 
 		switch (mode)
 		{
 			case CursorMode::Normal:
-				if (!SDL_SetWindowRelativeMouseMode(m_SDLWindow, false))
+				if (!SDL_SetWindowRelativeMouseMode(m_Implementation->SDLWindow, false))
 				{
 					IG_CORE_WARN("Failed SDL_SetWindowRelativeMouseMode: {}", SDL_GetError());
 				}
@@ -327,7 +304,7 @@ namespace Ignition
 				break;
 
 			case CursorMode::Hidden:
-				if (!SDL_SetWindowRelativeMouseMode(m_SDLWindow, false))
+				if (!SDL_SetWindowRelativeMouseMode(m_Implementation->SDLWindow, false))
 				{
 					IG_CORE_WARN("Failed SDL_SetWindowRelativeMouseMode: {}", SDL_GetError());
 				}
@@ -336,11 +313,21 @@ namespace Ignition
 
 			case CursorMode::Captured:
 				SDL_HideCursor();
-				if (!SDL_SetWindowRelativeMouseMode(m_SDLWindow, true))
+				if (!SDL_SetWindowRelativeMouseMode(m_Implementation->SDLWindow, true))
 				{
 					IG_CORE_WARN("Failed SDL_SetWindowRelativeMouseMode: {}", SDL_GetError());
 				}
 				break;
 		}
+	}
+
+	CursorMode Window::GetCursorMode() const
+	{
+		return m_Implementation->Cursor;
+	}
+
+	bool Window::IsOpen() const
+	{
+		return m_Implementation->IsOpen;
 	}
 }

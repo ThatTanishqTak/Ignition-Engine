@@ -1,11 +1,11 @@
 #include "Ignition/Core/Application.h"
 
+#include "Ignition/Core/ApplicationImplementation.h"
 #include "Ignition/Core/Engine.h"
 #include "Ignition/Core/Log.h"
 #include "Ignition/UI/ImGuiLayer.h"
 #include "Ignition/Core/Time.h"
 #include "Ignition/Events/EventQueue.h"
-#include "Ignition/Renderer/Renderer.h"
 
 namespace Ignition
 {
@@ -22,20 +22,21 @@ namespace Ignition
 	{
 		IG_CORE_INFO("------- INITIALIZING APPLICATION -------");
 
-		m_Engine = std::make_unique<Engine>();
-		m_Engine->Initialize(m_Specification.Title, m_Specification.Width, m_Specification.Height);
+		m_Implementation = std::make_unique<ApplicationImplementation>();
+		m_Implementation->Engine = std::make_unique<Engine>();
+		m_Implementation->Engine->Initialize(m_Specification.Title, m_Specification.Width, m_Specification.Height);
 
-		if (!m_Engine->IsRunning())
+		if (!m_Implementation->Engine->IsRunning())
 		{
 			IG_CORE_CRITICAL("Application initialization failed, the application will not run");
-			m_Engine.reset();
+			m_Implementation.reset();
 
 			return;
 		}
 
-		auto imguiLayer = std::make_unique<ImGuiLayer>(m_Engine->GetRenderer(), m_Engine->GetInput());
-		m_ImGuiLayer = imguiLayer.get();
-		m_LayerStack.PushOverlay(std::move(imguiLayer));
+		auto imguiLayer = std::make_unique<ImGuiLayer>(m_Implementation->Engine->GetRenderer(), m_Implementation->Engine->GetInput());
+		m_Implementation->ImGui = imguiLayer.get();
+		m_Implementation->Layers.PushOverlay(std::move(imguiLayer));
 
 		OnInitialize();
 
@@ -46,20 +47,24 @@ namespace Ignition
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN APPLICATION -------");
 
-		if (GetRenderer())
+		if (m_Implementation && m_Implementation->Engine)
 		{
-			GetRenderer()->WaitIdle();
+			m_Implementation->Engine->WaitIdle();
 		}
 
 		OnShutdown();
 
-		m_ImGuiLayer = nullptr;
-		m_LayerStack.Clear();
-
-		if (m_Engine)
+		if (m_Implementation)
 		{
-			m_Engine->Shutdown();
-			m_Engine.reset();
+			m_Implementation->ImGui = nullptr;
+			m_Implementation->Layers.Clear();
+
+			if (m_Implementation->Engine)
+			{
+				m_Implementation->Engine->Shutdown();
+			}
+
+			m_Implementation.reset();
 		}
 
 		IG_CORE_INFO("------- APPLICATION SHUTDOWN COMPLETE -------");
@@ -67,28 +72,28 @@ namespace Ignition
 
 	void Application::Run()
 	{
-		if (!m_Engine)
+		if (!m_Implementation || !m_Implementation->Engine)
 		{
 			IG_CORE_CRITICAL("Application::Run called before Initialize");
 
 			return;
 		}
 
-		while (m_Engine->IsRunning())
+		while (m_Implementation->Engine->IsRunning())
 		{
 			Time::Update();
 
-			m_Engine->PollEvents();
+			m_Implementation->Engine->PollEvents();
 
-			const auto queuedEvents = m_Engine->GetEventQueue().Take();
+			const auto queuedEvents = m_Implementation->Engine->GetEventQueue().Take();
 
 			for (const auto& queuedEvent : queuedEvents)
 			{
-				m_Engine->OnEvent(*queuedEvent);
+				m_Implementation->Engine->OnEvent(*queuedEvent);
 
 				if (!queuedEvent->IsHandled())
 				{
-					m_LayerStack.OnEvent(*queuedEvent);
+					m_Implementation->Layers.OnEvent(*queuedEvent);
 				}
 
 				if (!queuedEvent->IsHandled())
@@ -100,53 +105,59 @@ namespace Ignition
 			while (Time::NextFixedStep())
 			{
 				OnFixedUpdate(Time::GetFixedTimeStep());
-				m_LayerStack.OnFixedUpdate(Time::GetFixedTimeStep());
+				m_Implementation->Layers.OnFixedUpdate(Time::GetFixedTimeStep());
 			}
 
 			OnUpdate(Time::GetDeltaTime());
-			m_LayerStack.OnUpdate(Time::GetDeltaTime());
+			m_Implementation->Layers.OnUpdate(Time::GetDeltaTime());
 
-			if (!m_Engine->IsRunning())
+			if (!m_Implementation->Engine->IsRunning())
 			{
 				break;
 			}
 
-			m_Engine->BeginFrame();
+			m_Implementation->Engine->BeginFrame();
 
-			if (m_ImGuiLayer)
+			if (m_Implementation->ImGui)
 			{
-				m_ImGuiLayer->BeginFrame();
+				m_Implementation->ImGui->BeginFrame();
 			}
 
 			OnRender();
-			m_LayerStack.OnRender();
+			m_Implementation->Layers.OnRender();
 
-			m_Engine->EndFrame();
+			m_Implementation->Engine->EndFrame();
 		}
 	}
 
 	void Application::PushLayer(std::unique_ptr<Layer> layer)
 	{
-		m_LayerStack.PushLayer(std::move(layer));
+		if (m_Implementation)
+		{
+			m_Implementation->Layers.PushLayer(std::move(layer));
+		}
 	}
 
 	void Application::PushOverlay(std::unique_ptr<Layer> overlay)
 	{
-		m_LayerStack.PushOverlay(std::move(overlay));
+		if (m_Implementation)
+		{
+			m_Implementation->Layers.PushOverlay(std::move(overlay));
+		}
 	}
 
 	Renderer* Application::GetRenderer() const
 	{
-		return m_Engine ? m_Engine->GetRenderer() : nullptr;
+		return m_Implementation && m_Implementation->Engine ? m_Implementation->Engine->GetRenderer() : nullptr;
 	}
 
 	Input* Application::GetInput() const
 	{
-		return m_Engine ? m_Engine->GetInput() : nullptr;
+		return m_Implementation && m_Implementation->Engine ? m_Implementation->Engine->GetInput() : nullptr;
 	}
 
 	Window* Application::GetWindow() const
 	{
-		return m_Engine ? m_Engine->GetWindow() : nullptr;
+		return m_Implementation && m_Implementation->Engine ? m_Implementation->Engine->GetWindow() : nullptr;
 	}
 }

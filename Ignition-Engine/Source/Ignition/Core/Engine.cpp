@@ -4,8 +4,12 @@
 #include "Ignition/Events/Event.h"
 #include "Ignition/Events/WindowEvent.h"
 #include "Ignition/Input/Input.h"
+#include "Ignition/Input/InputImplementation.h"
 #include "Ignition/Window/Window.h"
+#include "Ignition/Window/WindowImplementation.h"
 #include "Ignition/Renderer/Renderer.h"
+#include "Ignition/Renderer/RendererImplementation.h"
+#include "Ignition/Renderer/Vulkan/VulkanRenderer.h"
 
 namespace Ignition
 {
@@ -16,8 +20,8 @@ namespace Ignition
 	{
 		IG_CORE_INFO("------- INITIALIZING IGNITION -------");
 
-		m_Window = std::make_unique<Window>();
-		m_Window->Initialize(title, width, height);
+		m_Window = std::unique_ptr<Window>(new Window());
+		m_Window->m_Implementation->Initialize(title, width, height);
 
 		if (!m_Window->IsOpen())
 		{
@@ -27,13 +31,15 @@ namespace Ignition
 			return;
 		}
 
-		m_Input = std::make_unique<Input>();
-		m_Input->Initialize(m_Window.get());
+		m_Input = std::unique_ptr<Input>(new Input());
+		m_Input->m_Implementation->Initialize(m_Window.get());
 
-		m_Renderer = std::make_unique<Renderer>();
-		m_Renderer->Initialize(m_Window->GetNativeWindow());
+		IG_CORE_INFO("------- INITIALIZING RENDERER -------");
 
-		if (!m_Renderer->IsValid())
+		m_Backend = std::make_unique<VulkanRenderer>();
+		m_Backend->Initialize(m_Window->m_Implementation->SDLWindow);
+
+		if (!m_Backend->IsValid())
 		{
 			IG_CORE_CRITICAL("Engine initialization failed: could not create renderer");
 			Shutdown();
@@ -41,13 +47,18 @@ namespace Ignition
 			return;
 		}
 
-		m_Window->SetRawEventCallback([this](const void* sdlEvent)
+		IG_CORE_INFO("------- RENDERER INITIALIZED -------");
+
+		m_Renderer = std::unique_ptr<Renderer>(new Renderer());
+		m_Renderer->m_Implementation->Backend = m_Backend.get();
+
+		m_Window->m_Implementation->RawCallback = [this](const void* sdlEvent)
 		{
-			if (m_Renderer)
+			if (m_Backend)
 			{
-				m_Renderer->ProcessImGuiEvent(sdlEvent);
+				m_Backend->ProcessImGuiEvent(sdlEvent);
 			}
-		});
+		};
 
 		IG_CORE_INFO("------- IGNITION INITIALIZED -------");
 	}
@@ -56,21 +67,28 @@ namespace Ignition
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN IGNITION -------");
 
-		if (m_Renderer)
+		// The non-owning handle must drop before the backend it points at
+		m_Renderer.reset();
+
+		if (m_Backend)
 		{
-			m_Renderer->Shutdown();
-			m_Renderer.reset();
+			IG_CORE_INFO("------- SHUTTING DOWN RENDERER -------");
+
+			m_Backend->Shutdown();
+			m_Backend.reset();
+
+			IG_CORE_INFO("------- RENDERER SHUTDOWN COMPLETE -------");
 		}
 
 		if (m_Input)
 		{
-			m_Input->Shutdown();
+			m_Input->m_Implementation->Shutdown();
 			m_Input.reset();
 		}
 
 		if (m_Window)
 		{
-			m_Window->Shutdown();
+			m_Window->m_Implementation->Shutdown();
 			m_Window.reset();
 		}
 
@@ -81,31 +99,39 @@ namespace Ignition
 	{
 		if (m_Input)
 		{
-			m_Input->NewFrame();
+			m_Input->m_Implementation->NewFrame();
 		}
 
 		if (m_Window)
 		{
-			m_Window->PollEvents(m_EventQueue);
+			m_Window->m_Implementation->PollEvents(m_EventQueue);
 		}
 	}
 
 	void Engine::BeginFrame()
 	{
-		if (!m_Renderer)
+		if (!m_Backend)
 		{
 			return;
 		}
 
-		m_Renderer->BeginFrame();
-		m_Renderer->BeginImGuiFrame();
+		m_Backend->BeginFrame();
+		m_Backend->BeginImGuiFrame();
 	}
 
 	void Engine::EndFrame()
 	{
-		if (m_Renderer)
+		if (m_Backend)
 		{
-			m_Renderer->EndFrame();
+			m_Backend->EndFrame();
+		}
+	}
+
+	void Engine::WaitIdle()
+	{
+		if (m_Backend)
+		{
+			m_Backend->WaitIdle();
 		}
 	}
 
@@ -113,7 +139,7 @@ namespace Ignition
 	{
 		if (m_Input)
 		{
-			m_Input->OnEvent(event);
+			m_Input->m_Implementation->OnEvent(event);
 		}
 
 		EventDispatcher dispatcher(event);
@@ -122,9 +148,9 @@ namespace Ignition
 		{
 			IG_CORE_TRACE("Window Resized To: {}x{} pixels", resizeEvent.GetPixelWidth(), resizeEvent.GetPixelHeight());
 
-			if (m_Renderer)
+			if (m_Backend)
 			{
-				m_Renderer->OnResize();
+				m_Backend->OnResize();
 			}
 
 			return false;

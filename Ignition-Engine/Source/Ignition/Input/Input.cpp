@@ -6,6 +6,7 @@
 #include "Ignition/Events/KeyEvent.h"
 #include "Ignition/Events/MouseEvent.h"
 #include "Ignition/Events/WindowEvent.h"
+#include "Ignition/Input/InputImplementation.h"
 #include "Ignition/Window/Window.h"
 
 #include <SDL3/SDL.h>
@@ -46,23 +47,20 @@ namespace
 
 namespace Ignition
 {
-	Input::Input() = default;
-	Input::~Input() = default;
-
-	void Input::Initialize(Window* window)
+	void InputImplementation::Initialize(Window* window)
 	{
 		IG_CORE_INFO("------- INITIALIZING INPUT -------");
 
-		m_Window = window;
+		WindowHandle = window;
 
 		IG_CORE_INFO("------- INPUT INITIALIZED -------");
 	}
 
-	void Input::Shutdown()
+	void InputImplementation::Shutdown()
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN INPUT -------");
 
-		for (auto& [gamepadID, state] : m_Gamepads)
+		for (auto& [gamepadID, state] : Gamepads)
 		{
 			if (state.Handle)
 			{
@@ -70,32 +68,32 @@ namespace Ignition
 			}
 		}
 
-		m_Gamepads.clear();
-		m_Window = nullptr;
+		Gamepads.clear();
+		WindowHandle = nullptr;
 
 		IG_CORE_INFO("------- INPUT SHUTDOWN COMPLETE -------");
 	}
 
-	void Input::NewFrame()
+	void InputImplementation::NewFrame()
 	{
-		m_KeysPressed.fill(false);
-		m_KeysReleased.fill(false);
-		m_KeyCodesPressed.clear();
-		m_KeyCodesReleased.clear();
+		KeysPressed.fill(false);
+		KeysReleased.fill(false);
+		KeyCodesPressed.clear();
+		KeyCodesReleased.clear();
 
-		m_MousePressed.fill(false);
-		m_MouseReleased.fill(false);
-		m_MouseDelta = glm::vec2(0.0f);
-		m_MouseWheel = glm::vec2(0.0f);
+		MousePressed.fill(false);
+		MouseReleased.fill(false);
+		MouseDelta = glm::vec2(0.0f);
+		MouseWheel = glm::vec2(0.0f);
 
-		for (auto& [gamepadID, state] : m_Gamepads)
+		for (auto& [gamepadID, state] : Gamepads)
 		{
 			state.Pressed.fill(false);
 			state.Released.fill(false);
 		}
 	}
 
-	void Input::OnEvent(Event& event)
+	void InputImplementation::OnEvent(Event& event)
 	{
 		EventDispatcher dispatcher(event);
 
@@ -103,22 +101,22 @@ namespace Ignition
 		{
 			const size_t scanIndex = static_cast<size_t>(keyEvent.GetScanCode());
 
-			if (scanIndex < m_KeysDown.size())
+			if (scanIndex < KeysDown.size())
 			{
-				if (!keyEvent.IsRepeat() && !m_KeysDown[scanIndex])
+				if (!keyEvent.IsRepeat() && !KeysDown[scanIndex])
 				{
-					m_KeysPressed[scanIndex] = true;
+					KeysPressed[scanIndex] = true;
 				}
 
-				m_KeysDown[scanIndex] = true;
+				KeysDown[scanIndex] = true;
 			}
 
-			if (!keyEvent.IsRepeat() && !m_KeyCodesDown.contains(keyEvent.GetKeyCode()))
+			if (!keyEvent.IsRepeat() && !KeyCodesDown.contains(keyEvent.GetKeyCode()))
 			{
-				m_KeyCodesPressed.insert(keyEvent.GetKeyCode());
+				KeyCodesPressed.insert(keyEvent.GetKeyCode());
 			}
 
-			m_KeyCodesDown.insert(keyEvent.GetKeyCode());
+			KeyCodesDown.insert(keyEvent.GetKeyCode());
 
 			return false;
 		});
@@ -127,31 +125,31 @@ namespace Ignition
 		{
 			const size_t scanIndex = static_cast<size_t>(keyEvent.GetScanCode());
 
-			if (scanIndex < m_KeysDown.size())
+			if (scanIndex < KeysDown.size())
 			{
-				m_KeysDown[scanIndex] = false;
-				m_KeysReleased[scanIndex] = true;
+				KeysDown[scanIndex] = false;
+				KeysReleased[scanIndex] = true;
 			}
 
-			m_KeyCodesDown.erase(keyEvent.GetKeyCode());
-			m_KeyCodesReleased.insert(keyEvent.GetKeyCode());
+			KeyCodesDown.erase(keyEvent.GetKeyCode());
+			KeyCodesReleased.insert(keyEvent.GetKeyCode());
 
 			return false;
 		});
 
 		dispatcher.Dispatch<MouseMovedEvent>([this](MouseMovedEvent& mouseEvent)
 		{
-			m_MousePosition = { mouseEvent.GetX(), mouseEvent.GetY() };
-			m_MouseDelta.x += mouseEvent.GetDeltaX();
-			m_MouseDelta.y += mouseEvent.GetDeltaY();
+			MousePosition = { mouseEvent.GetX(), mouseEvent.GetY() };
+			MouseDelta.x += mouseEvent.GetDeltaX();
+			MouseDelta.y += mouseEvent.GetDeltaY();
 
 			return false;
 		});
 
 		dispatcher.Dispatch<MouseScrolledEvent>([this](MouseScrolledEvent& mouseEvent)
 		{
-			m_MouseWheel.x += mouseEvent.GetXOffset();
-			m_MouseWheel.y += mouseEvent.GetYOffset();
+			MouseWheel.x += mouseEvent.GetXOffset();
+			MouseWheel.y += mouseEvent.GetYOffset();
 
 			return false;
 		});
@@ -160,10 +158,10 @@ namespace Ignition
 		{
 			const size_t index = static_cast<size_t>(mouseEvent.GetMouseButton());
 
-			if (index < m_MouseDown.size())
+			if (index < MouseDown.size())
 			{
-				m_MouseDown[index] = true;
-				m_MousePressed[index] = true;
+				MouseDown[index] = true;
+				MousePressed[index] = true;
 			}
 
 			return false;
@@ -173,10 +171,10 @@ namespace Ignition
 		{
 			const size_t index = static_cast<size_t>(mouseEvent.GetMouseButton());
 
-			if (index < m_MouseDown.size())
+			if (index < MouseDown.size())
 			{
-				m_MouseDown[index] = false;
-				m_MouseReleased[index] = true;
+				MouseDown[index] = false;
+				MouseReleased[index] = true;
 			}
 
 			return false;
@@ -241,10 +239,10 @@ namespace Ignition
 		{
 			ClearHeldState();
 
-			// Release a captured cursor while unfocused; intent is preserved in m_CursorMode
-			if (m_Window && m_CursorMode == CursorMode::Captured)
+			// Release a captured cursor while unfocused; intent is preserved in Cursor
+			if (WindowHandle && Cursor == CursorMode::Captured)
 			{
-				m_Window->SetCursorMode(CursorMode::Normal);
+				WindowHandle->SetCursorMode(CursorMode::Normal);
 			}
 
 			return false;
@@ -252,271 +250,28 @@ namespace Ignition
 
 		dispatcher.Dispatch<WindowFocusEvent>([this](WindowFocusEvent&)
 		{
-			if (m_Window)
+			if (WindowHandle)
 			{
-				m_Window->SetCursorMode(m_CursorMode);
+				WindowHandle->SetCursorMode(Cursor);
 			}
 
 			return false;
 		});
 	}
 
-	void Input::ClearHeldState()
+	void InputImplementation::ClearHeldState()
 	{
 		// Keyboard and mouse only: the OS delivers their releases to whichever window
 		// gains focus, so held state would otherwise stick. Gamepads are not focus
 		// scoped and keep streaming events, so their state stays live.
-		m_KeysDown.fill(false);
-		m_KeyCodesDown.clear();
-		m_MouseDown.fill(false);
+		KeysDown.fill(false);
+		KeyCodesDown.clear();
+		MouseDown.fill(false);
 	}
 
-	bool Input::IsKeyDown(ScanCode scanCode) const
+	void InputImplementation::OpenGamepad(GamepadID gamepadID)
 	{
-		const size_t index = static_cast<size_t>(scanCode);
-
-		return index < m_KeysDown.size() && m_KeysDown[index];
-	}
-
-	bool Input::IsKeyPressed(ScanCode scanCode) const
-	{
-		const size_t index = static_cast<size_t>(scanCode);
-
-		return index < m_KeysPressed.size() && m_KeysPressed[index];
-	}
-
-	bool Input::IsKeyReleased(ScanCode scanCode) const
-	{
-		const size_t index = static_cast<size_t>(scanCode);
-
-		return index < m_KeysReleased.size() && m_KeysReleased[index];
-	}
-
-	bool Input::IsKeyDown(KeyCode keyCode) const
-	{
-		return m_KeyCodesDown.contains(keyCode);
-	}
-
-	bool Input::IsKeyPressed(KeyCode keyCode) const
-	{
-		return m_KeyCodesPressed.contains(keyCode);
-	}
-
-	bool Input::IsKeyReleased(KeyCode keyCode) const
-	{
-		return m_KeyCodesReleased.contains(keyCode);
-	}
-
-	glm::vec2 Input::GetMousePosition() const
-	{
-		return m_MousePosition;
-	}
-
-	glm::vec2 Input::GetMouseDelta() const
-	{
-		return m_MouseDelta;
-	}
-
-	glm::vec2 Input::GetMouseWheel() const
-	{
-		return m_MouseWheel;
-	}
-
-	bool Input::IsMouseButtonDown(MouseCode button) const
-	{
-		const size_t index = static_cast<size_t>(button);
-
-		return index < m_MouseDown.size() && m_MouseDown[index];
-	}
-
-	bool Input::IsMouseButtonPressed(MouseCode button) const
-	{
-		const size_t index = static_cast<size_t>(button);
-
-		return index < m_MousePressed.size() && m_MousePressed[index];
-	}
-
-	bool Input::IsMouseButtonReleased(MouseCode button) const
-	{
-		const size_t index = static_cast<size_t>(button);
-
-		return index < m_MouseReleased.size() && m_MouseReleased[index];
-	}
-
-	void Input::SetCursorMode(CursorMode mode)
-	{
-		m_CursorMode = mode;
-
-		if (m_Window)
-		{
-			m_Window->SetCursorMode(mode);
-		}
-	}
-
-	CursorMode Input::GetCursorMode() const
-	{
-		return m_CursorMode;
-	}
-
-	void Input::SetTextInputEnabled(bool enabled)
-	{
-		if (m_Window)
-		{
-			m_Window->SetTextInputEnabled(enabled);
-		}
-	}
-
-	bool Input::IsGamepadConnected(GamepadID gamepadID) const
-	{
-		return m_Gamepads.contains(gamepadID);
-	}
-
-	std::vector<GamepadID> Input::GetConnectedGamepads() const
-	{
-		std::vector<GamepadID> gamepadIDs;
-		gamepadIDs.reserve(m_Gamepads.size());
-
-		for (const auto& [gamepadID, state] : m_Gamepads)
-		{
-			gamepadIDs.push_back(gamepadID);
-		}
-
-		return gamepadIDs;
-	}
-
-	std::string Input::GetGamepadName(GamepadID gamepadID) const
-	{
-		const GamepadState* state = FindGamepad(gamepadID);
-
-		if (!state || !state->Handle)
-		{
-			return {};
-		}
-
-		const char* name = SDL_GetGamepadName(state->Handle);
-
-		return name ? name : std::string{};
-	}
-
-	bool Input::IsGamepadButtonDown(GamepadID gamepadID, GamepadButton button) const
-	{
-		const GamepadState* state = FindGamepad(gamepadID);
-		const int32_t index = static_cast<int32_t>(button);
-
-		return state && index >= 0 && index < static_cast<int32_t>(GamepadButton::COUNT) && state->Down[index];
-	}
-
-	bool Input::IsGamepadButtonPressed(GamepadID gamepadID, GamepadButton button) const
-	{
-		const GamepadState* state = FindGamepad(gamepadID);
-		const int32_t index = static_cast<int32_t>(button);
-
-		return state && index >= 0 && index < static_cast<int32_t>(GamepadButton::COUNT) && state->Pressed[index];
-	}
-
-	bool Input::IsGamepadButtonReleased(GamepadID gamepadID, GamepadButton button) const
-	{
-		const GamepadState* state = FindGamepad(gamepadID);
-		const int32_t index = static_cast<int32_t>(button);
-
-		return state && index >= 0 && index < static_cast<int32_t>(GamepadButton::COUNT) && state->Released[index];
-	}
-
-	float Input::GetGamepadAxis(GamepadID gamepadID, GamepadAxis axis) const
-	{
-		switch (axis)
-		{
-			case GamepadAxis::LEFTX: return GetGamepadStick(gamepadID, GamepadStick::Left).x;
-			case GamepadAxis::LEFTY: return GetGamepadStick(gamepadID, GamepadStick::Left).y;
-			case GamepadAxis::RIGHTX: return GetGamepadStick(gamepadID, GamepadStick::Right).x;
-			case GamepadAxis::RIGHTY: return GetGamepadStick(gamepadID, GamepadStick::Right).y;
-			case GamepadAxis::LEFT_TRIGGER:
-			case GamepadAxis::RIGHT_TRIGGER: return ApplyThresholdDeadzone(GetGamepadAxisRaw(gamepadID, axis), m_TriggerDeadzone);
-			default: return 0.0f;
-		}
-	}
-
-	float Input::GetGamepadAxisRaw(GamepadID gamepadID, GamepadAxis axis) const
-	{
-		const GamepadState* state = FindGamepad(gamepadID);
-		const int32_t index = static_cast<int32_t>(axis);
-
-		if (!state || index < 0 || index >= static_cast<int32_t>(GamepadAxis::COUNT))
-		{
-			return 0.0f;
-		}
-
-		return state->Axes[index];
-	}
-
-	glm::vec2 Input::GetGamepadStick(GamepadID gamepadID, GamepadStick stick) const
-	{
-		const GamepadState* state = FindGamepad(gamepadID);
-
-		if (!state)
-		{
-			return glm::vec2(0.0f);
-		}
-
-		const bool left = stick == GamepadStick::Left;
-		const float x = state->Axes[static_cast<size_t>(left ? GamepadAxis::LEFTX : GamepadAxis::RIGHTX)];
-		const float y = state->Axes[static_cast<size_t>(left ? GamepadAxis::LEFTY : GamepadAxis::RIGHTY)];
-
-		return ApplyRadialDeadzone(x, y, m_StickDeadzone);
-	}
-
-	bool Input::SetGamepadRumble(GamepadID gamepadID, float lowFrequency, float highFrequency, uint32_t durationMilliseconds)
-	{
-		GamepadState* state = FindGamepad(gamepadID);
-
-		if (!state || !state->Handle)
-		{
-			return false;
-		}
-
-		const uint16_t low = static_cast<uint16_t>(std::clamp(lowFrequency, 0.0f, 1.0f) * 65535.0f);
-		const uint16_t high = static_cast<uint16_t>(std::clamp(highFrequency, 0.0f, 1.0f) * 65535.0f);
-
-		return SDL_RumbleGamepad(state->Handle, low, high, durationMilliseconds);
-	}
-
-	float Input::GetStickDeadzone() const
-	{
-		return m_StickDeadzone;
-	}
-
-	void Input::SetStickDeadzone(float deadzone)
-	{
-		if (deadzone < 0.0f || deadzone >= 1.0f)
-		{
-			IG_CORE_WARN("Invalid stick deadzone ({}), ignoring", deadzone);
-
-			return;
-		}
-
-		m_StickDeadzone = deadzone;
-	}
-
-	float Input::GetTriggerDeadzone() const
-	{
-		return m_TriggerDeadzone;
-	}
-
-	void Input::SetTriggerDeadzone(float deadzone)
-	{
-		if (deadzone < 0.0f || deadzone >= 1.0f)
-		{
-			IG_CORE_WARN("Invalid trigger deadzone ({}), ignoring", deadzone);
-
-			return;
-		}
-
-		m_TriggerDeadzone = deadzone;
-	}
-
-	void Input::OpenGamepad(GamepadID gamepadID)
-	{
-		if (m_Gamepads.contains(gamepadID))
+		if (Gamepads.contains(gamepadID))
 		{
 			return;
 		}
@@ -532,16 +287,18 @@ namespace Ignition
 
 		GamepadState state{};
 		state.Handle = handle;
-		m_Gamepads.emplace(gamepadID, state);
+		Gamepads.emplace(gamepadID, state);
 
-		IG_CORE_INFO("Gamepad connected: {} (id {})", GetGamepadName(gamepadID), gamepadID);
+		const char* name = SDL_GetGamepadName(handle);
+
+		IG_CORE_INFO("Gamepad connected: {} (id {})", name ? name : "", gamepadID);
 	}
 
-	void Input::CloseGamepad(GamepadID gamepadID)
+	void InputImplementation::CloseGamepad(GamepadID gamepadID)
 	{
-		auto it = m_Gamepads.find(gamepadID);
+		auto it = Gamepads.find(gamepadID);
 
-		if (it == m_Gamepads.end())
+		if (it == Gamepads.end())
 		{
 			return;
 		}
@@ -551,22 +308,274 @@ namespace Ignition
 			SDL_CloseGamepad(it->second.Handle);
 		}
 
-		m_Gamepads.erase(it);
+		Gamepads.erase(it);
 
 		IG_CORE_INFO("Gamepad disconnected (id {})", gamepadID);
 	}
 
-	const Input::GamepadState* Input::FindGamepad(GamepadID gamepadID) const
+	const InputImplementation::GamepadState* InputImplementation::FindGamepad(GamepadID gamepadID) const
 	{
-		auto it = m_Gamepads.find(gamepadID);
+		auto it = Gamepads.find(gamepadID);
 
-		return it != m_Gamepads.end() ? &it->second : nullptr;
+		return it != Gamepads.end() ? &it->second : nullptr;
 	}
 
-	Input::GamepadState* Input::FindGamepad(GamepadID gamepadID)
+	InputImplementation::GamepadState* InputImplementation::FindGamepad(GamepadID gamepadID)
 	{
-		auto it = m_Gamepads.find(gamepadID);
+		auto it = Gamepads.find(gamepadID);
 
-		return it != m_Gamepads.end() ? &it->second : nullptr;
+		return it != Gamepads.end() ? &it->second : nullptr;
+	}
+
+	//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+	Input::Input() : m_Implementation(std::make_unique<InputImplementation>())
+	{
+
+	}
+
+	Input::~Input() = default;
+
+	bool Input::IsKeyDown(ScanCode scanCode) const
+	{
+		const size_t index = static_cast<size_t>(scanCode);
+
+		return index < m_Implementation->KeysDown.size() && m_Implementation->KeysDown[index];
+	}
+
+	bool Input::IsKeyPressed(ScanCode scanCode) const
+	{
+		const size_t index = static_cast<size_t>(scanCode);
+
+		return index < m_Implementation->KeysPressed.size() && m_Implementation->KeysPressed[index];
+	}
+
+	bool Input::IsKeyReleased(ScanCode scanCode) const
+	{
+		const size_t index = static_cast<size_t>(scanCode);
+
+		return index < m_Implementation->KeysReleased.size() && m_Implementation->KeysReleased[index];
+	}
+
+	bool Input::IsKeyDown(KeyCode keyCode) const
+	{
+		return m_Implementation->KeyCodesDown.contains(keyCode);
+	}
+
+	bool Input::IsKeyPressed(KeyCode keyCode) const
+	{
+		return m_Implementation->KeyCodesPressed.contains(keyCode);
+	}
+
+	bool Input::IsKeyReleased(KeyCode keyCode) const
+	{
+		return m_Implementation->KeyCodesReleased.contains(keyCode);
+	}
+
+	glm::vec2 Input::GetMousePosition() const
+	{
+		return m_Implementation->MousePosition;
+	}
+
+	glm::vec2 Input::GetMouseDelta() const
+	{
+		return m_Implementation->MouseDelta;
+	}
+
+	glm::vec2 Input::GetMouseWheel() const
+	{
+		return m_Implementation->MouseWheel;
+	}
+
+	bool Input::IsMouseButtonDown(MouseCode button) const
+	{
+		const size_t index = static_cast<size_t>(button);
+
+		return index < m_Implementation->MouseDown.size() && m_Implementation->MouseDown[index];
+	}
+
+	bool Input::IsMouseButtonPressed(MouseCode button) const
+	{
+		const size_t index = static_cast<size_t>(button);
+
+		return index < m_Implementation->MousePressed.size() && m_Implementation->MousePressed[index];
+	}
+
+	bool Input::IsMouseButtonReleased(MouseCode button) const
+	{
+		const size_t index = static_cast<size_t>(button);
+
+		return index < m_Implementation->MouseReleased.size() && m_Implementation->MouseReleased[index];
+	}
+
+	void Input::SetCursorMode(CursorMode mode)
+	{
+		m_Implementation->Cursor = mode;
+
+		if (m_Implementation->WindowHandle)
+		{
+			m_Implementation->WindowHandle->SetCursorMode(mode);
+		}
+	}
+
+	CursorMode Input::GetCursorMode() const
+	{
+		return m_Implementation->Cursor;
+	}
+
+	void Input::SetTextInputEnabled(bool enabled)
+	{
+		if (m_Implementation->WindowHandle)
+		{
+			m_Implementation->WindowHandle->SetTextInputEnabled(enabled);
+		}
+	}
+
+	bool Input::IsGamepadConnected(GamepadID gamepadID) const
+	{
+		return m_Implementation->Gamepads.contains(gamepadID);
+	}
+
+	std::vector<GamepadID> Input::GetConnectedGamepads() const
+	{
+		std::vector<GamepadID> gamepadIDs;
+		gamepadIDs.reserve(m_Implementation->Gamepads.size());
+
+		for (const auto& [gamepadID, state] : m_Implementation->Gamepads)
+		{
+			gamepadIDs.push_back(gamepadID);
+		}
+
+		return gamepadIDs;
+	}
+
+	std::string Input::GetGamepadName(GamepadID gamepadID) const
+	{
+		const InputImplementation::GamepadState* state = m_Implementation->FindGamepad(gamepadID);
+
+		if (!state || !state->Handle)
+		{
+			return {};
+		}
+
+		const char* name = SDL_GetGamepadName(state->Handle);
+
+		return name ? name : std::string{};
+	}
+
+	bool Input::IsGamepadButtonDown(GamepadID gamepadID, GamepadButton button) const
+	{
+		const InputImplementation::GamepadState* state = m_Implementation->FindGamepad(gamepadID);
+		const int32_t index = static_cast<int32_t>(button);
+
+		return state && index >= 0 && index < static_cast<int32_t>(GamepadButton::COUNT) && state->Down[index];
+	}
+
+	bool Input::IsGamepadButtonPressed(GamepadID gamepadID, GamepadButton button) const
+	{
+		const InputImplementation::GamepadState* state = m_Implementation->FindGamepad(gamepadID);
+		const int32_t index = static_cast<int32_t>(button);
+
+		return state && index >= 0 && index < static_cast<int32_t>(GamepadButton::COUNT) && state->Pressed[index];
+	}
+
+	bool Input::IsGamepadButtonReleased(GamepadID gamepadID, GamepadButton button) const
+	{
+		const InputImplementation::GamepadState* state = m_Implementation->FindGamepad(gamepadID);
+		const int32_t index = static_cast<int32_t>(button);
+
+		return state && index >= 0 && index < static_cast<int32_t>(GamepadButton::COUNT) && state->Released[index];
+	}
+
+	float Input::GetGamepadAxis(GamepadID gamepadID, GamepadAxis axis) const
+	{
+		switch (axis)
+		{
+			case GamepadAxis::LEFTX: return GetGamepadStick(gamepadID, GamepadStick::Left).x;
+			case GamepadAxis::LEFTY: return GetGamepadStick(gamepadID, GamepadStick::Left).y;
+			case GamepadAxis::RIGHTX: return GetGamepadStick(gamepadID, GamepadStick::Right).x;
+			case GamepadAxis::RIGHTY: return GetGamepadStick(gamepadID, GamepadStick::Right).y;
+			case GamepadAxis::LEFT_TRIGGER:
+			case GamepadAxis::RIGHT_TRIGGER: return ApplyThresholdDeadzone(GetGamepadAxisRaw(gamepadID, axis), m_Implementation->TriggerDeadzone);
+			default: return 0.0f;
+		}
+	}
+
+	float Input::GetGamepadAxisRaw(GamepadID gamepadID, GamepadAxis axis) const
+	{
+		const InputImplementation::GamepadState* state = m_Implementation->FindGamepad(gamepadID);
+		const int32_t index = static_cast<int32_t>(axis);
+
+		if (!state || index < 0 || index >= static_cast<int32_t>(GamepadAxis::COUNT))
+		{
+			return 0.0f;
+		}
+
+		return state->Axes[index];
+	}
+
+	glm::vec2 Input::GetGamepadStick(GamepadID gamepadID, GamepadStick stick) const
+	{
+		const InputImplementation::GamepadState* state = m_Implementation->FindGamepad(gamepadID);
+
+		if (!state)
+		{
+			return glm::vec2(0.0f);
+		}
+
+		const bool left = stick == GamepadStick::Left;
+		const float x = state->Axes[static_cast<size_t>(left ? GamepadAxis::LEFTX : GamepadAxis::RIGHTX)];
+		const float y = state->Axes[static_cast<size_t>(left ? GamepadAxis::LEFTY : GamepadAxis::RIGHTY)];
+
+		return ApplyRadialDeadzone(x, y, m_Implementation->StickDeadzone);
+	}
+
+	bool Input::SetGamepadRumble(GamepadID gamepadID, float lowFrequency, float highFrequency, uint32_t durationMilliseconds)
+	{
+		InputImplementation::GamepadState* state = m_Implementation->FindGamepad(gamepadID);
+
+		if (!state || !state->Handle)
+		{
+			return false;
+		}
+
+		const uint16_t low = static_cast<uint16_t>(std::clamp(lowFrequency, 0.0f, 1.0f) * 65535.0f);
+		const uint16_t high = static_cast<uint16_t>(std::clamp(highFrequency, 0.0f, 1.0f) * 65535.0f);
+
+		return SDL_RumbleGamepad(state->Handle, low, high, durationMilliseconds);
+	}
+
+	float Input::GetStickDeadzone() const
+	{
+		return m_Implementation->StickDeadzone;
+	}
+
+	void Input::SetStickDeadzone(float deadzone)
+	{
+		if (deadzone < 0.0f || deadzone >= 1.0f)
+		{
+			IG_CORE_WARN("Invalid stick deadzone ({}), ignoring", deadzone);
+
+			return;
+		}
+
+		m_Implementation->StickDeadzone = deadzone;
+	}
+
+	float Input::GetTriggerDeadzone() const
+	{
+		return m_Implementation->TriggerDeadzone;
+	}
+
+	void Input::SetTriggerDeadzone(float deadzone)
+	{
+		if (deadzone < 0.0f || deadzone >= 1.0f)
+		{
+			IG_CORE_WARN("Invalid trigger deadzone ({}), ignoring", deadzone);
+
+			return;
+		}
+
+		m_Implementation->TriggerDeadzone = deadzone;
 	}
 }

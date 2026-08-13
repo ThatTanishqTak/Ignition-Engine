@@ -1,31 +1,30 @@
 #include "Ignition/Renderer/Texture.h"
 
-#include "Ignition/Renderer/Vulkan/VulkanTexture.h"
-#include "Ignition/Renderer/Vulkan/VulkanRenderer.h"
+#include "Ignition/Renderer/TextureImplementation.h"
 
 namespace Ignition
 {
-	Texture::Texture(std::unique_ptr<VulkanTexture> vulkanTexture, std::weak_ptr<VulkanRenderer*> renderer) : m_VulkanTexture(std::move(vulkanTexture)), m_Renderer(std::move(renderer))
+	Texture::Texture() : m_Implementation(std::make_unique<TextureImplementation>())
 	{
 
 	}
 
 	Texture::~Texture()
 	{
-		if (!m_VulkanTexture)
+		if (!m_Implementation->Handle)
 		{
 			return;
 		}
 
-		const std::shared_ptr<VulkanRenderer*> renderer = m_Renderer.lock();
+		const std::shared_ptr<VulkanRenderer*> renderer = m_Implementation->Backend.lock();
 
 		if (renderer && *renderer)
 		{
-			(*renderer)->Retire(std::move(m_VulkanTexture));
+			(*renderer)->Retire(std::move(m_Implementation->Handle));
 		}
 		else
 		{
-			m_VulkanTexture->Shutdown();
+			m_Implementation->Handle->Shutdown();
 		}
 	}
 }
