@@ -175,6 +175,14 @@ namespace Ignition
 			Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()), "Failed vkDeviceWaitIdle");
 		}
 
+		if (m_SelfReference)
+		{
+			*m_SelfReference = nullptr;
+			m_SelfReference.reset();
+		}
+
+		FlushRetirementQueue();
+
 		if (m_VulkanImGui)
 		{
 			m_VulkanImGui->Shutdown();
@@ -320,6 +328,8 @@ namespace Ignition
 		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
 
 		Utilities::VulkanUtilities::VKCheck(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed vkWaitForFences");
+
+		ProcessRetirementQueue();
 
 		const VkSemaphore imageAvailable = m_VulkanFrameContext->GetImageAvailableSemaphore(m_FrameIndex);
 		const VkResult acquireResult = vkAcquireNextImageKHR(device, m_VulkanSwapchain->GetSwapchain(), UINT64_MAX, imageAvailable, VK_NULL_HANDLE, &m_ImageIndex);
@@ -517,6 +527,7 @@ namespace Ignition
 
 		m_FrameStarted = false;
 		m_FrameIndex = (m_FrameIndex + 1) % VulkanFrameContext::MaximumFramesInFlight;
+		++m_FrameNumber;
 	}
 
 	void VulkanRenderer::ProcessImGuiEvent(const void* sdlEvent)
@@ -654,5 +665,77 @@ namespace Ignition
 	void VulkanRenderer::EndScene()
 	{
 		m_SceneActive = false;
+	}
+
+	void VulkanRenderer::Retire(std::unique_ptr<VulkanMesh> mesh)
+	{
+		if (!mesh)
+		{
+			return;
+		}
+
+		if (!m_VulkanDevice || m_VulkanDevice->GetDevice() == VK_NULL_HANDLE)
+		{
+			mesh->Shutdown();
+
+			return;
+		}
+
+		m_RetirementQueue.push_back({ std::move(mesh), nullptr, m_FrameNumber });
+	}
+
+	void VulkanRenderer::Retire(std::unique_ptr<VulkanTexture> texture)
+	{
+		if (!texture)
+		{
+			return;
+		}
+
+		if (!m_VulkanDevice || m_VulkanDevice->GetDevice() == VK_NULL_HANDLE)
+		{
+			texture->Shutdown();
+
+			return;
+		}
+
+		m_RetirementQueue.push_back({ nullptr, std::move(texture), m_FrameNumber });
+	}
+
+	void VulkanRenderer::ProcessRetirementQueue()
+	{
+		while (!m_RetirementQueue.empty() && m_RetirementQueue.front().FrameNumber + VulkanFrameContext::MaximumFramesInFlight <= m_FrameNumber)
+		{
+			RetiredResource& resource = m_RetirementQueue.front();
+
+			if (resource.Mesh)
+			{
+				resource.Mesh->Shutdown();
+			}
+
+			if (resource.Texture)
+			{
+				resource.Texture->Shutdown();
+			}
+
+			m_RetirementQueue.pop_front();
+		}
+	}
+
+	void VulkanRenderer::FlushRetirementQueue()
+	{
+		for (RetiredResource& resource : m_RetirementQueue)
+		{
+			if (resource.Mesh)
+			{
+				resource.Mesh->Shutdown();
+			}
+
+			if (resource.Texture)
+			{
+				resource.Texture->Shutdown();
+			}
+		}
+
+		m_RetirementQueue.clear();
 	}
 }

@@ -83,7 +83,7 @@ namespace Ignition
 			return nullptr;
 		}
 
-		return std::shared_ptr<Mesh>(new Mesh(std::move(vulkanMesh)));
+		return std::shared_ptr<Mesh>(new Mesh(std::move(vulkanMesh), m_VulkanRenderer->GetSelfReference()));
 	}
 
 	void Renderer::BeginScene(const Camera& camera)
@@ -108,7 +108,7 @@ namespace Ignition
 			return nullptr;
 		}
 
-		return std::shared_ptr<Texture>(new Texture(std::move(vulkanTexture)));
+		return std::shared_ptr<Texture>(new Texture(std::move(vulkanTexture), m_VulkanRenderer->GetSelfReference()));
 	}
 
 	void Renderer::Submit(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform)

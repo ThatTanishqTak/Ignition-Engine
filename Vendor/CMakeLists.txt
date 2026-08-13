@@ -61,6 +61,11 @@ add_library(stb INTERFACE)
 target_include_directories(stb SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/stb")
 # --------------
 
+# entt (header-only) -------
+add_library(entt INTERFACE)
+target_include_directories(entt SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/entt/single_include")
+# --------------
+
 # spdlog -------
 set(SPDLOG_BUILD_SHARED OFF)
 set(SPDLOG_BUILD_PIC ON)

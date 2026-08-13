@@ -7,6 +7,7 @@
 namespace Ignition
 {
 	class VulkanMesh;
+	class VulkanRenderer;
 
 	class Mesh
 	{
@@ -21,9 +22,10 @@ namespace Ignition
 	private:
 		friend class Renderer;
 
-		explicit Mesh(std::unique_ptr<VulkanMesh> vulkanMesh);
+		Mesh(std::unique_ptr<VulkanMesh> vulkanMesh, std::weak_ptr<VulkanRenderer*> renderer);
 
 	private:
 		std::unique_ptr<VulkanMesh> m_VulkanMesh;
+		std::weak_ptr<VulkanRenderer*> m_Renderer;
 	};
 }

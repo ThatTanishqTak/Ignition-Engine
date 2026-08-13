@@ -14,6 +14,7 @@
 #include "Ignition/Renderer/Texture.h"
 #include "Ignition/Renderer/Material.h"
 #include "Ignition/Renderer/Vertex.h"
+#include "Ignition/Scene/Scene.h"
 #include "Ignition/Core/Time.h"
 
 #include "Sandbox/CameraController.h"
@@ -24,6 +25,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace Sandbox
@@ -59,8 +61,42 @@ namespace Sandbox
 
 			m_QuadMesh = GetRenderer()->CreateMesh(vertices, indices);
 
-			m_TestTexture = GetRenderer()->CreateTexture("Assets/Test.png");
-			m_QuadMaterial.Albedo = m_TestTexture;
+			m_Scene = std::make_unique<Ignition::Scene>();
+
+			// The center grid entity holds the only reference, so destroying it at
+			// runtime exercises texture retirement.
+			const std::shared_ptr<Ignition::Texture> testTexture = GetRenderer()->CreateTexture("Assets/Test.png");
+
+			constexpr int gridSize = 5;
+			constexpr float spacing = 0.75f;
+
+			for (int y = 0; y < gridSize; ++y)
+			{
+				for (int x = 0; x < gridSize; ++x)
+				{
+					Ignition::Entity entity = m_Scene->CreateEntity("Quad (" + std::to_string(x) + ", " + std::to_string(y) + ")");
+
+					Ignition::TransformComponent& transform = entity.GetTransform();
+					transform.Position = { (x - gridSize / 2) * spacing, (y - gridSize / 2) * spacing, 0.0f };
+					transform.Scale = glm::vec3(0.6f);
+
+					Ignition::Material material{};
+					material.Tint = { x / static_cast<float>(gridSize - 1), y / static_cast<float>(gridSize - 1), 1.0f, 1.0f };
+
+					if (x == gridSize / 2 && y == gridSize / 2)
+					{
+						material.Albedo = testTexture;
+						material.Tint = glm::vec4(1.0f);
+					}
+
+					entity.AddMeshRenderer(m_QuadMesh, material);
+				}
+			}
+
+			m_SpinningEntity = m_Scene->CreateEntity("Spinner");
+			m_SpinningEntity.GetTransform().Position = { 0.0f, 0.0f, 0.5f };
+			m_SpinningEntity.GetTransform().Scale = glm::vec3(0.35f);
+			m_SpinningEntity.AddMeshRenderer(m_QuadMesh, {});
 
 			int pixelWidth = 0;
 			int pixelHeight = 0;
@@ -72,7 +108,7 @@ namespace Sandbox
 
 			m_CameraController = std::make_unique<CameraController>(GetInput(), m_Actions.get());
 
-			PushLayer(std::make_unique<SandboxLayer>(GetRenderer(), &m_QuadMaterial));
+			PushLayer(std::make_unique<SandboxLayer>(GetRenderer(), m_Scene.get()));
 
 			IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 		}
@@ -97,6 +133,11 @@ namespace Sandbox
 			{
 				IG_APP_TRACE("Move: ({}, {})", move.x, move.y);
 			}
+
+			if (m_SpinningEntity.IsValid())
+			{
+				m_SpinningEntity.GetTransform().Rotation.z = static_cast<float>(Ignition::Time::GetElapsedTime()) * glm::radians(90.0f);
+			}
 		}
 
 		void OnFixedUpdate(float fixedTimeStep) override
@@ -107,14 +148,7 @@ namespace Sandbox
 
 		void OnRender() override
 		{
-			const float angle = static_cast<float>(Ignition::Time::GetElapsedTime()) * glm::radians(90.0f);
-			const glm::mat4 spinning = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 0.0f, 1.0f));
-			const glm::mat4 orbiting = glm::rotate(glm::mat4(1.0f), -angle, glm::vec3(0.0f, 0.0f, 1.0f)) * glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, -0.5f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.35f));
-
-			GetRenderer()->BeginScene(m_Camera);
-			GetRenderer()->Submit(m_QuadMesh, m_QuadMaterial, spinning);
-			GetRenderer()->Submit(m_QuadMesh, orbiting);
-			GetRenderer()->EndScene();
+			m_Scene->OnRender(*GetRenderer(), m_Camera);
 		}
 
 		void OnEvent(Ignition::Event& event) override
@@ -143,8 +177,7 @@ namespace Sandbox
 		{
 			IG_APP_INFO("------- SHUTTING DOWN SANDBOX -------");
 
-			m_QuadMaterial.Albedo.reset();
-			m_TestTexture.reset();
+			m_Scene.reset();
 			m_QuadMesh.reset();
 
 			IG_APP_INFO("------- SANDBOX SHUTDOWN COMPLETE -------");
@@ -163,9 +196,9 @@ namespace Sandbox
 
 		std::unique_ptr<Ignition::ActionMap> m_Actions;
 		std::unique_ptr<CameraController> m_CameraController;
+		std::unique_ptr<Ignition::Scene> m_Scene;
 		std::shared_ptr<Ignition::Mesh> m_QuadMesh;
-		std::shared_ptr<Ignition::Texture> m_TestTexture;
-		Ignition::Material m_QuadMaterial;
+		Ignition::Entity m_SpinningEntity;
 		Ignition::Camera m_Camera;
 	};
 }

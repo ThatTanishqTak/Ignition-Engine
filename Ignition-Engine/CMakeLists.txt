@@ -56,6 +56,7 @@ target_link_libraries(Ignition PRIVATE
     spdlog::spdlog
     imgui
     stb
+    entt
 PUBLIC
     glm::glm
 )
