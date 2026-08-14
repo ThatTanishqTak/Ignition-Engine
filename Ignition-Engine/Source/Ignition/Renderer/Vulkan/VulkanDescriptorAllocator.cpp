@@ -30,7 +30,7 @@ namespace Ignition
 		layoutCreateInfo.bindingCount = 1;
 		layoutCreateInfo.pBindings = &textureBinding;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateDescriptorSetLayout(m_Device, &layoutCreateInfo, nullptr, &m_TextureSetLayout), "Failed vkCreateDescriptorSetLayout"))
+		if (!VK_CHECK(vkCreateDescriptorSetLayout(m_Device, &layoutCreateInfo, nullptr, &m_TextureSetLayout)))
 		{
 			m_TextureSetLayout = VK_NULL_HANDLE;
 
@@ -48,7 +48,7 @@ namespace Ignition
 		poolCreateInfo.poolSizeCount = 1;
 		poolCreateInfo.pPoolSizes = &poolSize;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateDescriptorPool(m_Device, &poolCreateInfo, nullptr, &m_DescriptorPool), "Failed vkCreateDescriptorPool"))
+		if (!VK_CHECK(vkCreateDescriptorPool(m_Device, &poolCreateInfo, nullptr, &m_DescriptorPool)))
 		{
 			m_DescriptorPool = VK_NULL_HANDLE;
 
@@ -97,7 +97,7 @@ namespace Ignition
 
 		VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkAllocateDescriptorSets(m_Device, &allocateInfo, &descriptorSet), "Failed vkAllocateDescriptorSets"))
+		if (!VK_CHECK(vkAllocateDescriptorSets(m_Device, &allocateInfo, &descriptorSet)))
 		{
 			return VK_NULL_HANDLE;
 		}

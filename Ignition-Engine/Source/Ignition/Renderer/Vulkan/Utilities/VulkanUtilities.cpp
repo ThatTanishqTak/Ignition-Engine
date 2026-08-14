@@ -6,21 +6,21 @@ namespace Ignition
 {
 	namespace Utilities
 	{
-		bool VulkanUtilities::VKCheck(VkResult result, const char* message)
+		bool VulkanUtilities::CheckVkResult(VkResult result, const char* expression, const char* file, int line)
 		{
 			if (result < 0)
 			{
-				IG_CORE_ERROR("[VULKAN]: {} (VkResult: {})", message, static_cast<int>(result));
+				IG_CORE_ERROR("[VULKAN]: {} failed (VkResult: {}) at {}:{}", expression, static_cast<int>(result), file, line);
 
-				return true;
+				return false;
 			}
 
 			if (result != VK_SUCCESS)
 			{
-				IG_CORE_TRACE("[VULKAN]: {} (VkResult: {})", message, static_cast<int>(result));
+				IG_CORE_TRACE("[VULKAN]: {} returned VkResult {} at {}:{}", expression, static_cast<int>(result), file, line);
 			}
 
-			return false;
+			return true;
 		}
 
 		bool VulkanUtilities::SubmitOneShotCommands(VkDevice device, VkQueue queue, uint32_t queueFamily, const std::function<void(VkCommandBuffer)>& record)
@@ -32,7 +32,7 @@ namespace Ignition
 
 			VkCommandPool commandPool = VK_NULL_HANDLE;
 
-			if (VulkanUtilities::VKCheck(vkCreateCommandPool(device, &poolCreateInfo, nullptr, &commandPool), "Failed vkCreateCommandPool"))
+			if (!VK_CHECK(vkCreateCommandPool(device, &poolCreateInfo, nullptr, &commandPool)))
 			{
 				return false;
 			}
@@ -45,7 +45,7 @@ namespace Ignition
 
 			VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
-			if (VulkanUtilities::VKCheck(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer), "Failed vkAllocateCommandBuffers"))
+			if (!VK_CHECK(vkAllocateCommandBuffers(device, &allocateInfo, &commandBuffer)))
 			{
 				vkDestroyCommandPool(device, commandPool, nullptr);
 
@@ -58,11 +58,11 @@ namespace Ignition
 
 			bool succeeded = false;
 
-			if (!VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer"))
+			if (VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo)))
 			{
 				record(commandBuffer);
 
-				if (!VulkanUtilities::VKCheck(vkEndCommandBuffer(commandBuffer), "Failed vkEndCommandBuffer"))
+				if (VK_CHECK(vkEndCommandBuffer(commandBuffer)))
 				{
 					VkCommandBufferSubmitInfo commandBufferSubmitInfo{};
 					commandBufferSubmitInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
@@ -73,9 +73,9 @@ namespace Ignition
 					submitInfo.commandBufferInfoCount = 1;
 					submitInfo.pCommandBufferInfos = &commandBufferSubmitInfo;
 
-					if (!VulkanUtilities::VKCheck(vkQueueSubmit2(queue, 1, &submitInfo, VK_NULL_HANDLE), "Failed vkQueueSubmit2"))
+					if (VK_CHECK(vkQueueSubmit2(queue, 1, &submitInfo, VK_NULL_HANDLE)))
 					{
-						succeeded = !VulkanUtilities::VKCheck(vkQueueWaitIdle(queue), "Failed vkQueueWaitIdle");
+						succeeded = VK_CHECK(vkQueueWaitIdle(queue));
 					}
 				}
 			}

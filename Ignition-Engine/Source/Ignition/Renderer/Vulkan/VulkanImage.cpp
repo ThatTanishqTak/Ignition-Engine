@@ -42,7 +42,7 @@ namespace Ignition
 		VmaAllocationCreateInfo allocationCreateInfo{};
 		allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
-		if (Utilities::VulkanUtilities::VKCheck(vmaCreateImage(allocator, &imageCreateInfo, &allocationCreateInfo, &m_Image, &m_Allocation, nullptr), "Failed vmaCreateImage"))
+		if (!VK_CHECK(vmaCreateImage(allocator, &imageCreateInfo, &allocationCreateInfo, &m_Image, &m_Allocation, nullptr)))
 		{
 			m_Image = VK_NULL_HANDLE;
 			m_Allocation = VK_NULL_HANDLE;
@@ -61,7 +61,7 @@ namespace Ignition
 		viewCreateInfo.subresourceRange.baseArrayLayer = 0;
 		viewCreateInfo.subresourceRange.layerCount = 1;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateImageView(m_Device, &viewCreateInfo, nullptr, &m_ImageView), "Failed vkCreateImageView"))
+		if (!VK_CHECK(vkCreateImageView(m_Device, &viewCreateInfo, nullptr, &m_ImageView)))
 		{
 			m_ImageView = VK_NULL_HANDLE;
 

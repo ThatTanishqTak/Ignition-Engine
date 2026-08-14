@@ -103,7 +103,7 @@ namespace Ignition
 		samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 		samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateSampler(m_Device, &samplerCreateInfo, nullptr, &m_Sampler), "Failed vkCreateSampler"))
+		if (!VK_CHECK(vkCreateSampler(m_Device, &samplerCreateInfo, nullptr, &m_Sampler)))
 		{
 			m_Sampler = VK_NULL_HANDLE;
 

@@ -10,10 +10,10 @@ namespace
 	VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 	{
 		uint32_t formatCount = 0;
-		Ignition::Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr), "Failed vkGetPhysicalDeviceSurfaceFormatsKHR");
+		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr));
 
 		std::vector<VkSurfaceFormatKHR> formats(formatCount);
-		Ignition::Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats.data()), "Failed vkGetPhysicalDeviceSurfaceFormatsKHR");
+		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats.data()));
 
 		if (formats.empty())
 		{
@@ -38,10 +38,10 @@ namespace
 	VkPresentModeKHR ChoosePresentMode(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 	{
 		uint32_t presentModeCount = 0;
-		Ignition::Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr), "Failed vkGetPhysicalDeviceSurfacePresentModesKHR");
+		VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr));
 
 		std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-		Ignition::Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data()), "Failed vkGetPhysicalDeviceSurfacePresentModesKHR");
+		VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data()));
 
 		for (VkPresentModeKHR presentMode : presentModes)
 		{
@@ -115,7 +115,7 @@ namespace Ignition
 
 		if (m_Device != VK_NULL_HANDLE)
 		{
-			Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_Device), "Failed vkDeviceWaitIdle");
+			VK_CHECK(vkDeviceWaitIdle(m_Device));
 		}
 
 		DestroySemaphores();
@@ -140,7 +140,7 @@ namespace Ignition
 			return;
 		}
 
-		Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_Device), "Failed vkDeviceWaitIdle");
+		VK_CHECK(vkDeviceWaitIdle(m_Device));
 
 		DestroySemaphores();
 		DestroyImageViews();
@@ -163,7 +163,7 @@ namespace Ignition
 		IG_CORE_TRACE("Creating Swapchain");
 
 		VkSurfaceCapabilitiesKHR capabilities{};
-		if (Utilities::VulkanUtilities::VKCheck(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_PhysicalDevice, m_Surface, &capabilities), "Failed vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))
+		if (!VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_PhysicalDevice, m_Surface, &capabilities)))
 		{
 			DestroySwapchain();
 
@@ -230,7 +230,7 @@ namespace Ignition
 
 		VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
 
-		const bool createFailed = Utilities::VulkanUtilities::VKCheck(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain), "Failed vkCreateSwapchainKHR");
+		const bool createFailed = !VK_CHECK(vkCreateSwapchainKHR(m_Device, &swapchainCreateInfo, nullptr, &newSwapchain));
 		DestroySwapchain();
 
 		if (createFailed)
@@ -243,10 +243,10 @@ namespace Ignition
 		m_Extent = extent;
 
 		uint32_t actualImageCount = 0;
-		Utilities::VulkanUtilities::VKCheck(vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &actualImageCount, nullptr), "Failed vkGetSwapchainImagesKHR");
+		VK_CHECK(vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &actualImageCount, nullptr));
 
 		m_Images.resize(actualImageCount);
-		Utilities::VulkanUtilities::VKCheck(vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &actualImageCount, m_Images.data()), "Failed vkGetSwapchainImagesKHR");
+		VK_CHECK(vkGetSwapchainImagesKHR(m_Device, m_Swapchain, &actualImageCount, m_Images.data()));
 
 		IG_CORE_TRACE("Swapchain Created: {}x{}, {} images", m_Extent.width, m_Extent.height, actualImageCount);
 	}
@@ -274,7 +274,7 @@ namespace Ignition
 			imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
 			imageViewCreateInfo.subresourceRange.layerCount = 1;
 
-			if (Utilities::VulkanUtilities::VKCheck(vkCreateImageView(m_Device, &imageViewCreateInfo, nullptr, &m_ImageViews[i]), "Failed vkCreateImageView"))
+			if (!VK_CHECK(vkCreateImageView(m_Device, &imageViewCreateInfo, nullptr, &m_ImageViews[i])))
 			{
 				DestroyImageViews();
 				DestroySwapchain();
@@ -297,7 +297,7 @@ namespace Ignition
 
 		for (size_t i = 0; i < m_RenderFinishedSemaphores.size(); ++i)
 		{
-			if (Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphores[i]), "Failed vkCreateSemaphore"))
+			if (!VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphores[i])))
 			{
 				DestroySemaphores();
 				DestroyImageViews();

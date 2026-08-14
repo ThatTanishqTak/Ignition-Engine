@@ -31,7 +31,7 @@ namespace Ignition
 			allocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 		}
 
-		if (Utilities::VulkanUtilities::VKCheck(vmaCreateBuffer(m_Allocator, &bufferCreateInfo, &allocationCreateInfo, &m_Buffer, &m_Allocation, nullptr), "Failed vmaCreateBuffer"))
+		if (!VK_CHECK(vmaCreateBuffer(m_Allocator, &bufferCreateInfo, &allocationCreateInfo, &m_Buffer, &m_Allocation, nullptr)))
 		{
 			m_Buffer = VK_NULL_HANDLE;
 			m_Allocation = VK_NULL_HANDLE;
@@ -64,7 +64,7 @@ namespace Ignition
 
 		void* data = nullptr;
 
-		if (Utilities::VulkanUtilities::VKCheck(vmaMapMemory(m_Allocator, m_Allocation, &data), "Failed vmaMapMemory"))
+		if (!VK_CHECK(vmaMapMemory(m_Allocator, m_Allocation, &data)))
 		{
 			return nullptr;
 		}

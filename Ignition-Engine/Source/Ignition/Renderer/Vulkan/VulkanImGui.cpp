@@ -44,7 +44,7 @@ namespace Ignition
 		poolCreateInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 		poolCreateInfo.pPoolSizes = poolSizes.data();
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateDescriptorPool(m_Device, &poolCreateInfo, nullptr, &m_DescriptorPool), "Failed vkCreateDescriptorPool (ImGui)"))
+		if (!VK_CHECK(vkCreateDescriptorPool(m_Device, &poolCreateInfo, nullptr, &m_DescriptorPool)))
 		{
 			m_DescriptorPool = VK_NULL_HANDLE;
 

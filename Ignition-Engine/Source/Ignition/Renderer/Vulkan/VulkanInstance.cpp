@@ -57,7 +57,7 @@ namespace Ignition
 		applicationInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
 
 		uint32_t instanceVersion = VK_API_VERSION_1_0;
-		if (Utilities::VulkanUtilities::VKCheck(vkEnumerateInstanceVersion(&instanceVersion), "Failed vkEnumerateInstanceVersion"))
+		if (!VK_CHECK(vkEnumerateInstanceVersion(&instanceVersion)))
 		{
 			instanceVersion = VK_API_VERSION_1_0;
 		}
@@ -116,7 +116,7 @@ namespace Ignition
 		instanceCreateInfo.ppEnabledLayerNames = layers.empty() ? nullptr : layers.data();
 		instanceCreateInfo.pNext = m_ValidationEnabled ? &debugCreateInfo : nullptr;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateInstance(&instanceCreateInfo, nullptr, &m_Instance), "Failed vkCreateInstance"))
+		if (!VK_CHECK(vkCreateInstance(&instanceCreateInfo, nullptr, &m_Instance)))
 		{
 			return;
 		}

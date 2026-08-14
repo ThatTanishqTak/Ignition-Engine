@@ -129,7 +129,7 @@ namespace Ignition
 		layoutInfo.pushConstantRangeCount = 1;
 		layoutInfo.pPushConstantRanges = &pushConstantRange;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_PipelineLayout), "Failed vkCreatePipelineLayout"))
+		if (!VK_CHECK(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_PipelineLayout)))
 		{
 			vkDestroyShaderModule(m_Device, shaderModule, nullptr);
 
@@ -158,13 +158,13 @@ namespace Ignition
 		pipelineInfo.layout = m_PipelineLayout;
 		pipelineInfo.renderPass = VK_NULL_HANDLE;
 
-		bool failed = Utilities::VulkanUtilities::VKCheck(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline), "Failed vkCreateGraphicsPipelines");
+		bool failed = !VK_CHECK(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline));
 
 		if (!failed)
 		{
 			rasterizationState.cullMode = VK_CULL_MODE_NONE;
 
-			failed = Utilities::VulkanUtilities::VKCheck(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_PipelineTwoSided), "Failed vkCreateGraphicsPipelines (two-sided)");
+			failed = !VK_CHECK(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_PipelineTwoSided));
 		}
 
 		vkDestroyShaderModule(m_Device, shaderModule, nullptr);
@@ -231,7 +231,7 @@ namespace Ignition
 
 		VkShaderModule shaderModule = VK_NULL_HANDLE;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateShaderModule(m_Device, &createInfo, nullptr, &shaderModule), "Failed vkCreateShaderModule"))
+		if (!VK_CHECK(vkCreateShaderModule(m_Device, &createInfo, nullptr, &shaderModule)))
 		{
 			return VK_NULL_HANDLE;
 		}

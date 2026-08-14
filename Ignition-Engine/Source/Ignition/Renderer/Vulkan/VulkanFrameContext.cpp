@@ -66,7 +66,7 @@ namespace Ignition
 			return;
 		}
 
-		Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_Device), "Failed vkDeviceWaitIdle");
+		VK_CHECK(vkDeviceWaitIdle(m_Device));
 
 		for (VkFence fence : m_InFlightFences)
 		{
@@ -108,7 +108,7 @@ namespace Ignition
 		commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		commandPoolCreateInfo.queueFamilyIndex = graphicsQueueFamily;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkCreateCommandPool(m_Device, &commandPoolCreateInfo, nullptr, &m_CommandPool), "Failed vkCreateCommandPool"))
+		if (!VK_CHECK(vkCreateCommandPool(m_Device, &commandPoolCreateInfo, nullptr, &m_CommandPool)))
 		{
 			return;
 		}
@@ -128,7 +128,7 @@ namespace Ignition
 		allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocateInfo.commandBufferCount = MaximumFramesInFlight;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkAllocateCommandBuffers(m_Device, &allocateInfo, m_CommandBuffers.data()), "Failed vkAllocateCommandBuffers"))
+		if (!VK_CHECK(vkAllocateCommandBuffers(m_Device, &allocateInfo, m_CommandBuffers.data())))
 		{
 			return;
 		}
@@ -152,7 +152,7 @@ namespace Ignition
 
 		for (uint32_t i = 0; i < MaximumFramesInFlight; ++i)
 		{
-			if (Utilities::VulkanUtilities::VKCheck(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphores[i]), "Failed vkCreateSemaphore") || Utilities::VulkanUtilities::VKCheck(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_InFlightFences[i]), "Failed vkCreateFence"))
+			if (!VK_CHECK(vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphores[i])) || !VK_CHECK(vkCreateFence(m_Device, &fenceCreateInfo, nullptr, &m_InFlightFences[i])))
 			{
 				return;
 			}

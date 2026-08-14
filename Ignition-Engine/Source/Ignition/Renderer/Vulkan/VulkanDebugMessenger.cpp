@@ -19,10 +19,10 @@ namespace
 	bool IsValidationLayerAvailable()
 	{
 		uint32_t layerCount = 0;
-		Ignition::Utilities::VulkanUtilities::VKCheck(vkEnumerateInstanceLayerProperties(&layerCount, nullptr), "Failed vkEnumerateInstanceLayerProperties");
+		VK_CHECK(vkEnumerateInstanceLayerProperties(&layerCount, nullptr));
 
 		std::vector<VkLayerProperties> availableLayers(layerCount);
-		Ignition::Utilities::VulkanUtilities::VKCheck(vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data()), "Failed vkEnumerateInstanceLayerProperties");
+		VK_CHECK(vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data()));
 
 		for (const VkLayerProperties& layer : availableLayers)
 		{
@@ -127,7 +127,7 @@ namespace Ignition
 		VkDebugUtilsMessengerCreateInfoEXT createInfo{};
 		PopulateCreateInfo(createInfo);
 
-		if (Utilities::VulkanUtilities::VKCheck(createFunction(m_Instance, &createInfo, nullptr, &m_DebugMessenger), "Failed vkCreateDebugUtilsMessengerEXT"))
+		if (!VK_CHECK(createFunction(m_Instance, &createInfo, nullptr, &m_DebugMessenger)))
 		{
 			return;
 		}

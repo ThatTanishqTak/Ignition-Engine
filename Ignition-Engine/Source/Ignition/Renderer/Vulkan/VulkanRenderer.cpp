@@ -172,7 +172,7 @@ namespace Ignition
 
 		if (m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
 		{
-			Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()), "Failed vkDeviceWaitIdle");
+			VK_CHECK(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()));
 		}
 
 		if (m_SelfReference)
@@ -327,7 +327,7 @@ namespace Ignition
 		const VkDevice device = m_VulkanDevice->GetDevice();
 		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
 
-		Utilities::VulkanUtilities::VKCheck(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "Failed vkWaitForFences");
+		VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
 
 		ProcessRetirementQueue();
 
@@ -343,7 +343,7 @@ namespace Ignition
 
 		if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR)
 		{
-			Utilities::VulkanUtilities::VKCheck(acquireResult, "Failed vkAcquireNextImageKHR");
+			VK_CHECK(acquireResult);
 
 			return;
 		}
@@ -354,7 +354,7 @@ namespace Ignition
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		if (Utilities::VulkanUtilities::VKCheck(vkResetCommandBuffer(commandBuffer, 0), "Failed vkResetCommandBuffer") || Utilities::VulkanUtilities::VKCheck(vkBeginCommandBuffer(commandBuffer, &beginInfo), "Failed vkBeginCommandBuffer"))
+		if (!VK_CHECK(vkResetCommandBuffer(commandBuffer, 0)) || !VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo)))
 		{
 			VkSemaphoreSubmitInfo drainWaitSubmitInfo{};
 			drainWaitSubmitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -366,7 +366,7 @@ namespace Ignition
 			drainSubmitInfo.waitSemaphoreInfoCount = 1;
 			drainSubmitInfo.pWaitSemaphoreInfos = &drainWaitSubmitInfo;
 
-			if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &drainSubmitInfo, VK_NULL_HANDLE), "Failed vkQueueSubmit2 while aborting acquired frame"))
+			if (!VK_CHECK(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &drainSubmitInfo, VK_NULL_HANDLE)))
 			{
 				IG_CORE_CRITICAL("Could not recover the image available semaphore, disabling the renderer");
 
@@ -451,7 +451,7 @@ namespace Ignition
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
 
-		if (Utilities::VulkanUtilities::VKCheck(vkEndCommandBuffer(commandBuffer), "Failed vkEndCommandBuffer"))
+		if (!VK_CHECK(vkEndCommandBuffer(commandBuffer)))
 		{
 			m_FrameStarted = false;
 
@@ -484,14 +484,14 @@ namespace Ignition
 		const VkDevice device = m_VulkanDevice->GetDevice();
 		const VkFence fence = m_VulkanFrameContext->GetInFlightFence(m_FrameIndex);
 
-		if (Utilities::VulkanUtilities::VKCheck(vkResetFences(device, 1, &fence), "Failed vkResetFences"))
+		if (!VK_CHECK(vkResetFences(device, 1, &fence)))
 		{
 			m_FrameStarted = false;
 
 			return;
 		}
 
-		if (Utilities::VulkanUtilities::VKCheck(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, fence), "Failed vkQueueSubmit2"))
+		if (!VK_CHECK(vkQueueSubmit2(m_VulkanDevice->GetGraphicsQueue(), 1, &submitInfo, fence)))
 		{
 			IG_CORE_CRITICAL("Queue submission failed, the device may be lost, disabling the renderer");
 
@@ -522,7 +522,7 @@ namespace Ignition
 		}
 		else if (presentResult != VK_SUCCESS)
 		{
-			Utilities::VulkanUtilities::VKCheck(presentResult, "Failed vkQueuePresentKHR");
+			VK_CHECK(presentResult);
 		}
 
 		m_FrameStarted = false;
@@ -563,7 +563,7 @@ namespace Ignition
 	{
 		if (m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
 		{
-			Utilities::VulkanUtilities::VKCheck(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()), "Failed vkDeviceWaitIdle");
+			VK_CHECK(vkDeviceWaitIdle(m_VulkanDevice->GetDevice()));
 		}
 	}
 

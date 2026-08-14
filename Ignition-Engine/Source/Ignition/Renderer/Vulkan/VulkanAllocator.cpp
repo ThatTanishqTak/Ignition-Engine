@@ -28,7 +28,7 @@ namespace Ignition
 		allocatorCreateInfo.device = device;
 		allocatorCreateInfo.vulkanApiVersion = apiVersion;
 
-		if (Utilities::VulkanUtilities::VKCheck(vmaCreateAllocator(&allocatorCreateInfo, &m_Allocator), "Failed vmaCreateAllocator"))
+		if (!VK_CHECK(vmaCreateAllocator(&allocatorCreateInfo, &m_Allocator)))
 		{
 			m_Allocator = VK_NULL_HANDLE;
 
