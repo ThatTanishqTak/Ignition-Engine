@@ -30,6 +30,21 @@ namespace Ignition
 		}
 	}
 
+	template <typename TResource, typename TBackendHandle>
+	std::shared_ptr<TResource> Renderer::WrapBackendResource(std::unique_ptr<TBackendHandle> handle)
+	{
+		if (!handle)
+		{
+			return nullptr;
+		}
+
+		auto resource = std::shared_ptr<TResource>(new TResource());
+		resource->m_Implementation->Handle = std::move(handle);
+		resource->m_Implementation->Backend = m_Implementation->Backend->GetSelfReference();
+
+		return resource;
+	}
+
 	std::shared_ptr<Mesh> Renderer::CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
 	{
 		if (!m_Implementation->Backend)
@@ -37,18 +52,7 @@ namespace Ignition
 			return nullptr;
 		}
 
-		auto vulkanMesh = m_Implementation->Backend->CreateMesh(vertices, indices);
-
-		if (!vulkanMesh)
-		{
-			return nullptr;
-		}
-
-		auto mesh = std::shared_ptr<Mesh>(new Mesh());
-		mesh->m_Implementation->Handle = std::move(vulkanMesh);
-		mesh->m_Implementation->Backend = m_Implementation->Backend->GetSelfReference();
-
-		return mesh;
+		return WrapBackendResource<Mesh>(m_Implementation->Backend->CreateMesh(vertices, indices));
 	}
 
 	std::shared_ptr<Texture> Renderer::CreateTexture(const std::string& filepath)
@@ -58,18 +62,7 @@ namespace Ignition
 			return nullptr;
 		}
 
-		auto vulkanTexture = m_Implementation->Backend->CreateTexture(filepath);
-
-		if (!vulkanTexture)
-		{
-			return nullptr;
-		}
-
-		auto texture = std::shared_ptr<Texture>(new Texture());
-		texture->m_Implementation->Handle = std::move(vulkanTexture);
-		texture->m_Implementation->Backend = m_Implementation->Backend->GetSelfReference();
-
-		return texture;
+		return WrapBackendResource<Texture>(m_Implementation->Backend->CreateTexture(filepath));
 	}
 
 	std::shared_ptr<Texture> Renderer::CreateTextureFromMemory(const void* data, size_t size)
@@ -79,18 +72,7 @@ namespace Ignition
 			return nullptr;
 		}
 
-		auto vulkanTexture = m_Implementation->Backend->CreateTextureFromMemory(data, size);
-
-		if (!vulkanTexture)
-		{
-			return nullptr;
-		}
-
-		auto texture = std::shared_ptr<Texture>(new Texture());
-		texture->m_Implementation->Handle = std::move(vulkanTexture);
-		texture->m_Implementation->Backend = m_Implementation->Backend->GetSelfReference();
-
-		return texture;
+		return WrapBackendResource<Texture>(m_Implementation->Backend->CreateTextureFromMemory(data, size));
 	}
 
 	void Renderer::BeginScene(const Camera& camera)

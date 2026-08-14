@@ -78,11 +78,13 @@ namespace Ignition
 		void ProcessRetirementQueue();
 		void FlushRetirementQueue();
 
+		template <typename TResource>
+		void RetireResource(std::unique_ptr<TResource> resource);
+
 	private:
 		struct RetiredResource
 		{
-			std::unique_ptr<VulkanMesh> Mesh;
-			std::unique_ptr<VulkanTexture> Texture;
+			std::shared_ptr<void> Resource;
 			uint64_t FrameNumber = 0;
 		};
 

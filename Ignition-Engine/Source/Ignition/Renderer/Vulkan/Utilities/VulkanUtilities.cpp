@@ -2,6 +2,8 @@
 
 #include "Ignition/Core/Log.h"
 
+#include <cstring>
+
 namespace Ignition
 {
 	namespace Utilities
@@ -83,6 +85,38 @@ namespace Ignition
 			vkDestroyCommandPool(device, commandPool, nullptr);
 
 			return succeeded;
+		}
+
+		bool VulkanUtilities::UploadViaStaging(VkDevice device, VkQueue queue, uint32_t queueFamily, VmaAllocator allocator, const void* data, VkDeviceSize size, const std::function<void(VkCommandBuffer, const VulkanBuffer& staging)>& recordCopy)
+		{
+			VulkanBuffer stagingBuffer;
+			stagingBuffer.Initialize(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
+
+			if (!stagingBuffer.IsValid())
+			{
+				return false;
+			}
+
+			void* mapped = stagingBuffer.Map();
+
+			if (!mapped)
+			{
+				stagingBuffer.Shutdown();
+
+				return false;
+			}
+
+			std::memcpy(mapped, data, static_cast<size_t>(size));
+			stagingBuffer.Unmap();
+
+			const bool submitted = SubmitOneShotCommands(device, queue, queueFamily, [&](VkCommandBuffer commandBuffer)
+			{
+				recordCopy(commandBuffer, stagingBuffer);
+			});
+
+			stagingBuffer.Shutdown();
+
+			return submitted;
 		}
 
 		void VulkanUtilities::TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageAspectFlags aspectMask, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess)

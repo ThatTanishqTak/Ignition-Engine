@@ -3,8 +3,6 @@
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
 #include "Ignition/Core/Log.h"
 
-#include <cstring>
-
 namespace Ignition
 {
 	namespace
@@ -12,44 +10,20 @@ namespace Ignition
 
 		bool UploadDeviceLocalBuffer(VulkanBuffer& outBuffer, VkDevice device, VkQueue queue, uint32_t queueFamily, VmaAllocator allocator, const void* data, VkDeviceSize size, VkBufferUsageFlags usage)
 		{
-			VulkanBuffer stagingBuffer;
-			stagingBuffer.Initialize(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
-
-			if (!stagingBuffer.IsValid())
-			{
-				return false;
-			}
-
-			void* mapped = stagingBuffer.Map();
-
-			if (!mapped)
-			{
-				stagingBuffer.Shutdown();
-
-				return false;
-			}
-
-			std::memcpy(mapped, data, static_cast<size_t>(size));
-			stagingBuffer.Unmap();
-
 			outBuffer.Initialize(allocator, size, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
 
 			if (!outBuffer.IsValid())
 			{
-				stagingBuffer.Shutdown();
-
 				return false;
 			}
 
-			const bool copied = Utilities::VulkanUtilities::SubmitOneShotCommands(device, queue, queueFamily, [&](VkCommandBuffer commandBuffer)
+			const bool copied = Utilities::VulkanUtilities::UploadViaStaging(device, queue, queueFamily, allocator, data, size, [&](VkCommandBuffer commandBuffer, const VulkanBuffer& stagingBuffer)
 			{
 				VkBufferCopy copyRegion{};
 				copyRegion.size = size;
 
 				vkCmdCopyBuffer(commandBuffer, stagingBuffer.GetBuffer(), outBuffer.GetBuffer(), 1, &copyRegion);
 			});
-
-			stagingBuffer.Shutdown();
 
 			if (!copied)
 			{

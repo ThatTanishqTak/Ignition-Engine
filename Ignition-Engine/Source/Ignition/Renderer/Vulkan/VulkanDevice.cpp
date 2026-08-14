@@ -22,13 +22,9 @@ namespace
 	{
 		QueueFamilyIndices indices{};
 
-		uint32_t familyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &familyCount, nullptr);
+		const std::vector<VkQueueFamilyProperties> families = Ignition::Utilities::Enumerate<VkQueueFamilyProperties>(vkGetPhysicalDeviceQueueFamilyProperties, physicalDevice);
 
-		std::vector<VkQueueFamilyProperties> families(familyCount);
-		vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &familyCount, families.data());
-
-		for (uint32_t i = 0; i < familyCount; ++i)
+		for (uint32_t i = 0; i < static_cast<uint32_t>(families.size()); ++i)
 		{
 			if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			{
@@ -187,18 +183,14 @@ namespace Ignition
 	{
 		IG_CORE_TRACE("Selecting Physical Device");
 
-		uint32_t deviceCount = 0;
-		VK_CHECK(vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr));
+		const std::vector<VkPhysicalDevice> devices = Utilities::Enumerate<VkPhysicalDevice>(vkEnumeratePhysicalDevices, instance);
 
-		if (deviceCount == 0)
+		if (devices.empty())
 		{
 			IG_CORE_CRITICAL("No physical devices with Vulkan support");
 
 			return;
 		}
-
-		std::vector<VkPhysicalDevice> devices(deviceCount);
-		VK_CHECK(vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data()));
 
 		uint32_t bestScore = 0;
 		for (VkPhysicalDevice device : devices)

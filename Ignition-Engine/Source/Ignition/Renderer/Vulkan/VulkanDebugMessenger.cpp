@@ -18,11 +18,7 @@ namespace
 
 	bool IsValidationLayerAvailable()
 	{
-		uint32_t layerCount = 0;
-		VK_CHECK(vkEnumerateInstanceLayerProperties(&layerCount, nullptr));
-
-		std::vector<VkLayerProperties> availableLayers(layerCount);
-		VK_CHECK(vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data()));
+		const std::vector<VkLayerProperties> availableLayers = Ignition::Utilities::Enumerate<VkLayerProperties>(vkEnumerateInstanceLayerProperties);
 
 		for (const VkLayerProperties& layer : availableLayers)
 		{

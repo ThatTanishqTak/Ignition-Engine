@@ -1,15 +1,12 @@
 #pragma once
 
+#include "Ignition/Renderer/ResourceImplementation.h"
 #include "Ignition/Renderer/Vulkan/VulkanTexture.h"
-#include "Ignition/Renderer/Vulkan/VulkanRenderer.h"
-
-#include <memory>
 
 namespace Ignition
 {
-	struct TextureImplementation
+	struct TextureImplementation : ResourceImplementation<VulkanTexture>
 	{
-		std::unique_ptr<VulkanTexture> Handle;
-		std::weak_ptr<VulkanRenderer*> Backend;
+
 	};
 }

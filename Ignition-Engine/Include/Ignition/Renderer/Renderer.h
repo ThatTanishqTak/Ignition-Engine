@@ -49,6 +49,9 @@ namespace Ignition
 
 		Renderer();
 
+		template <typename TResource, typename TBackendHandle>
+		std::shared_ptr<TResource> WrapBackendResource(std::unique_ptr<TBackendHandle> handle);
+
 		std::unique_ptr<RendererImplementation> m_Implementation;
 	};
 }

@@ -9,22 +9,5 @@ namespace Ignition
 
 	}
 
-	Mesh::~Mesh()
-	{
-		if (!m_Implementation->Handle)
-		{
-			return;
-		}
-
-		const std::shared_ptr<VulkanRenderer*> renderer = m_Implementation->Backend.lock();
-
-		if (renderer && *renderer)
-		{
-			(*renderer)->Retire(std::move(m_Implementation->Handle));
-		}
-		else
-		{
-			m_Implementation->Handle->Shutdown();
-		}
-	}
+	Mesh::~Mesh() = default;
 }

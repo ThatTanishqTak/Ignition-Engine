@@ -26,7 +26,7 @@ namespace Ignition
 	{
 		if (m_Renderer && m_Renderer->IsImGuiFrameActive())
 		{
-			//DrawDebugWindows();
+
 		}
 	}
 
@@ -46,24 +46,5 @@ namespace Ignition
 		{
 			event.SetHandled(true);
 		}
-	}
-
-	void ImGuiLayer::DrawDebugWindows()
-	{
-		ImGui::Begin("Gamepads");
-
-		const auto gamepads = m_Input->GetConnectedGamepads();
-
-		if (gamepads.empty())
-		{
-			ImGui::TextUnformatted("No gamepads connected");
-		}
-
-		for (const GamepadID gamepadID : gamepads)
-		{
-			ImGui::Text("[%d] %s", static_cast<int>(gamepadID), m_Input->GetGamepadName(gamepadID).c_str());
-		}
-
-		ImGui::End();
 	}
 }

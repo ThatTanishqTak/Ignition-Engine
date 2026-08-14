@@ -18,9 +18,6 @@ namespace Ignition
 		void OnEvent(Event& event) override;
 
 	private:
-		void DrawDebugWindows();
-
-	private:
 		Renderer* m_Renderer = nullptr;
 		Input* m_Input = nullptr;
 	};

@@ -9,11 +9,7 @@ namespace
 {
 	VkSurfaceFormatKHR ChooseSurfaceFormat(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 	{
-		uint32_t formatCount = 0;
-		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr));
-
-		std::vector<VkSurfaceFormatKHR> formats(formatCount);
-		VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats.data()));
+		const std::vector<VkSurfaceFormatKHR> formats = Ignition::Utilities::Enumerate<VkSurfaceFormatKHR>(vkGetPhysicalDeviceSurfaceFormatsKHR, physicalDevice, surface);
 
 		if (formats.empty())
 		{
@@ -37,11 +33,7 @@ namespace
 
 	VkPresentModeKHR ChoosePresentMode(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 	{
-		uint32_t presentModeCount = 0;
-		VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr));
-
-		std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-		VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data()));
+		const std::vector<VkPresentModeKHR> presentModes = Ignition::Utilities::Enumerate<VkPresentModeKHR>(vkGetPhysicalDeviceSurfacePresentModesKHR, physicalDevice, surface);
 
 		for (VkPresentModeKHR presentMode : presentModes)
 		{

@@ -8,8 +8,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include <cstring>
-
 namespace Ignition
 {
 	VulkanTexture::VulkanTexture() = default;
@@ -42,32 +40,7 @@ namespace Ignition
 
 		const VkDeviceSize size = static_cast<VkDeviceSize>(width) * static_cast<VkDeviceSize>(height) * 4;
 
-		VulkanBuffer stagingBuffer;
-		stagingBuffer.Initialize(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
-
-		if (!stagingBuffer.IsValid())
-		{
-			IG_CORE_ERROR("Vulkan texture initialization aborted: no staging buffer");
-
-			Shutdown();
-
-			return;
-		}
-
-		void* mapped = stagingBuffer.Map();
-
-		if (!mapped)
-		{
-			stagingBuffer.Shutdown();
-			Shutdown();
-
-			return;
-		}
-
-		std::memcpy(mapped, pixels, static_cast<size_t>(size));
-		stagingBuffer.Unmap();
-
-		const bool uploaded = Utilities::VulkanUtilities::SubmitOneShotCommands(device, graphicsQueue, graphicsQueueFamily, [&](VkCommandBuffer commandBuffer)
+		const bool uploaded = Utilities::VulkanUtilities::UploadViaStaging(device, graphicsQueue, graphicsQueueFamily, allocator, pixels, size, [&](VkCommandBuffer commandBuffer, const VulkanBuffer& stagingBuffer)
 		{
 			Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_Image.GetImage(), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
 
@@ -82,8 +55,6 @@ namespace Ignition
 
 			Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_Image.GetImage(), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 		});
-
-		stagingBuffer.Shutdown();
 
 		if (!uploaded)
 		{
