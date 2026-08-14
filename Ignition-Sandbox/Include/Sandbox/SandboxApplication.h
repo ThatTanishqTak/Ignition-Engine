@@ -3,9 +3,7 @@
 #include <Ignition/Core/Application.h>
 #include <Ignition/Input/ActionMap.h>
 #include <Ignition/Renderer/Camera.h>
-#include <Ignition/Renderer/Mesh.h>
 #include <Ignition/Scene/Scene.h>
-#include <Ignition/Scene/Entity.h>
 
 #include <memory>
 
@@ -29,7 +27,6 @@ namespace Sandbox
 	private:
 		void SetupInput();
 		void SetupCamera();
-		void BuildDemoScene();
 
 		static Ignition::ApplicationSpecification MakeSpecification();
 
@@ -37,8 +34,6 @@ namespace Sandbox
 		std::unique_ptr<Ignition::ActionMap> m_Actions;
 		std::unique_ptr<CameraController> m_CameraController;
 		std::unique_ptr<Ignition::Scene> m_Scene;
-		std::shared_ptr<Ignition::Mesh> m_QuadMesh;
-		Ignition::Entity m_SpinningEntity;
 		Ignition::Camera m_Camera;
 	};
 }

@@ -2,11 +2,6 @@
 
 #include "Ignition/Ignition.h"
 
-#include <glm/vec3.hpp>
-
-#include <memory>
-#include <string>
-
 namespace Sandbox
 {
 	namespace
@@ -14,7 +9,7 @@ namespace Sandbox
 		constexpr size_t FrameHistorySize = 240;
 	}
 
-	ControlPanelLayer::ControlPanelLayer(Ignition::Renderer* renderer, Ignition::Scene* scene) : m_Renderer(renderer), m_Scene(scene)
+	ControlPanelLayer::ControlPanelLayer(Ignition::Scene* scene) : m_Scene(scene)
 	{
 		m_FrameTimeHistory.reserve(FrameHistorySize);
 	}
@@ -33,12 +28,11 @@ namespace Sandbox
 
 	void ControlPanelLayer::OnRender()
 	{
-		Ignition::UI::SetNextWindowSize(360.0f, 560.0f);
+		Ignition::UI::SetNextWindowSize(360.0f, 240.0f);
 
 		if (Ignition::UI::BeginWindow("Control Panel"))
 		{
 			DrawSessionSection();
-			DrawSceneSection();
 		}
 
 		Ignition::UI::EndWindow();
@@ -61,79 +55,5 @@ namespace Sandbox
 		}
 
 		Ignition::UI::Spacing();
-	}
-
-	void ControlPanelLayer::DrawSceneSection()
-	{
-		if (!Ignition::UI::CollapsingHeader("Scene"))
-		{
-			return;
-		}
-
-		if (Ignition::UI::Button("Spawn"))
-		{
-			SpawnEntity();
-		}
-
-		Ignition::UI::Separator();
-
-		Ignition::Entity pendingDestroy{};
-
-		for (Ignition::Entity entity : m_Scene->GetEntities())
-		{
-			Ignition::UI::PushID(static_cast<int>(entity.GetID()));
-
-			if (Ignition::UI::SmallButton("Destroy"))
-			{
-				pendingDestroy = entity;
-			}
-
-			Ignition::UI::SameLine();
-
-			if (Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer())
-			{
-				Ignition::UI::ColorEdit4("##Tint", meshRenderer->Material.Tint);
-				Ignition::UI::SameLine();
-				Ignition::UI::Checkbox("##TwoSided", &meshRenderer->Material.TwoSided);
-				Ignition::UI::SameLine();
-			}
-
-			Ignition::UI::Text(entity.GetName().c_str());
-
-			Ignition::UI::PopID();
-		}
-
-		if (pendingDestroy.IsValid())
-		{
-			m_Scene->DestroyEntity(pendingDestroy);
-		}
-	}
-
-	void ControlPanelLayer::SpawnEntity()
-	{
-		const std::vector<Ignition::Vertex> vertices = {
-			{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f } },
-			{ {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f } },
-			{ {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
-			{ { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
-		};
-
-		const std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0, 2, 1, 0, 0, 3, 2 };
-		const std::shared_ptr<Ignition::Mesh> mesh = m_Renderer->CreateMesh(vertices, indices);
-
-		if (!mesh)
-		{
-			return;
-		}
-
-		++m_SpawnCount;
-
-		Ignition::Entity entity = m_Scene->CreateEntity("Spawned " + std::to_string(m_SpawnCount));
-
-		Ignition::TransformComponent& transform = entity.GetTransform();
-		transform.Position = { -1.5f + 0.3f * static_cast<float>((m_SpawnCount - 1) % 11), -2.25f, 0.5f };
-		transform.Scale = glm::vec3(0.25f);
-
-		entity.AddMeshRenderer(mesh, {});
 	}
 }

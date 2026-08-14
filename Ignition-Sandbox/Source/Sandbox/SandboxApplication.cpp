@@ -5,14 +5,9 @@
 
 #include "Ignition/Ignition.h"
 
-#include <glm/vec2.hpp>
-#include <glm/vec3.hpp>
-#include <glm/vec4.hpp>
 #include <glm/trigonometric.hpp>
 
-#include <string>
-#include <utility>
-#include <vector>
+#include <memory>
 
 namespace Sandbox
 {
@@ -31,9 +26,10 @@ namespace Sandbox
 
 		SetupInput();
 		SetupCamera();
-		BuildDemoScene();
 
-		PushLayer(std::make_unique<ControlPanelLayer>(GetRenderer(), m_Scene.get()));
+		m_Scene = std::make_unique<Ignition::Scene>();
+
+		PushLayer(std::make_unique<ControlPanelLayer>(m_Scene.get()));
 
 		IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 	}
@@ -41,21 +37,6 @@ namespace Sandbox
 	void SandboxApplication::OnUpdate(float deltaTime)
 	{
 		m_CameraController->Update(m_Camera, deltaTime, GetRenderer()->WantCaptureMouse(), GetRenderer()->WantCaptureKeyboard());
-
-		if (!GetRenderer()->WantCaptureKeyboard() && m_Actions->IsPressed("Jump"))
-		{
-			IG_APP_INFO("Jump");
-
-			for (Ignition::GamepadID gamepadID : GetInput()->GetConnectedGamepads())
-			{
-				GetInput()->SetGamepadRumble(gamepadID, 0.5f, 0.5f, 200);
-			}
-		}
-
-		if (m_SpinningEntity.IsValid())
-		{
-			m_SpinningEntity.GetTransform().Rotation.z = static_cast<float>(Ignition::Time::GetElapsedTime()) * glm::radians(90.0f);
-		}
 	}
 
 	void SandboxApplication::OnRender()
@@ -83,7 +64,6 @@ namespace Sandbox
 		IG_APP_INFO("------- SHUTTING DOWN SANDBOX -------");
 
 		m_Scene.reset();
-		m_QuadMesh.reset();
 
 		IG_APP_INFO("------- SANDBOX SHUTDOWN COMPLETE -------");
 	}
@@ -92,7 +72,6 @@ namespace Sandbox
 	{
 		m_Actions = std::make_unique<Ignition::ActionMap>(GetInput());
 
-		m_Actions->AddButton("Jump").Bind(Ignition::ScanCode::SPACE).Bind(Ignition::GamepadButton::SOUTH);
 		m_Actions->AddAxis2D("Move").BindKeys(Ignition::ScanCode::W, Ignition::ScanCode::S, Ignition::ScanCode::A, Ignition::ScanCode::D).BindStick(Ignition::GamepadStick::Left);
 	}
 
@@ -107,64 +86,6 @@ namespace Sandbox
 		m_Camera.SetPerspective(glm::radians(60.0f), aspectRatio, 0.1f, 100.0f);
 
 		m_CameraController = std::make_unique<CameraController>(GetInput(), m_Actions.get());
-	}
-
-	void SandboxApplication::BuildDemoScene()
-	{
-		m_Scene = std::make_unique<Ignition::Scene>();
-
-		const std::vector<Ignition::Vertex> vertices = {
-			{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f } },
-			{ {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f } },
-			{ {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f } },
-			{ { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
-		};
-
-		const std::vector<uint32_t> indices = { 0, 1, 2, 2, 3, 0, 2, 1, 0, 0, 3, 2 };
-
-		m_QuadMesh = GetRenderer()->CreateMesh(vertices, indices);
-
-		const std::shared_ptr<Ignition::Texture> testTexture = GetRenderer()->CreateTexture("Assets/Test.png");
-
-		constexpr int gridSize = 5;
-		constexpr float spacing = 0.75f;
-
-		for (int y = 0; y < gridSize; ++y)
-		{
-			for (int x = 0; x < gridSize; ++x)
-			{
-				Ignition::Entity entity = m_Scene->CreateEntity("Quad (" + std::to_string(x) + ", " + std::to_string(y) + ")");
-
-				Ignition::TransformComponent& transform = entity.GetTransform();
-				transform.Position = { (x - gridSize / 2) * spacing, (y - gridSize / 2) * spacing, 0.0f };
-				transform.Scale = glm::vec3(0.6f);
-
-				Ignition::Material material{};
-				material.Tint = { x / static_cast<float>(gridSize - 1), y / static_cast<float>(gridSize - 1), 1.0f, 1.0f };
-
-				if (x == gridSize / 2 && y == gridSize / 2)
-				{
-					material.Albedo = testTexture;
-					material.Tint = glm::vec4(1.0f);
-				}
-
-				entity.AddMeshRenderer(m_QuadMesh, material);
-			}
-		}
-
-		m_SpinningEntity = m_Scene->CreateEntity("Spinner");
-		m_SpinningEntity.GetTransform().Position = { 0.0f, 0.0f, 0.5f };
-		m_SpinningEntity.GetTransform().Scale = glm::vec3(0.35f);
-		m_SpinningEntity.AddMeshRenderer(m_QuadMesh, {});
-
-		const std::vector<Ignition::Entity> duckEntities = Ignition::ModelImporter::Import(*m_Scene, *GetRenderer(), "Assets/Duck.glb");
-
-		for (Ignition::Entity entity : duckEntities)
-		{
-			Ignition::TransformComponent& transform = entity.GetTransform();
-			transform.Position = { 2.5f, -1.0f, 0.0f };
-			transform.Scale = glm::vec3(1.0f);
-		}
 	}
 
 	Ignition::ApplicationSpecification SandboxApplication::MakeSpecification()
