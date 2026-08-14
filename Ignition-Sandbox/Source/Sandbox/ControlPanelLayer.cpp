@@ -1,13 +1,6 @@
 #include "Sandbox/ControlPanelLayer.h"
 
-#include <Ignition/Core/Time.h>
-#include <Ignition/Renderer/Renderer.h>
-#include <Ignition/Renderer/Mesh.h>
-#include <Ignition/Renderer/Vertex.h>
-#include <Ignition/Scene/Scene.h>
-#include <Ignition/Scene/Entity.h>
-#include <Ignition/Scene/Components.h>
-#include <Ignition/UI/UI.h>
+#include "Ignition/Ignition.h"
 
 #include <glm/vec3.hpp>
 

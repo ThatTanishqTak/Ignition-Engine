@@ -1,8 +1,6 @@
 #include "Sandbox/CameraController.h"
 
-#include <Ignition/Input/ActionMap.h>
-#include <Ignition/Input/Input.h>
-#include <Ignition/Renderer/Camera.h>
+#include "Ignition/Ignition.h"
 
 #include <glm/vec2.hpp>
 #include <glm/common.hpp>

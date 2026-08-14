@@ -3,19 +3,7 @@
 #include "Sandbox/CameraController.h"
 #include "Sandbox/ControlPanelLayer.h"
 
-#include <Ignition/Core/Log.h>
-#include <Ignition/Core/Time.h>
-#include <Ignition/Events/Event.h>
-#include <Ignition/Events/KeyEvent.h>
-#include <Ignition/Events/WindowEvent.h>
-#include <Ignition/Input/Input.h>
-#include <Ignition/Renderer/Renderer.h>
-#include <Ignition/Renderer/Material.h>
-#include <Ignition/Renderer/Texture.h>
-#include <Ignition/Renderer/Vertex.h>
-#include <Ignition/Scene/Components.h>
-#include <Ignition/Scene/ModelImporter.h>
-#include <Ignition/Window/Window.h>
+#include "Ignition/Ignition.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>

@@ -3,15 +3,23 @@
 // Core
 #include "Ignition/Core/Application.h"
 #include "Ignition/Core/Layer.h"
+#include "Ignition/Core/LayerStack.h"
 #include "Ignition/Core/Log.h"
 #include "Ignition/Core/Time.h"
 
 // Events
 #include "Ignition/Events/Event.h"
+#include "Ignition/Events/EventQueue.h"
 #include "Ignition/Events/KeyEvent.h"
 #include "Ignition/Events/MouseEvent.h"
 #include "Ignition/Events/WindowEvent.h"
 #include "Ignition/Events/GamepadEvent.h"
+
+// Event codes
+#include "Ignition/Events/KeyCodes.h"
+#include "Ignition/Events/ScanCodes.h"
+#include "Ignition/Events/MouseCodes.h"
+#include "Ignition/Events/GamepadCodes.h"
 
 // Input
 #include "Ignition/Input/Input.h"

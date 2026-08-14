@@ -89,14 +89,10 @@ namespace Ignition
 
 	void VulkanMesh::Bind(VkCommandBuffer commandBuffer) const
 	{
-		//IG_CORE_TRACE("Binding Command Buffer To Vertex Buffer And Index Buffer");
-
 		const VkBuffer vertexBuffer = m_VertexBuffer.GetBuffer();
 		const VkDeviceSize offset = 0;
 
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
 		vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer.GetBuffer(), 0, VK_INDEX_TYPE_UINT32);
-
-		//IG_CORE_TRACE("Vertex Buffer And Index Buffer Binded To Command Buffer");
 	}
 }

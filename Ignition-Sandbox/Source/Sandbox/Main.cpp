@@ -1,6 +1,7 @@
 #include "Sandbox/SandboxApplication.h"
 
-#include <Ignition/Core/EntryPoint.h>
+#include "Ignition/Ignition.h"
+#include "Ignition/Core/EntryPoint.h"
 
 #include <memory>
 
