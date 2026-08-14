@@ -30,6 +30,11 @@ namespace Ignition
 		return m_Scene->m_Registry->Registry.get<TagComponent>(ToHandle(m_ID)).Name;
 	}
 
+	void Entity::SetName(const std::string& name)
+	{
+		m_Scene->m_Registry->Registry.get<TagComponent>(ToHandle(m_ID)).Name = name;
+	}
+
 	MeshRendererComponent& Entity::AddMeshRenderer(std::shared_ptr<Mesh> mesh, const Material& material)
 	{
 		return m_Scene->m_Registry->Registry.emplace_or_replace<MeshRendererComponent>(ToHandle(m_ID), std::move(mesh), material);

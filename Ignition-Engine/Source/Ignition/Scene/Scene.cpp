@@ -24,6 +24,25 @@ namespace Ignition
 		return Entity(static_cast<uint32_t>(handle), this);
 	}
 
+	Entity Scene::DuplicateEntity(Entity entity)
+	{
+		if (entity.m_Scene != this || !entity.IsValid())
+		{
+			return {};
+		}
+
+		Entity duplicate = CreateEntity(entity.GetName() + " Copy");
+
+		duplicate.GetTransform() = entity.GetTransform();
+
+		if (const MeshRendererComponent* meshRenderer = entity.GetMeshRenderer())
+		{
+			m_Registry->Registry.emplace_or_replace<MeshRendererComponent>(static_cast<entt::entity>(duplicate.GetID()), *meshRenderer);
+		}
+
+		return duplicate;
+	}
+
 	void Scene::DestroyEntity(Entity entity)
 	{
 		if (entity.m_Scene == this && entity.IsValid())

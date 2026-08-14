@@ -56,6 +56,28 @@ target_link_libraries(imgui PRIVATE SDL3::SDL3-static Vulkan::Vulkan)
 set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # --------------
 
+# ImGuizmo -------
+add_library(imguizmo STATIC
+    ImGuizmo/src/ImGuizmo.cpp
+)
+
+target_include_directories(imguizmo SYSTEM PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ImGuizmo/src")
+
+target_link_libraries(imguizmo PUBLIC imgui)
+
+set_target_properties(imguizmo PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# --------------
+
+# yaml-cpp -------
+set(YAML_CPP_BUILD_TOOLS OFF)
+set(YAML_CPP_BUILD_TESTS OFF)
+set(YAML_CPP_BUILD_CONTRIB OFF)
+set(YAML_CPP_INSTALL OFF)
+set(YAML_BUILD_SHARED_LIBS OFF)
+
+add_subdirectory(yaml-cpp SYSTEM EXCLUDE_FROM_ALL)
+# --------------
+
 # stb (header-only) -------
 add_library(stb INTERFACE)
 target_include_directories(stb SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/stb")

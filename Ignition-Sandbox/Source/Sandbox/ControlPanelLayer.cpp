@@ -40,11 +40,6 @@ namespace Sandbox
 
 	void ControlPanelLayer::DrawSessionSection()
 	{
-		if (!Ignition::UI::CollapsingHeader("Session"))
-		{
-			return;
-		}
-
 		Ignition::UI::Text("FPS: {:.1f}", Ignition::Time::GetFramesPerSecond());
 		Ignition::UI::Text("Frame Time: {:.2f} ms", Ignition::Time::GetAverageFrameTimeMilliseconds());
 		Ignition::UI::Text("Entities: {}", m_Scene->GetEntities().size());

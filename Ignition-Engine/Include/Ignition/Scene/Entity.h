@@ -20,6 +20,7 @@ namespace Ignition
 
 		IGNITION_API TransformComponent& GetTransform() const;
 		IGNITION_API const std::string& GetName() const;
+		IGNITION_API void SetName(const std::string& name);
 
 		IGNITION_API MeshRendererComponent& AddMeshRenderer(std::shared_ptr<Mesh> mesh, const Material& material = {});
 		IGNITION_API MeshRendererComponent* GetMeshRenderer() const;

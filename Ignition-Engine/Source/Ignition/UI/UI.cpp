@@ -35,6 +35,24 @@ namespace Ignition
 			return CanDraw();
 		}
 
+		void* GetContext()
+		{
+			return ImGui::GetCurrentContext();
+		}
+
+		void GetAllocatorFunctions(void*& allocateFunction, void*& freeFunction, void*& userData)
+		{
+			ImGuiMemAllocFunc allocate = nullptr;
+			ImGuiMemFreeFunc release = nullptr;
+			void* user = nullptr;
+
+			ImGui::GetAllocatorFunctions(&allocate, &release, &user);
+
+			allocateFunction = reinterpret_cast<void*>(allocate);
+			freeFunction = reinterpret_cast<void*>(release);
+			userData = user;
+		}
+
 		void SetNextWindowPosition(float x, float y, Condition condition)
 		{
 			if (CanDraw())
@@ -61,6 +79,175 @@ namespace Ignition
 			if (CanDraw())
 			{
 				ImGui::End();
+			}
+		}
+
+		bool IsWindowHovered()
+		{
+			return CanDraw() ? ImGui::IsWindowHovered() : false;
+		}
+
+		bool IsWindowFocused()
+		{
+			return CanDraw() ? ImGui::IsWindowFocused() : false;
+		}
+
+		glm::vec2 GetCursorScreenPosition()
+		{
+			if (!CanDraw())
+			{
+				return glm::vec2(0.0f);
+			}
+
+			const ImVec2 position = ImGui::GetCursorScreenPos();
+
+			return glm::vec2(position.x, position.y);
+		}
+
+		glm::vec2 GetContentRegionAvailable()
+		{
+			if (!CanDraw())
+			{
+				return glm::vec2(0.0f);
+			}
+
+			const ImVec2 size = ImGui::GetContentRegionAvail();
+
+			return glm::vec2(size.x, size.y);
+		}
+
+		bool WantsTextInput()
+		{
+			return ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
+		}
+
+		unsigned int DockSpaceOverMainViewport()
+		{
+			if (!CanDraw())
+			{
+				return 0;
+			}
+
+			static int lastSubmittedFrame = -1;
+			static unsigned int dockspaceID = 0;
+
+			if (lastSubmittedFrame != ImGui::GetFrameCount())
+			{
+				dockspaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+				lastSubmittedFrame = ImGui::GetFrameCount();
+			}
+
+			return dockspaceID;
+		}
+
+		bool BuildDefaultDockLayout(unsigned int dockspaceID, const char* leftPanel, const char* rightPanel, const char* bottomPanel, const char* centerPanel)
+		{
+			if (!CanDraw() || dockspaceID == 0)
+			{
+				return false;
+			}
+
+			// A node with children means the user already has a saved layout; leave it alone
+			const ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockspaceID);
+
+			if (!node || !node->IsLeafNode())
+			{
+				return false;
+			}
+
+			ImGui::DockBuilderRemoveNode(dockspaceID);
+			ImGui::DockBuilderAddNode(dockspaceID, ImGuiDockNodeFlags_DockSpace);
+			ImGui::DockBuilderSetNodeSize(dockspaceID, ImGui::GetMainViewport()->WorkSize);
+
+			ImGuiID centerID = dockspaceID;
+			const ImGuiID leftID = ImGui::DockBuilderSplitNode(centerID, ImGuiDir_Left, 0.18f, nullptr, &centerID);
+			const ImGuiID rightID = ImGui::DockBuilderSplitNode(centerID, ImGuiDir_Right, 0.22f, nullptr, &centerID);
+			const ImGuiID bottomID = ImGui::DockBuilderSplitNode(centerID, ImGuiDir_Down, 0.25f, nullptr, &centerID);
+
+			ImGui::DockBuilderDockWindow(leftPanel, leftID);
+			ImGui::DockBuilderDockWindow(rightPanel, rightID);
+			ImGui::DockBuilderDockWindow(bottomPanel, bottomID);
+			ImGui::DockBuilderDockWindow(centerPanel, centerID);
+			ImGui::DockBuilderFinish(dockspaceID);
+
+			return true;
+		}
+
+		bool BeginMainMenuBar()
+		{
+			return CanDraw() ? ImGui::BeginMainMenuBar() : false;
+		}
+
+		void EndMainMenuBar()
+		{
+			if (CanDraw())
+			{
+				ImGui::EndMainMenuBar();
+			}
+		}
+
+		bool BeginMenu(const char* label)
+		{
+			return CanDraw() ? ImGui::BeginMenu(label) : false;
+		}
+
+		void EndMenu()
+		{
+			if (CanDraw())
+			{
+				ImGui::EndMenu();
+			}
+		}
+
+		bool MenuItem(const char* label, const char* shortcut)
+		{
+			return CanDraw() ? ImGui::MenuItem(label, shortcut) : false;
+		}
+
+		void OpenPopup(const char* id)
+		{
+			if (CanDraw())
+			{
+				ImGui::OpenPopup(id);
+			}
+		}
+
+		bool BeginPopup(const char* id)
+		{
+			return CanDraw() ? ImGui::BeginPopup(id) : false;
+		}
+
+		bool BeginPopupContextItem(const char* id)
+		{
+			return CanDraw() ? ImGui::BeginPopupContextItem(id) : false;
+		}
+
+		bool BeginPopupContextWindow(const char* id)
+		{
+			return CanDraw() ? ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems) : false;
+		}
+
+		void EndPopup()
+		{
+			if (CanDraw())
+			{
+				ImGui::EndPopup();
+			}
+		}
+
+		void PushWindowPadding(float x, float y)
+		{
+			if (CanDraw())
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(x, y));
+			}
+		}
+
+		void PopStyleVariable(int count)
+		{
+			if (CanDraw())
+			{
+				ImGui::PopStyleVar(count);
 			}
 		}
 
@@ -111,9 +298,19 @@ namespace Ignition
 			return CanDraw() ? ImGui::SmallButton(label) : false;
 		}
 
+		bool Selectable(const char* label, bool selected)
+		{
+			return CanDraw() ? ImGui::Selectable(label, selected) : false;
+		}
+
 		bool Checkbox(const char* label, bool* value)
 		{
 			return CanDraw() ? ImGui::Checkbox(label, value) : false;
+		}
+
+		bool InputText(const char* label, char* buffer, size_t bufferSize)
+		{
+			return CanDraw() ? ImGui::InputText(label, buffer, bufferSize) : false;
 		}
 
 		bool SliderFloat(const char* label, float* value, float minimum, float maximum)
@@ -144,6 +341,14 @@ namespace Ignition
 		bool Combo(const char* label, int* currentIndex, const char* const items[], int itemCount)
 		{
 			return CanDraw() ? ImGui::Combo(label, currentIndex, items, itemCount) : false;
+		}
+
+		void Image(uint64_t textureID, float width, float height)
+		{
+			if (CanDraw() && textureID != 0)
+			{
+				ImGui::Image((ImTextureID)textureID, ImVec2(width, height));
+			}
 		}
 
 		void ProgressBar(float fraction, const char* overlay)

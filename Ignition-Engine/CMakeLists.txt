@@ -61,6 +61,7 @@ target_link_libraries(Ignition PRIVATE
     stb
     entt
     assimp::assimp
+    yaml-cpp::yaml-cpp
 PUBLIC
     glm::glm
 )

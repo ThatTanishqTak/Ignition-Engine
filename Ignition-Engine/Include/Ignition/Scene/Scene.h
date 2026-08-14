@@ -23,6 +23,7 @@ namespace Ignition
 		Scene& operator=(const Scene&) = delete;
 
 		IGNITION_API Entity CreateEntity(const std::string& name = "Entity");
+		IGNITION_API Entity DuplicateEntity(Entity entity);
 		IGNITION_API void DestroyEntity(Entity entity);
 
 		IGNITION_API std::vector<Entity> GetEntities();

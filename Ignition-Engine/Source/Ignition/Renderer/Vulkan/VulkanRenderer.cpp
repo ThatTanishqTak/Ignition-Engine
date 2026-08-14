@@ -176,6 +176,14 @@ namespace Ignition
 
 		FlushRetirementQueue();
 
+		DestroySceneRenderTarget();
+
+		if (m_SceneColorSampler != VK_NULL_HANDLE && m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
+		{
+			vkDestroySampler(m_VulkanDevice->GetDevice(), m_SceneColorSampler, nullptr);
+			m_SceneColorSampler = VK_NULL_HANDLE;
+		}
+
 		if (m_VulkanImGui)
 		{
 			m_VulkanImGui->Shutdown();
@@ -307,6 +315,13 @@ namespace Ignition
 			return;
 		}
 
+		if (m_SceneTargetResizeRequested)
+		{
+			WaitIdle();
+			CreateSceneRenderTarget(m_PendingSceneTargetWidth, m_PendingSceneTargetHeight);
+			m_SceneTargetResizeRequested = false;
+		}
+
 		if (m_ResizeRequested || !m_VulkanSwapchain->IsValid())
 		{
 			RecreateSwapchain();
@@ -378,11 +393,20 @@ namespace Ignition
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_DepthImage->GetImage(), VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
 
-		const VkExtent2D extent = m_VulkanSwapchain->GetExtent();
+		m_ScenePassActive = m_SceneColorImage && m_SceneColorImage->IsValid() && m_SceneDepthImage && m_SceneDepthImage->IsValid();
+
+		if (m_ScenePassActive)
+		{
+			Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_SceneColorImage->GetImage(), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+
+			Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_SceneDepthImage->GetImage(), VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+		}
+
+		const VkExtent2D extent = m_ScenePassActive ? m_SceneColorImage->GetExtent() : m_VulkanSwapchain->GetExtent();
 
 		VkRenderingAttachmentInfo renderingColorAttachmentInfo{};
 		renderingColorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-		renderingColorAttachmentInfo.imageView = m_VulkanSwapchain->GetImageView(m_ImageIndex);
+		renderingColorAttachmentInfo.imageView = m_ScenePassActive ? m_SceneColorImage->GetImageView() : m_VulkanSwapchain->GetImageView(m_ImageIndex);
 		renderingColorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		renderingColorAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		renderingColorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -390,7 +414,7 @@ namespace Ignition
 
 		VkRenderingAttachmentInfo renderingDepthAttachmentInfo{};
 		renderingDepthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-		renderingDepthAttachmentInfo.imageView = m_DepthImage->GetImageView();
+		renderingDepthAttachmentInfo.imageView = m_ScenePassActive ? m_SceneDepthImage->GetImageView() : m_DepthImage->GetImageView();
 		renderingDepthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 		renderingDepthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		renderingDepthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -434,6 +458,42 @@ namespace Ignition
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
 
+		if (m_ScenePassActive)
+		{
+			vkCmdEndRendering(commandBuffer);
+
+			Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_SceneColorImage->GetImage(), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+
+			const VkExtent2D swapchainExtent = m_VulkanSwapchain->GetExtent();
+
+			VkRenderingAttachmentInfo compositeColorAttachmentInfo{};
+			compositeColorAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+			compositeColorAttachmentInfo.imageView = m_VulkanSwapchain->GetImageView(m_ImageIndex);
+			compositeColorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			compositeColorAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			compositeColorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			compositeColorAttachmentInfo.clearValue.color = { { m_ClearColor[0], m_ClearColor[1], m_ClearColor[2], m_ClearColor[3] } };
+
+			VkRenderingAttachmentInfo compositeDepthAttachmentInfo{};
+			compositeDepthAttachmentInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+			compositeDepthAttachmentInfo.imageView = m_DepthImage->GetImageView();
+			compositeDepthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+			compositeDepthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			compositeDepthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			compositeDepthAttachmentInfo.clearValue.depthStencil = { 1.0f, 0 };
+
+			VkRenderingInfo compositeRenderingInfo{};
+			compositeRenderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+			compositeRenderingInfo.renderArea.offset = { 0, 0 };
+			compositeRenderingInfo.renderArea.extent = swapchainExtent;
+			compositeRenderingInfo.layerCount = 1;
+			compositeRenderingInfo.colorAttachmentCount = 1;
+			compositeRenderingInfo.pColorAttachments = &compositeColorAttachmentInfo;
+			compositeRenderingInfo.pDepthAttachment = &compositeDepthAttachmentInfo;
+
+			vkCmdBeginRendering(commandBuffer, &compositeRenderingInfo);
+		}
+
 		if (m_ImGuiFrameActive)
 		{
 			m_VulkanImGui->Render(commandBuffer);
@@ -441,6 +501,8 @@ namespace Ignition
 		}
 
 		vkCmdEndRendering(commandBuffer);
+
+		m_ScenePassActive = false;
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
 
@@ -685,6 +747,106 @@ namespace Ignition
 	void VulkanRenderer::EndScene()
 	{
 		m_SceneActive = false;
+	}
+
+	void VulkanRenderer::SetSceneRenderTargetSize(uint32_t width, uint32_t height)
+	{
+		if (width == GetSceneRenderTargetWidth() && height == GetSceneRenderTargetHeight())
+		{
+			return;
+		}
+
+		m_PendingSceneTargetWidth = width;
+		m_PendingSceneTargetHeight = height;
+		m_SceneTargetResizeRequested = true;
+	}
+
+	uint64_t VulkanRenderer::GetSceneRenderTargetTextureID() const
+	{
+		return reinterpret_cast<uint64_t>(m_SceneTextureDescriptor);
+	}
+
+	uint32_t VulkanRenderer::GetSceneRenderTargetWidth() const
+	{
+		return m_SceneColorImage && m_SceneColorImage->IsValid() ? m_SceneColorImage->GetExtent().width : 0;
+	}
+
+	uint32_t VulkanRenderer::GetSceneRenderTargetHeight() const
+	{
+		return m_SceneColorImage && m_SceneColorImage->IsValid() ? m_SceneColorImage->GetExtent().height : 0;
+	}
+
+	void VulkanRenderer::CreateSceneRenderTarget(uint32_t width, uint32_t height)
+	{
+		DestroySceneRenderTarget();
+
+		if (width == 0 || height == 0 || !m_VulkanDevice || !m_VulkanAllocator || !m_VulkanSwapchain)
+		{
+			return;
+		}
+		
+		m_SceneColorImage = std::make_unique<VulkanImage>();
+		m_SceneColorImage->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), width, height, m_VulkanSwapchain->GetImageFormat(), VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+
+		m_SceneDepthImage = std::make_unique<VulkanImage>();
+		m_SceneDepthImage->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), width, height, DepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+		if (!m_SceneColorImage->IsValid() || !m_SceneDepthImage->IsValid())
+		{
+			IG_CORE_ERROR("Vulkan renderer: scene render target creation failed ({}x{})", width, height);
+			DestroySceneRenderTarget();
+
+			return;
+		}
+
+		if (m_SceneColorSampler == VK_NULL_HANDLE)
+		{
+			VkSamplerCreateInfo samplerCreateInfo{};
+			samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+			samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+			samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+			if (!VK_CHECK(vkCreateSampler(m_VulkanDevice->GetDevice(), &samplerCreateInfo, nullptr, &m_SceneColorSampler)))
+			{
+				m_SceneColorSampler = VK_NULL_HANDLE;
+				DestroySceneRenderTarget();
+
+				return;
+			}
+		}
+
+		if (m_VulkanImGui && m_VulkanImGui->IsValid())
+		{
+			m_SceneTextureDescriptor = m_VulkanImGui->AddTexture(m_SceneColorSampler, m_SceneColorImage->GetImageView());
+		}
+	}
+
+	void VulkanRenderer::DestroySceneRenderTarget()
+	{
+		if (m_SceneTextureDescriptor != VK_NULL_HANDLE)
+		{
+			if (m_VulkanImGui)
+			{
+				m_VulkanImGui->RemoveTexture(m_SceneTextureDescriptor);
+			}
+
+			m_SceneTextureDescriptor = VK_NULL_HANDLE;
+		}
+
+		if (m_SceneColorImage)
+		{
+			m_SceneColorImage->Shutdown();
+			m_SceneColorImage.reset();
+		}
+
+		if (m_SceneDepthImage)
+		{
+			m_SceneDepthImage->Shutdown();
+			m_SceneDepthImage.reset();
+		}
 	}
 
 	template <typename TResource>

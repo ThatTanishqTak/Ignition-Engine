@@ -6,6 +6,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -43,6 +44,11 @@ namespace Ignition
 		IGNITION_API void Submit(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform);
 		IGNITION_API void Submit(const std::shared_ptr<Mesh>& mesh, const Material& material, const glm::mat4& transform);
 		IGNITION_API void EndScene();
+		
+		IGNITION_API void SetSceneRenderTargetSize(uint32_t width, uint32_t height);
+		IGNITION_API uint64_t GetSceneRenderTargetTextureID() const;
+		IGNITION_API uint32_t GetSceneRenderTargetWidth() const;
+		IGNITION_API uint32_t GetSceneRenderTargetHeight() const;
 
 	private:
 		friend class Engine;

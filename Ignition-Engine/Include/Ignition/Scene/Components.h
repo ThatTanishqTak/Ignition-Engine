@@ -35,5 +35,8 @@ namespace Ignition
 	{
 		std::shared_ptr<Ignition::Mesh> Mesh;
 		Ignition::Material Material;
+
+		std::string MeshAsset;
+		std::string AlbedoAsset;
 	};
 }

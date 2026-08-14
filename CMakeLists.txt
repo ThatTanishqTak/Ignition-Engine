@@ -25,5 +25,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${BASE_OUTPUT_DIRECTORY}")
 add_subdirectory(Vendor)
 add_subdirectory(Ignition-Engine)
 add_subdirectory(Ignition-Sandbox)
+add_subdirectory(Ignition-Editor)
 
-set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT Ignition-Sandbox)
+set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT Editor)

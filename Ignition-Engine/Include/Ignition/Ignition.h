@@ -34,11 +34,15 @@
 #include "Ignition/Renderer/Material.h"
 #include "Ignition/Renderer/Vertex.h"
 
+// Assets
+#include "Ignition/Assets/AssetRegistry.h"
+
 // Scene
 #include "Ignition/Scene/Scene.h"
 #include "Ignition/Scene/Entity.h"
 #include "Ignition/Scene/Components.h"
 #include "Ignition/Scene/ModelImporter.h"
+#include "Ignition/Scene/SceneSerializer.h"
 
 // UI
 #include "Ignition/UI/UI.h"

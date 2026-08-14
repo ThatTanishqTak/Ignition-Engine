@@ -109,6 +109,29 @@ namespace Ignition
 		}
 	}
 
+	void Renderer::SetSceneRenderTargetSize(uint32_t width, uint32_t height)
+	{
+		if (m_Implementation->Backend)
+		{
+			m_Implementation->Backend->SetSceneRenderTargetSize(width, height);
+		}
+	}
+
+	uint64_t Renderer::GetSceneRenderTargetTextureID() const
+	{
+		return m_Implementation->Backend ? m_Implementation->Backend->GetSceneRenderTargetTextureID() : 0;
+	}
+
+	uint32_t Renderer::GetSceneRenderTargetWidth() const
+	{
+		return m_Implementation->Backend ? m_Implementation->Backend->GetSceneRenderTargetWidth() : 0;
+	}
+
+	uint32_t Renderer::GetSceneRenderTargetHeight() const
+	{
+		return m_Implementation->Backend ? m_Implementation->Backend->GetSceneRenderTargetHeight() : 0;
+	}
+
 	bool Renderer::IsImGuiFrameActive() const
 	{
 		return m_Implementation->Backend && m_Implementation->Backend->IsImGuiFrameActive();

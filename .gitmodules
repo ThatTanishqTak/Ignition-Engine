@@ -23,3 +23,9 @@
 [submodule "Vendor/assimp"]
 	path = Vendor/assimp
 	url = https://github.com/ThatTanishqTak/assimp.git
+[submodule "Vendor/ImGuizmo"]
+	path = Vendor/ImGuizmo
+	url = https://github.com/ThatTanishqTak/ImGuizmo.git
+[submodule "Vendor/yaml-cpp"]
+	path = Vendor/yaml-cpp
+	url = https://github.com/ThatTanishqTak/yaml-cpp.git

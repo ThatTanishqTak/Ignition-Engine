@@ -163,6 +163,24 @@ namespace Ignition
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 	}
 
+	VkDescriptorSet VulkanImGui::AddTexture(VkSampler sampler, VkImageView imageView)
+	{
+		if (!m_Initialized)
+		{
+			return VK_NULL_HANDLE;
+		}
+
+		return ImGui_ImplVulkan_AddTexture(sampler, imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
+
+	void VulkanImGui::RemoveTexture(VkDescriptorSet descriptorSet)
+	{
+		if (m_Initialized && descriptorSet != VK_NULL_HANDLE)
+		{
+			ImGui_ImplVulkan_RemoveTexture(descriptorSet);
+		}
+	}
+
 	bool VulkanImGui::WantCaptureMouse() const
 	{
 		return m_Initialized && ImGui::GetIO().WantCaptureMouse;

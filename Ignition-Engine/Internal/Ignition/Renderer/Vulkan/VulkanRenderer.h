@@ -70,10 +70,17 @@ namespace Ignition
 		void Submit(const VulkanMesh& mesh, const VulkanTexture* texture, const glm::vec4& tint, bool twoSided, const glm::mat4& transform);
 		void EndScene();
 
+		void SetSceneRenderTargetSize(uint32_t width, uint32_t height);
+		uint64_t GetSceneRenderTargetTextureID() const;
+		uint32_t GetSceneRenderTargetWidth() const;
+		uint32_t GetSceneRenderTargetHeight() const;
+
 		void OnResize();
 
 	private:
 		void RecreateSwapchain();
+		void CreateSceneRenderTarget(uint32_t width, uint32_t height);
+		void DestroySceneRenderTarget();
 		void GetWindowPixelSize(uint32_t& outWidth, uint32_t& outHeight) const;
 		void ProcessRetirementQueue();
 		void FlushRetirementQueue();
@@ -101,6 +108,15 @@ namespace Ignition
 		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;
 		std::unique_ptr<VulkanTexture> m_WhiteTexture;
 		std::unique_ptr<VulkanImGui> m_VulkanImGui;
+
+		std::unique_ptr<VulkanImage> m_SceneColorImage;
+		std::unique_ptr<VulkanImage> m_SceneDepthImage;
+		VkSampler m_SceneColorSampler = VK_NULL_HANDLE;
+		VkDescriptorSet m_SceneTextureDescriptor = VK_NULL_HANDLE;
+		uint32_t m_PendingSceneTargetWidth = 0;
+		uint32_t m_PendingSceneTargetHeight = 0;
+		bool m_SceneTargetResizeRequested = false;
+		bool m_ScenePassActive = false;
 
 		glm::mat4 m_SceneViewProjection{ 1.0f };
 		bool m_SceneActive = false;

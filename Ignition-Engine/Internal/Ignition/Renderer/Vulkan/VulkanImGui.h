@@ -25,6 +25,9 @@ namespace Ignition
 		void BeginFrame();
 		void Render(VkCommandBuffer commandBuffer);
 
+		VkDescriptorSet AddTexture(VkSampler sampler, VkImageView imageView);
+		void RemoveTexture(VkDescriptorSet descriptorSet);
+
 		bool WantCaptureMouse() const;
 		bool WantCaptureKeyboard() const;
 

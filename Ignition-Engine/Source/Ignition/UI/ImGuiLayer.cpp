@@ -4,6 +4,7 @@
 #include "Ignition/Events/Event.h"
 #include "Ignition/Input/Input.h"
 #include "Ignition/Renderer/Renderer.h"
+#include "Ignition/UI/UI.h"
 
 #include <imgui.h>
 
@@ -18,7 +19,7 @@ namespace Ignition
 	{
 		if (m_Renderer && m_Renderer->IsImGuiFrameActive())
 		{
-			ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+			UI::DockSpaceOverMainViewport();
 		}
 	}
 
