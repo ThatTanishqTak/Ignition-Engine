@@ -227,6 +227,14 @@ namespace Ignition
 			return CanDraw() ? ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems) : false;
 		}
 
+		void CloseCurrentPopup()
+		{
+			if (CanDraw())
+			{
+				ImGui::CloseCurrentPopup();
+			}
+		}
+
 		void EndPopup()
 		{
 			if (CanDraw())

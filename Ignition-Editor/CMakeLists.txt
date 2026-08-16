@@ -32,13 +32,15 @@ target_link_libraries(Editor PRIVATE Ignition imguizmo)
 
 add_dependencies(Editor IgnitionShaders)
 
-add_custom_command(TARGET Editor POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/Assets"
-        "${BASE_OUTPUT_DIRECTORY}/Assets"
-    COMMENT "Copying Editor assets"
-    VERBATIM
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Assets")
+    add_custom_command(TARGET Editor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/Assets"
+            "${BASE_OUTPUT_DIRECTORY}/Assets"
+        COMMENT "Copying Editor assets"
+        VERBATIM
+    )
+endif()
 
 set_target_properties(Editor PROPERTIES
     CXX_EXTENSIONS OFF

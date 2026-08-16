@@ -35,11 +35,20 @@ namespace Editor
 			m_MoveSpeed = glm::clamp(m_MoveSpeed * glm::pow(1.2f, wheel), MinimumMoveSpeed, MaximumMoveSpeed);
 		}
 
-		// F focuses the current selection
+		// F focuses the current selection, framed by its actual mesh bounds
 		if (canStartAction && m_Input->IsKeyPressed(Ignition::ScanCode::F) && context.Selection.IsValid())
 		{
 			const Ignition::TransformComponent& transform = context.Selection.GetTransform();
-			const float radius = glm::max(glm::max(transform.Scale.x, transform.Scale.y), glm::max(transform.Scale.z, 0.5f));
+
+			float radius = 0.5f;
+
+			if (const Ignition::MeshRendererComponent* meshRenderer = context.Selection.GetMeshRenderer(); meshRenderer && meshRenderer->Mesh)
+			{
+				const Ignition::MeshBounds bounds = meshRenderer->Mesh->GetBounds();
+				const glm::vec3 extent = (bounds.Maximum - bounds.Minimum) * transform.Scale;
+
+				radius = glm::max(glm::length(extent) * 0.5f, 0.01f);
+			}
 
 			Focus(transform.Position, radius);
 		}

@@ -40,7 +40,7 @@ namespace Editor
 			meshRenderer.MeshAsset = "builtin:quad";
 		}
 
-		PushLayer(std::make_unique<EditorLayer>(&m_Context, &m_Camera, m_CameraController.get(), m_Assets.get(), GetRenderer(), GetInput()));
+		PushLayer(std::make_unique<EditorLayer>(&m_Context, &m_Camera, m_Assets.get(), GetRenderer(), GetInput()));
 
 		IG_APP_INFO("------- EDITOR INITIALIZED -------");
 	}

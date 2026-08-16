@@ -62,6 +62,7 @@ namespace Ignition
 
 		void Retire(std::unique_ptr<VulkanMesh> mesh);
 		void Retire(std::unique_ptr<VulkanTexture> texture);
+		void Retire(std::unique_ptr<VulkanImage> image);
 
 		std::shared_ptr<VulkanRenderer*> GetSelfReference() const { return m_SelfReference; }
 

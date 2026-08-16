@@ -59,6 +59,7 @@ namespace Ignition
 		IGNITION_API bool BeginPopup(const char* id);
 		IGNITION_API bool BeginPopupContextItem(const char* id);
 		IGNITION_API bool BeginPopupContextWindow(const char* id); // right-click on empty window space only
+		IGNITION_API void CloseCurrentPopup();
 		IGNITION_API void EndPopup();
 
 		// Style

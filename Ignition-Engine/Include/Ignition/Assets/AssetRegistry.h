@@ -11,6 +11,7 @@ namespace Ignition
 	class Mesh;
 	class Renderer;
 	class Texture;
+	struct ModelData;
 
 	class AssetRegistry
 	{
@@ -25,9 +26,15 @@ namespace Ignition
 		IGNITION_API std::shared_ptr<Texture> LoadTexture(const std::string& path);
 
 	private:
+		friend class ModelImporter;
+
+		const ModelData* LoadModel(const std::string& filepath);
+
+	private:
 		Renderer* m_Renderer = nullptr;
 
 		std::unordered_map<std::string, std::shared_ptr<Mesh>> m_Meshes;
 		std::unordered_map<std::string, std::shared_ptr<Texture>> m_Textures;
+		std::unordered_map<std::string, std::unique_ptr<ModelData>> m_Models;
 	};
 }

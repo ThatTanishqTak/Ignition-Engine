@@ -3,6 +3,10 @@
 #include "Ignition/Core/Log.h"
 #include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Vertex.h"
+#include "Ignition/Scene/ModelLoader.h"
+
+#include <charconv>
+#include <string_view>
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -54,6 +58,44 @@ namespace Ignition
 				indices.insert(indices.end(), { base, base + 1, base + 2, base + 2, base + 3, base });
 			}
 		}
+
+		bool SplitAssetReference(const std::string& path, std::string& outFile, std::string& outFragment)
+		{
+			const size_t separator = path.find('#');
+
+			if (separator == std::string::npos)
+			{
+				outFile = path;
+				outFragment.clear();
+
+				return false;
+			}
+
+			outFile = path.substr(0, separator);
+			outFragment = path.substr(separator + 1);
+
+			return true;
+		}
+
+		int ParseIndex(std::string_view text)
+		{
+			int value = -1;
+			const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+
+			return (result.ec == std::errc() && result.ptr == text.data() + text.size()) ? value : -1;
+		}
+
+		void AppendSubmesh(const ModelSubmesh& submesh, std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
+		{
+			const uint32_t base = static_cast<uint32_t>(vertices.size());
+
+			vertices.insert(vertices.end(), submesh.Vertices.begin(), submesh.Vertices.end());
+
+			for (uint32_t index : submesh.Indices)
+			{
+				indices.push_back(base + index);
+			}
+		}
 	}
 
 	AssetRegistry::AssetRegistry(Renderer* renderer) : m_Renderer(renderer)
@@ -62,6 +104,28 @@ namespace Ignition
 	}
 
 	AssetRegistry::~AssetRegistry() = default;
+
+	const ModelData* AssetRegistry::LoadModel(const std::string& filepath)
+	{
+		if (const auto it = m_Models.find(filepath); it != m_Models.end())
+		{
+			return it->second.get();
+		}
+
+		auto model = std::make_unique<ModelData>();
+
+		if (!LoadModelFile(filepath, *model))
+		{
+			m_Models.emplace(filepath, nullptr);
+
+			return nullptr;
+		}
+
+		const ModelData* loaded = model.get();
+		m_Models.emplace(filepath, std::move(model));
+
+		return loaded;
+	}
 
 	std::shared_ptr<Mesh> AssetRegistry::LoadMesh(const std::string& path)
 	{
@@ -86,9 +150,50 @@ namespace Ignition
 		{
 			BuildCube(vertices, indices);
 		}
+		else if (path.starts_with("builtin:"))
+		{
+			IG_CORE_ERROR("AssetRegistry: unknown builtin mesh '{}'", path);
+
+			return nullptr;
+		}
 		else
 		{
-			IG_CORE_ERROR("AssetRegistry: unknown mesh asset '{}'", path);
+			std::string filepath;
+			std::string fragment;
+			SplitAssetReference(path, filepath, fragment);
+
+			const ModelData* model = LoadModel(filepath);
+
+			if (!model)
+			{
+				return nullptr;
+			}
+
+			if (fragment.empty())
+			{
+				for (const ModelSubmesh& submesh : model->Submeshes)
+				{
+					AppendSubmesh(submesh, vertices, indices);
+				}
+			}
+			else
+			{
+				const int submeshIndex = ParseIndex(fragment);
+
+				if (submeshIndex < 0 || static_cast<size_t>(submeshIndex) >= model->Submeshes.size())
+				{
+					IG_CORE_ERROR("AssetRegistry: mesh reference '{}' is out of range ({} submeshes)", path, model->Submeshes.size());
+
+					return nullptr;
+				}
+
+				AppendSubmesh(model->Submeshes[submeshIndex], vertices, indices);
+			}
+		}
+
+		if (indices.empty())
+		{
+			IG_CORE_ERROR("AssetRegistry: mesh asset '{}' produced no geometry", path);
 
 			return nullptr;
 		}
@@ -115,7 +220,36 @@ namespace Ignition
 			return it->second;
 		}
 
-		auto texture = m_Renderer->CreateTexture(path);
+		std::string filepath;
+		std::string fragment;
+
+		std::shared_ptr<Texture> texture;
+
+		if (SplitAssetReference(path, filepath, fragment) && fragment.starts_with("tex:"))
+		{
+			const ModelData* model = LoadModel(filepath);
+			const int textureIndex = ParseIndex(std::string_view(fragment).substr(4));
+
+			if (!model || textureIndex < 0 || static_cast<size_t>(textureIndex) >= model->EmbeddedTextures.size())
+			{
+				IG_CORE_ERROR("AssetRegistry: embedded texture reference '{}' could not be resolved", path);
+
+				return nullptr;
+			}
+
+			const std::vector<uint8_t>& data = model->EmbeddedTextures[textureIndex].Data;
+
+			if (data.empty())
+			{
+				return nullptr;
+			}
+
+			texture = m_Renderer->CreateTextureFromMemory(data.data(), data.size());
+		}
+		else
+		{
+			texture = m_Renderer->CreateTexture(path);
+		}
 
 		if (texture)
 		{

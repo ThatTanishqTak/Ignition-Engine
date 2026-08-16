@@ -8,6 +8,8 @@
 #include "Ignition/Renderer/TextureImplementation.h"
 #include "Ignition/Renderer/RendererImplementation.h"
 
+#include <glm/common.hpp>
+
 namespace Ignition
 {
 	Renderer::Renderer() : m_Implementation(std::make_unique<RendererImplementation>())
@@ -52,7 +54,22 @@ namespace Ignition
 			return nullptr;
 		}
 
-		return WrapBackendResource<Mesh>(m_Implementation->Backend->CreateMesh(vertices, indices));
+		auto mesh = WrapBackendResource<Mesh>(m_Implementation->Backend->CreateMesh(vertices, indices));
+
+		if (mesh && !vertices.empty())
+		{
+			MeshBounds bounds{ vertices.front().Position, vertices.front().Position };
+
+			for (const Vertex& vertex : vertices)
+			{
+				bounds.Minimum = glm::min(bounds.Minimum, vertex.Position);
+				bounds.Maximum = glm::max(bounds.Maximum, vertex.Position);
+			}
+
+			mesh->m_Implementation->Bounds = bounds;
+		}
+
+		return mesh;
 	}
 
 	std::shared_ptr<Texture> Renderer::CreateTexture(const std::string& filepath)

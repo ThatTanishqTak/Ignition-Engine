@@ -8,12 +8,12 @@
 
 namespace Ignition
 {
-	class Renderer;
+	class AssetRegistry;
 	class Scene;
 
 	class ModelImporter
 	{
 	public:
-		IGNITION_API static std::vector<Entity> Import(Scene& scene, Renderer& renderer, const std::string& filepath);
+		IGNITION_API static std::vector<Entity> Import(Scene& scene, AssetRegistry& assets, const std::string& filepath);
 	};
 }

@@ -174,9 +174,9 @@ namespace Ignition
 			m_SelfReference.reset();
 		}
 
-		FlushRetirementQueue();
-
 		DestroySceneRenderTarget();
+
+		FlushRetirementQueue();
 
 		if (m_SceneColorSampler != VK_NULL_HANDLE && m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
 		{
@@ -317,7 +317,6 @@ namespace Ignition
 
 		if (m_SceneTargetResizeRequested)
 		{
-			WaitIdle();
 			CreateSceneRenderTarget(m_PendingSceneTargetWidth, m_PendingSceneTargetHeight);
 			m_SceneTargetResizeRequested = false;
 		}
@@ -776,6 +775,23 @@ namespace Ignition
 		return m_SceneColorImage && m_SceneColorImage->IsValid() ? m_SceneColorImage->GetExtent().height : 0;
 	}
 
+	namespace
+	{
+		struct RetiredImGuiTexture
+		{
+			VulkanImGui* ImGui = nullptr;
+			VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
+
+			void Shutdown()
+			{
+				if (ImGui && DescriptorSet != VK_NULL_HANDLE)
+				{
+					ImGui->RemoveTexture(DescriptorSet);
+				}
+			}
+		};
+	}
+
 	void VulkanRenderer::CreateSceneRenderTarget(uint32_t width, uint32_t height)
 	{
 		DestroySceneRenderTarget();
@@ -828,25 +844,13 @@ namespace Ignition
 	{
 		if (m_SceneTextureDescriptor != VK_NULL_HANDLE)
 		{
-			if (m_VulkanImGui)
-			{
-				m_VulkanImGui->RemoveTexture(m_SceneTextureDescriptor);
-			}
+			RetireResource(std::make_unique<RetiredImGuiTexture>(RetiredImGuiTexture{ m_VulkanImGui.get(), m_SceneTextureDescriptor }));
 
 			m_SceneTextureDescriptor = VK_NULL_HANDLE;
 		}
 
-		if (m_SceneColorImage)
-		{
-			m_SceneColorImage->Shutdown();
-			m_SceneColorImage.reset();
-		}
-
-		if (m_SceneDepthImage)
-		{
-			m_SceneDepthImage->Shutdown();
-			m_SceneDepthImage.reset();
-		}
+		RetireResource(std::move(m_SceneColorImage));
+		RetireResource(std::move(m_SceneDepthImage));
 	}
 
 	template <typename TResource>
@@ -881,6 +885,11 @@ namespace Ignition
 	void VulkanRenderer::Retire(std::unique_ptr<VulkanTexture> texture)
 	{
 		RetireResource(std::move(texture));
+	}
+
+	void VulkanRenderer::Retire(std::unique_ptr<VulkanImage> image)
+	{
+		RetireResource(std::move(image));
 	}
 
 	void VulkanRenderer::ProcessRetirementQueue()

@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <array>
 
 namespace Ignition
 {
@@ -22,19 +23,28 @@ namespace Editor
 	class EditorLayer final : public Ignition::Layer
 	{
 	public:
-		EditorLayer(EditorContext* context, Ignition::Camera* camera, EditorCameraController* cameraController, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input);
+		EditorLayer(EditorContext* context, Ignition::Camera* camera, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input);
 
 		void OnAttach() override;
 		void OnUpdate(float deltaTime) override;
 		void OnRender() override;
 
 	private:
+		enum class PathPrompt
+		{
+			None = 0,
+			Open,
+			SaveAs
+		};
+
 		void DrawMenuBar();
 		void DrawViewportPanel();
 		void DrawGizmo();
 		void DrawHierarchyPanel();
 		void DrawInspectorPanel();
 		void DrawStatsPanel();
+		void DrawPathPrompt();
+		void PromptForPath(PathPrompt prompt);
 
 		void NewScene();
 		void OpenScene(const std::string& filepath);
@@ -43,7 +53,6 @@ namespace Editor
 	private:
 		EditorContext* m_Context = nullptr;
 		Ignition::Camera* m_Camera = nullptr;
-		EditorCameraController* m_CameraController = nullptr;
 		Ignition::AssetRegistry* m_Assets = nullptr;
 		Ignition::Renderer* m_Renderer = nullptr;
 		Ignition::Input* m_Input = nullptr;
@@ -51,6 +60,10 @@ namespace Editor
 		int m_GizmoOperation = 0; // ImGuizmo::OPERATION, stored as int to keep this header ImGuizmo-free
 		bool m_GizmoWorldSpace = true;
 		bool m_DockLayoutInitialized = false;
+
+		PathPrompt m_PathPrompt = PathPrompt::None;
+		bool m_PathPromptRequested = false;
+		std::array<char, 260> m_PathBuffer{};
 
 		std::vector<float> m_FrameTimeHistory;
 	};

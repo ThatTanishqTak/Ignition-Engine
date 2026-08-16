@@ -1,12 +1,7 @@
 #include "Editor/EditorLayer.h"
 
-#include "Editor/EditorCameraController.h"
-
 #include "Ignition/Ignition.h"
 
-// The one direct ImGui-family dependency: no gizmo facade exists yet.
-// ImGuizmo.h requires imgui.h to be included first; OnAttach also uses it
-// once to share the engine's ImGui context across the DLL boundary.
 #include <imgui.h>
 #include <ImGuizmo.h>
 
@@ -25,8 +20,7 @@ namespace Editor
 		constexpr const char* DefaultScenePath = "Assets/Scenes/Scene.yaml";
 	}
 
-	EditorLayer::EditorLayer(EditorContext* context, Ignition::Camera* camera, EditorCameraController* cameraController, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input)
-		: m_Context(context), m_Camera(camera), m_CameraController(cameraController), m_Assets(assets), m_Renderer(renderer), m_Input(input), m_GizmoOperation(ImGuizmo::TRANSLATE)
+	EditorLayer::EditorLayer(EditorContext* context, Ignition::Camera* camera, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input) : m_Context(context), m_Camera(camera), m_Assets(assets), m_Renderer(renderer), m_Input(input), m_GizmoOperation(ImGuizmo::TRANSLATE)
 	{
 		m_FrameTimeHistory.reserve(FrameHistorySize);
 	}
@@ -62,18 +56,31 @@ namespace Editor
 			}
 			else if (m_Input->IsKeyPressed(Ignition::ScanCode::O))
 			{
-				OpenScene(m_Context->ScenePath.empty() ? DefaultScenePath : m_Context->ScenePath);
+				PromptForPath(PathPrompt::Open);
 			}
 		}
 
-		// W/E/R switch the gizmo operation, X toggles world/local — while the viewport is
-		// active, nothing is being typed, and the camera isn't fly-looking (which uses W/E)
 		if ((m_Context->ViewportHovered || m_Context->ViewportFocused) && !Ignition::UI::WantsTextInput() && !m_Input->IsMouseButtonDown(Ignition::MouseCode::RIGHT))
 		{
-			if (m_Input->IsKeyPressed(Ignition::ScanCode::W)) m_GizmoOperation = ImGuizmo::TRANSLATE;
-			if (m_Input->IsKeyPressed(Ignition::ScanCode::E)) m_GizmoOperation = ImGuizmo::ROTATE;
-			if (m_Input->IsKeyPressed(Ignition::ScanCode::R)) m_GizmoOperation = ImGuizmo::SCALE;
-			if (m_Input->IsKeyPressed(Ignition::ScanCode::X)) m_GizmoWorldSpace = !m_GizmoWorldSpace;
+			if (m_Input->IsKeyPressed(Ignition::ScanCode::W))
+			{
+				m_GizmoOperation = ImGuizmo::TRANSLATE;
+			}
+			
+			if (m_Input->IsKeyPressed(Ignition::ScanCode::E))
+			{
+				m_GizmoOperation = ImGuizmo::ROTATE;
+			}
+			
+			if (m_Input->IsKeyPressed(Ignition::ScanCode::R))
+			{
+				m_GizmoOperation = ImGuizmo::SCALE;
+			}
+			
+			if (m_Input->IsKeyPressed(Ignition::ScanCode::X))
+			{
+				m_GizmoWorldSpace = !m_GizmoWorldSpace;
+			}
 		}
 	}
 
@@ -95,6 +102,7 @@ namespace Editor
 		}
 
 		DrawMenuBar();
+		DrawPathPrompt();
 		DrawViewportPanel();
 		DrawHierarchyPanel();
 		DrawInspectorPanel();
@@ -115,14 +123,19 @@ namespace Editor
 				NewScene();
 			}
 
-			if (Ignition::UI::MenuItem("Open Scene", "Ctrl+O"))
+			if (Ignition::UI::MenuItem("Open Scene...", "Ctrl+O"))
 			{
-				OpenScene(m_Context->ScenePath.empty() ? DefaultScenePath : m_Context->ScenePath);
+				PromptForPath(PathPrompt::Open);
 			}
 
 			if (Ignition::UI::MenuItem("Save Scene", "Ctrl+S"))
 			{
 				SaveScene(m_Context->ScenePath.empty() ? DefaultScenePath : m_Context->ScenePath);
+			}
+
+			if (Ignition::UI::MenuItem("Save Scene As..."))
+			{
+				PromptForPath(PathPrompt::SaveAs);
 			}
 
 			Ignition::UI::EndMenu();
@@ -306,12 +319,20 @@ namespace Editor
 				if (Ignition::UI::CollapsingHeader("Mesh Renderer"))
 				{
 					Ignition::UI::LabelText("Mesh", meshRenderer->MeshAsset.empty() ? "<unreferenced>" : meshRenderer->MeshAsset.c_str());
+
+					if (meshRenderer->Mesh)
+					{
+						const Ignition::MeshBounds bounds = meshRenderer->Mesh->GetBounds();
+						const glm::vec3 size = (bounds.Maximum - bounds.Minimum) * entity.GetTransform().Scale;
+
+						Ignition::UI::Text("Size: {:.3f} x {:.3f} x {:.3f} m", size.x, size.y, size.z);
+					}
+
 					Ignition::UI::ColorEdit4("Tint", meshRenderer->Material.Tint, true);
 					Ignition::UI::Checkbox("Two Sided", &meshRenderer->Material.TwoSided);
 				}
 			}
 
-			// Phase 1 physics components slot in here
 			Ignition::UI::Separator();
 
 			if (Ignition::UI::Button("Add Component"))
@@ -359,6 +380,66 @@ namespace Editor
 		}
 
 		Ignition::UI::EndWindow();
+	}
+
+	void EditorLayer::PromptForPath(PathPrompt prompt)
+	{
+		const std::string& seed = m_Context->ScenePath.empty() ? std::string(DefaultScenePath) : m_Context->ScenePath;
+
+		m_PathBuffer.fill('\0');
+		std::memcpy(m_PathBuffer.data(), seed.c_str(), std::min(seed.size(), m_PathBuffer.size() - 1));
+
+		m_PathPrompt = prompt;
+		m_PathPromptRequested = true;
+	}
+
+	void EditorLayer::DrawPathPrompt()
+	{
+		if (m_PathPromptRequested)
+		{
+			Ignition::UI::OpenPopup("ScenePath");
+			m_PathPromptRequested = false;
+		}
+
+		if (!Ignition::UI::BeginPopup("ScenePath"))
+		{
+			return;
+		}
+
+		const bool saving = m_PathPrompt == PathPrompt::SaveAs;
+
+		Ignition::UI::Text(saving ? "Save scene as" : "Open scene");
+		Ignition::UI::InputText("##ScenePath", m_PathBuffer.data(), m_PathBuffer.size());
+
+		if (Ignition::UI::Button(saving ? "Save" : "Open"))
+		{
+			const std::string filepath = m_PathBuffer.data();
+
+			if (!filepath.empty())
+			{
+				if (saving)
+				{
+					SaveScene(filepath);
+				}
+				else
+				{
+					OpenScene(filepath);
+				}
+			}
+
+			m_PathPrompt = PathPrompt::None;
+			Ignition::UI::CloseCurrentPopup();
+		}
+
+		Ignition::UI::SameLine();
+
+		if (Ignition::UI::Button("Cancel"))
+		{
+			m_PathPrompt = PathPrompt::None;
+			Ignition::UI::CloseCurrentPopup();
+		}
+
+		Ignition::UI::EndPopup();
 	}
 
 	void EditorLayer::NewScene()
