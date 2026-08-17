@@ -27,7 +27,6 @@ else()
     target_compile_options(Editor PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# The editor is privileged: it links ImGui/ImGuizmo directly instead of going through Ignition::UI
 target_link_libraries(Editor PRIVATE Ignition imguizmo)
 
 add_dependencies(Editor IgnitionShaders)

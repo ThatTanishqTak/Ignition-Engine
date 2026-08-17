@@ -58,6 +58,7 @@ target_link_libraries(Ignition PRIVATE
     GPUOpen::VulkanMemoryAllocator
     spdlog::spdlog
     imgui
+    imguizmo
     stb
     entt
     assimp::assimp
