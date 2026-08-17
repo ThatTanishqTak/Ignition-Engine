@@ -8,6 +8,7 @@
 #include <imgui_impl_vulkan.h>
 
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_filesystem.h>
 
 #include <array>
 
@@ -58,6 +59,15 @@ namespace Ignition
 		ImGuiIO& io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+		const char* basePath = SDL_GetBasePath();
+		const std::string assetDirectory = std::string(basePath ? basePath : "") + "Assets";
+
+		// fopen will not create the directory, and SaveIniSettingsToDisk reports nothing when it fails
+		SDL_CreateDirectory(assetDirectory.c_str());
+
+		m_IniFilename = assetDirectory + "/imgui.ini";
+		io.IniFilename = m_IniFilename.c_str();
 
 		ImGui::StyleColorsDark();
 
@@ -130,6 +140,11 @@ namespace Ignition
 		}
 
 		IG_CORE_INFO("------- SHUTTING DOWN IMGUI -------");
+
+		if (!m_IniFilename.empty())
+		{
+			ImGui::SaveIniSettingsToDisk(m_IniFilename.c_str());
+		}
 
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplSDL3_Shutdown();

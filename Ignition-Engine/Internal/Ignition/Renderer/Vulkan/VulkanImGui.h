@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <string>
+
 struct SDL_Window;
 
 namespace Ignition
@@ -35,6 +37,8 @@ namespace Ignition
 		VkDevice m_Device = VK_NULL_HANDLE;
 		VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
 		VkFormat m_ColorFormat = VK_FORMAT_UNDEFINED;
+
+		std::string m_IniFilename;
 
 		bool m_Initialized = false;
 	};
