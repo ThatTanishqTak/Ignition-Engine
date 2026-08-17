@@ -2,8 +2,10 @@
 
 #include "Ignition/Ignition.h"
 
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
 
@@ -23,7 +25,9 @@ namespace Editor
 
 		glm::mat4 ColliderTransform(const Ignition::TransformComponent& transform, const glm::vec3& offset)
 		{
-			return glm::translate(glm::mat4(1.0f), transform.Position + glm::vec3(glm::mat4_cast(glm::quat(transform.Rotation)) * glm::vec4(offset * transform.Scale, 0.0f))) * glm::mat4_cast(glm::quat(transform.Rotation));
+			const glm::mat4 rotation = glm::mat4_cast(transform.Rotation);
+
+			return glm::translate(glm::mat4(1.0f), transform.Position + glm::vec3(rotation * glm::vec4(offset * transform.Scale, 0.0f))) * rotation;
 		}
 
 		float UniformScale(const glm::vec3& scale)
@@ -585,13 +589,17 @@ namespace Editor
 				Ignition::TransformComponent& transform = entity.GetTransform();
 
 				bool transformEdited = Ignition::UI::DragFloat3("Position", transform.Position, 0.01f);
+				const bool rotationCacheStale = m_RotationEulerEntity != entity.GetID() || glm::abs(glm::dot(glm::quat(glm::radians(m_RotationEuler)), transform.Rotation)) < 0.9999f;
 
-				// Radians in the component, degrees at the UI boundary only
-				glm::vec3 rotationDegrees = glm::degrees(transform.Rotation);
-
-				if (Ignition::UI::DragFloat3("Rotation", rotationDegrees, 0.5f))
+				if (rotationCacheStale)
 				{
-					transform.Rotation = glm::radians(rotationDegrees);
+					m_RotationEuler = glm::degrees(transform.GetEulerAngles());
+					m_RotationEulerEntity = entity.GetID();
+				}
+
+				if (Ignition::UI::DragFloat3("Rotation", m_RotationEuler, 0.5f))
+				{
+					transform.SetEulerAngles(glm::radians(m_RotationEuler));
 					transformEdited = true;
 				}
 

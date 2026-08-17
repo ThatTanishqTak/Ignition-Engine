@@ -2,6 +2,7 @@
 
 #include "Ignition/Core/Export.h"
 
+#include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -141,7 +142,7 @@ namespace Ignition
 		// Call inside the window the gizmo draws into, before TransformGizmo
 		IGNITION_API void SetGizmoViewportRect(const glm::vec2& position, const glm::vec2& size);
 
-		IGNITION_API bool TransformGizmo(const glm::mat4& view, const glm::mat4& projection, GizmoOperation operation, GizmoMode mode, glm::vec3& position, glm::vec3& rotationRadians, glm::vec3& scale, float snap = 0.0f);
+		IGNITION_API bool TransformGizmo(const glm::mat4& view, const glm::mat4& projection, GizmoOperation operation, GizmoMode mode, glm::vec3& position, glm::quat& rotation, glm::vec3& scale, float snap = 0.0f);
 
 		IGNITION_API bool IsGizmoInUse();
 		IGNITION_API bool IsGizmoHovered();

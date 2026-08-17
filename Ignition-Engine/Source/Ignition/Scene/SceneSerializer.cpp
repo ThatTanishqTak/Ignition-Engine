@@ -10,6 +10,7 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
@@ -93,6 +94,29 @@ namespace Ignition
 
 			return out;
 		}
+
+		YAML::Emitter& operator<<(YAML::Emitter& out, const glm::quat& value)
+		{
+			out << YAML::Flow << YAML::BeginSeq << value.x << value.y << value.z << value.w << YAML::EndSeq;
+
+			return out;
+		}
+
+		// Four components are a quaternion; three are Euler radians from a scene written before the switch
+		glm::quat ReadRotation(const YAML::Node& node)
+		{
+			if (node && node.IsSequence() && node.size() == 4)
+			{
+				return glm::normalize(glm::quat(node[3].as<float>(), node[0].as<float>(), node[1].as<float>(), node[2].as<float>()));
+			}
+
+			if (node && node.IsSequence() && node.size() == 3)
+			{
+				return glm::normalize(glm::quat(glm::vec3(node[0].as<float>(), node[1].as<float>(), node[2].as<float>())));
+			}
+
+			return glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+		}
 	}
 
 	SceneSerializer::SceneSerializer(Scene* scene, AssetRegistry* assets) : m_Scene(scene), m_Assets(assets)
@@ -141,7 +165,7 @@ namespace Ignition
 
 			out << YAML::Key << "Transform" << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "Position" << YAML::Value << transform.Position;
-			out << YAML::Key << "Rotation" << YAML::Value << transform.Rotation; // radians
+			out << YAML::Key << "Rotation" << YAML::Value << transform.Rotation; // quaternion, x y z w
 			out << YAML::Key << "Scale" << YAML::Value << transform.Scale;
 			out << YAML::EndMap;
 
@@ -266,7 +290,7 @@ namespace Ignition
 			{
 				TransformComponent& transform = entity.GetTransform();
 				transform.Position = transformNode["Position"].as<glm::vec3>(glm::vec3(0.0f));
-				transform.Rotation = transformNode["Rotation"].as<glm::vec3>(glm::vec3(0.0f));
+				transform.Rotation = ReadRotation(transformNode["Rotation"]);
 				transform.Scale = transformNode["Scale"].as<glm::vec3>(glm::vec3(1.0f));
 			}
 

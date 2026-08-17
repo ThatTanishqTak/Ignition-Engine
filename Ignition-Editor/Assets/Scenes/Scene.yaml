@@ -2,21 +2,39 @@ Scene: Untitled
 Entities:
   - Name: Ground
     Transform:
-      Position: [0, 0, 0]
-      Rotation: [-1.5707964, 0, 0] # radians: quad laid flat, normal +Y
-      Scale: [20, 20, 1]
-    MeshRenderer:
-      Mesh: builtin:quad
-      Albedo: ""
-      Tint: [0.25, 0.25, 0.28, 1]
-      TwoSided: true
-  - Name: Cube
-    Transform:
-      Position: [0, 0.5, 0]
+      Position: [0, -0.25, 0]
       Rotation: [0, 0, 0]
+      Scale: [20, 0.5, 20]
+    MeshRenderer:
+      Mesh: builtin:cube
+      Albedo: ""
+      Tint: [0.21568626, 0.21568626, 0.21568626, 1]
+      TwoSided: false
+    RigidBody:
+      Type: 0
+      Mass: 1
+      LinearDamping: 0.01
+      AngularDamping: 0.05
+      UseGravity: true
+    BoxCollider:
+      HalfExtents: [0.5, 0.5, 0.5]
+      Offset: [0, 0, 0]
+  - Name: Box
+    Transform:
+      Position: [-5.4090224e-06, 0.4999987, 7.3736333e-06]
+      Rotation: [2.1800777e-06, -2.3408778e-10, -4.6390915e-07]
       Scale: [1, 1, 1]
     MeshRenderer:
       Mesh: builtin:cube
       Albedo: ""
-      Tint: [0.8, 0.35, 0.15, 1]
+      Tint: [0.08434258, 0.5735294, 0, 1]
       TwoSided: false
+    RigidBody:
+      Type: 2
+      Mass: 1
+      LinearDamping: 0.01
+      AngularDamping: 0.05
+      UseGravity: true
+    BoxCollider:
+      HalfExtents: [0.5, 0.5, 0.5]
+      Offset: [0, 0, 0]

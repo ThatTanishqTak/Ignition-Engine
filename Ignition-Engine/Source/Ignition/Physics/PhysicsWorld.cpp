@@ -23,6 +23,7 @@
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/RegisterTypes.h>
 
 #ifdef JPH_DEBUG_RENDERER
@@ -38,6 +39,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <thread>
+#include <vector>
 
 namespace Ignition
 {
@@ -70,9 +72,9 @@ namespace Ignition
 			return glm::quat(value.GetW(), value.GetX(), value.GetY(), value.GetZ());
 		}
 
-		JPH::Quat ToJoltRotation(const glm::vec3& eulerRadians)
+		JPH::Quat ToJoltRotation(const glm::quat& rotation)
 		{
-			return ToJolt(glm::normalize(glm::quat(eulerRadians)));
+			return ToJolt(glm::normalize(rotation));
 		}
 
 		// Jolt shapes cannot carry non-uniform scale directly, so it is baked into the geometry
@@ -124,6 +126,34 @@ namespace Ignition
 			const JPH::RotatedTranslatedShapeSettings settings(ToJolt(offset), JPH::Quat::sIdentity(), shape);
 
 			return FinalizeShape(settings.Create(), "offset");
+		}
+
+		struct ColliderShape
+		{
+			JPH::RefConst<JPH::Shape> Shape;
+			glm::vec3 Offset{ 0.0f };
+		};
+
+		JPH::RefConst<JPH::Shape> CombineShapes(const std::vector<ColliderShape>& shapes)
+		{
+			if (shapes.empty())
+			{
+				return nullptr;
+			}
+
+			if (shapes.size() == 1)
+			{
+				return ApplyOffset(shapes.front().Shape, shapes.front().Offset);
+			}
+
+			JPH::StaticCompoundShapeSettings settings;
+
+			for (const ColliderShape& entry : shapes)
+			{
+				settings.AddShape(ToJolt(entry.Offset), JPH::Quat::sIdentity(), entry.Shape);
+			}
+
+			return FinalizeShape(settings.Create(), "compound");
 		}
 
 		JPH::RefConst<JPH::Shape> BuildMeshShape(PhysicsWorldImplementation& implementation, AssetRegistry& assets, const std::string& meshAsset, bool convex, const glm::vec3& scale)
@@ -355,30 +385,45 @@ namespace Ignition
 			}
 
 			const float scale = UniformScale(transform.Scale);
-			JPH::RefConst<JPH::Shape> shape;
+			std::vector<ColliderShape> colliderShapes;
 
 			if (boxCollider)
 			{
 				const glm::vec3 halfExtents = glm::max(glm::abs(boxCollider->HalfExtents * transform.Scale), glm::vec3(0.001f));
 				const float convexRadius = std::min(JPH::cDefaultConvexRadius, glm::min(glm::min(halfExtents.x, halfExtents.y), halfExtents.z) * 0.5f);
+				const JPH::RefConst<JPH::Shape> box = FinalizeShape(JPH::BoxShapeSettings(ToJolt(halfExtents), convexRadius).Create(), "box");
 
-				shape = ApplyOffset(FinalizeShape(JPH::BoxShapeSettings(ToJolt(halfExtents), convexRadius).Create(), "box"), boxCollider->Offset * transform.Scale);
+				if (box)
+				{
+					colliderShapes.push_back({ box, boxCollider->Offset * transform.Scale });
+				}
 			}
-			else if (sphereCollider)
+
+			if (sphereCollider)
 			{
 				const float radius = glm::max(sphereCollider->Radius * scale, 0.001f);
+				const JPH::RefConst<JPH::Shape> sphere = FinalizeShape(JPH::SphereShapeSettings(radius).Create(), "sphere");
 
-				shape = ApplyOffset(FinalizeShape(JPH::SphereShapeSettings(radius).Create(), "sphere"), sphereCollider->Offset * transform.Scale);
+				if (sphere)
+				{
+					colliderShapes.push_back({ sphere, sphereCollider->Offset * transform.Scale });
+				}
 			}
-			else if (capsuleCollider)
+
+			if (capsuleCollider)
 			{
 				// Jolt capsules are Y-aligned, which is already the engine's up axis - no fix-up rotation
 				const float radius = glm::max(capsuleCollider->Radius * scale, 0.001f);
 				const float halfHeight = glm::max(capsuleCollider->HalfHeight * scale, 0.001f);
+				const JPH::RefConst<JPH::Shape> capsule = FinalizeShape(JPH::CapsuleShapeSettings(halfHeight, radius).Create(), "capsule");
 
-				shape = ApplyOffset(FinalizeShape(JPH::CapsuleShapeSettings(halfHeight, radius).Create(), "capsule"), capsuleCollider->Offset * transform.Scale);
+				if (capsule)
+				{
+					colliderShapes.push_back({ capsule, capsuleCollider->Offset * transform.Scale });
+				}
 			}
-			else if (meshCollider && !meshCollider->MeshAsset.empty() && m_Assets)
+
+			if (meshCollider && !meshCollider->MeshAsset.empty() && m_Assets)
 			{
 				const bool convex = meshCollider->Convex || bodyType == RigidBodyType::Dynamic;
 
@@ -387,8 +432,15 @@ namespace Ignition
 					IG_CORE_WARN("Mesh collider '{}' is triangle-based on a dynamic body, building a convex hull instead", meshCollider->MeshAsset);
 				}
 
-				shape = ApplyOffset(BuildMeshShape(*m_Implementation, *m_Assets, meshCollider->MeshAsset, convex, transform.Scale), meshCollider->Offset * transform.Scale);
+				const JPH::RefConst<JPH::Shape> mesh = BuildMeshShape(*m_Implementation, *m_Assets, meshCollider->MeshAsset, convex, transform.Scale);
+
+				if (mesh)
+				{
+					colliderShapes.push_back({ mesh, meshCollider->Offset * transform.Scale });
+				}
 			}
+
+			const JPH::RefConst<JPH::Shape> shape = CombineShapes(colliderShapes);
 
 			if (!shape)
 			{
@@ -516,7 +568,7 @@ namespace Ignition
 
 			TransformComponent& transform = registry.get<TransformComponent>(handle);
 			transform.Position = FromJolt(position);
-			transform.Rotation = glm::eulerAngles(FromJolt(rotation));
+			transform.Rotation = FromJolt(rotation);
 		}
 	}
 

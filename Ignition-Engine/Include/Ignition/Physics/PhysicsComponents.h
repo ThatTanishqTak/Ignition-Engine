@@ -54,7 +54,7 @@ namespace Ignition
 		std::string MeshAsset;
 		glm::vec3 Offset{ 0.0f };
 
-		// PhysX requires convex hulls for dynamic bodies; triangle meshes are static-only
+		// Jolt requires convex hulls for dynamic bodies; triangle meshes are static-only
 		bool Convex = true;
 	};
 }

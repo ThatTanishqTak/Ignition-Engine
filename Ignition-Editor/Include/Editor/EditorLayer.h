@@ -5,6 +5,9 @@
 #include <Ignition/Core/Layer.h>
 #include <Ignition/UI/UI.h>
 
+#include <glm/vec3.hpp>
+
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -77,6 +80,10 @@ namespace Editor
 
 		Ignition::UI::GizmoOperation m_GizmoOperation = Ignition::UI::GizmoOperation::Translate;
 		bool m_GizmoWorldSpace = true;
+
+		// Inspector-only Euler cache, in degrees
+		glm::vec3 m_RotationEuler{ 0.0f };
+		uint32_t m_RotationEulerEntity = UINT32_MAX;
 		bool m_DockLayoutInitialized = false;
 
 		PathPrompt m_PathPrompt = PathPrompt::None;

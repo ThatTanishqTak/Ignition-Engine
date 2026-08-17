@@ -4,7 +4,12 @@
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
 
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/mat3x3.hpp>
 #include <glm/trigonometric.hpp>
 
 #include <array>
@@ -503,21 +508,15 @@ namespace Ignition
 			ImGuizmo::SetRect(position.x, position.y, size.x, size.y);
 		}
 
-		bool TransformGizmo(const glm::mat4& view, const glm::mat4& projection, GizmoOperation operation, GizmoMode mode, glm::vec3& position, glm::vec3& rotationRadians, glm::vec3& scale, float snap)
+		bool TransformGizmo(const glm::mat4& view, const glm::mat4& projection, GizmoOperation operation, GizmoMode mode, glm::vec3& position, glm::quat& rotation, glm::vec3& scale, float snap)
 		{
 			if (!CanDraw())
 			{
 				return false;
 			}
 
-			std::array<float, 3> translation = { position.x, position.y, position.z };
-
-			const glm::vec3 degrees = glm::degrees(rotationRadians);
-			std::array<float, 3> rotationDegrees = { degrees.x, degrees.y, degrees.z };
-			std::array<float, 3> scaleValues = { scale.x, scale.y, scale.z };
-
-			glm::mat4 matrix(1.0f);
-			ImGuizmo::RecomposeMatrixFromComponents(translation.data(), rotationDegrees.data(), scaleValues.data(), glm::value_ptr(matrix));
+			// Composed from the quaternion rather than through ImGuizmo's Euler helpers: those round-trip every drag through an angle triple, which is exactly what the quaternion transform avoids
+			glm::mat4 matrix = glm::translate(glm::mat4(1.0f), position) * glm::mat4_cast(rotation) * glm::scale(glm::mat4(1.0f), scale);
 
 			// ImGuizmo only ever scales in local space
 			const ImGuizmo::MODE gizmoMode = (mode == GizmoMode::World && operation != GizmoOperation::Scale) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
@@ -530,11 +529,13 @@ namespace Ignition
 				return false;
 			}
 
-			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(matrix), translation.data(), rotationDegrees.data(), scaleValues.data());
+			// Column lengths are the scale; the normalized basis is the rotation
+			const glm::vec3 columnLengths = glm::max(glm::vec3(glm::length(glm::vec3(matrix[0])), glm::length(glm::vec3(matrix[1])), glm::length(glm::vec3(matrix[2]))), glm::vec3(1e-6f));
+			const glm::mat3 basis(glm::vec3(matrix[0]) / columnLengths.x, glm::vec3(matrix[1]) / columnLengths.y, glm::vec3(matrix[2]) / columnLengths.z);
 
-			position = { translation[0], translation[1], translation[2] };
-			rotationRadians = glm::radians(glm::vec3(rotationDegrees[0], rotationDegrees[1], rotationDegrees[2]));
-			scale = { scaleValues[0], scaleValues[1], scaleValues[2] };
+			position = glm::vec3(matrix[3]);
+			rotation = glm::normalize(glm::quat_cast(basis));
+			scale = columnLengths;
 
 			return true;
 		}

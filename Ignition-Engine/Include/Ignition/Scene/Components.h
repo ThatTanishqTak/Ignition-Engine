@@ -22,12 +22,23 @@ namespace Ignition
 	struct TransformComponent
 	{
 		glm::vec3 Position{ 0.0f };
-		glm::vec3 Rotation{ 0.0f }; // Euler angles in radians
+		glm::quat Rotation{ 1.0f, 0.0f, 0.0f, 0.0f }; // identity, stored w-first
 		glm::vec3 Scale{ 1.0f };
 
 		glm::mat4 GetMatrix() const
 		{
-			return glm::translate(glm::mat4(1.0f), Position) * glm::mat4_cast(glm::quat(Rotation)) * glm::scale(glm::mat4(1.0f), Scale);
+			return glm::translate(glm::mat4(1.0f), Position) * glm::mat4_cast(Rotation) * glm::scale(glm::mat4(1.0f), Scale);
+		}
+
+		// Euler angles are a presentation detail: convert at the UI boundary, never store them
+		glm::vec3 GetEulerAngles() const
+		{
+			return glm::eulerAngles(Rotation);
+		}
+
+		void SetEulerAngles(const glm::vec3& radians)
+		{
+			Rotation = glm::normalize(glm::quat(radians));
 		}
 	};
 
