@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include "Ignition/Core/ProfilerVulkan.h"
 #include "Ignition/Fluid/FluidSolver2D.h"
 #include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Vertex.h"
@@ -131,6 +132,8 @@ namespace Ignition
 
 		uint32_t m_FramePassTimer = UINT32_MAX;
 		uint32_t m_ScenePassTimer = UINT32_MAX;
+
+		GPUProfilerContext m_GPUProfiler = nullptr;
 
 		std::unique_ptr<VulkanImage> m_SceneColorImage;
 		std::unique_ptr<VulkanImage> m_SceneDepthImage;

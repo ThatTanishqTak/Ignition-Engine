@@ -4,9 +4,10 @@ cmake_minimum_required(VERSION 3.30)
 project(Ignition)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 set(SDL_FORCE_STATIC_VCRT OFF)
+
+option(IGNITION_PROFILE "Build with Tracy profiling instrumentation" ON)
 
 if(CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Configurations" FORCE)

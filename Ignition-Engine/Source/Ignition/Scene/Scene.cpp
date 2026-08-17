@@ -5,6 +5,7 @@
 #include "Ignition/Scene/SceneRegistry.h"
 #include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Camera.h"
+#include "Ignition/Core/ProfilerInternal.h"
 
 namespace Ignition
 {
@@ -88,6 +89,8 @@ namespace Ignition
 
 	void Scene::OnRender(Renderer& renderer, const Camera& camera)
 	{
+		IG_PROFILE_ZONE();
+
 		renderer.BeginScene(camera);
 
 		const auto view = m_Registry->Registry.view<TransformComponent, MeshRendererComponent>();

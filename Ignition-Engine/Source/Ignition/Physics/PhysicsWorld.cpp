@@ -1,5 +1,7 @@
 #include "Ignition/Physics/PhysicsWorld.h"
 
+#include "Ignition/Core/ProfilerInternal.h"
+
 #include "Ignition/Assets/AssetRegistry.h"
 #include "Ignition/Core/Log.h"
 #include "Ignition/Physics/PhysicsComponents.h"
@@ -341,6 +343,8 @@ namespace Ignition
 
 	void PhysicsWorld::Rebuild()
 	{
+		IG_PROFILE_ZONE();
+
 		if (!IsValid() || !m_Scene)
 		{
 			return;
@@ -507,6 +511,8 @@ namespace Ignition
 
 	void PhysicsWorld::Step(float fixedTimeStep)
 	{
+		IG_PROFILE_ZONE();
+
 		if (!IsValid() || m_Settings.QueryOnly || fixedTimeStep <= 0.0f)
 		{
 			return;
@@ -540,6 +546,8 @@ namespace Ignition
 
 	void PhysicsWorld::SyncTransforms(float alpha)
 	{
+		IG_PROFILE_ZONE();
+
 		if (!IsValid() || !m_Scene || m_Settings.QueryOnly)
 		{
 			return;

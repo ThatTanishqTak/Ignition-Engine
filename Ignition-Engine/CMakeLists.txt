@@ -68,6 +68,11 @@ PUBLIC
     glm::glm
 )
 
+if(IGNITION_PROFILE)
+    target_link_libraries(Ignition PRIVATE TracyClient)
+    target_compile_definitions(Ignition PUBLIC IGNITION_PROFILE)
+endif()
+
 find_program(SLANGC_EXECUTABLE
     NAMES slangc
     HINTS

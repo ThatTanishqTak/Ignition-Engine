@@ -32,3 +32,6 @@
 [submodule "Vendor/JoltPhysics"]
 	path = Vendor/JoltPhysics
 	url = https://github.com/ThatTanishqTak/JoltPhysics.git
+[submodule "Vendor/tracy"]
+	path = Vendor/tracy
+	url = https://github.com/ThatTanishqTak/tracy.git

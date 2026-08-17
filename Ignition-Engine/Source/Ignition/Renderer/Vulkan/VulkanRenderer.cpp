@@ -18,6 +18,7 @@
 #include "Ignition/Renderer/Vulkan/VulkanImage.h"
 
 #include "Ignition/Core/Log.h"
+#include "Ignition/Core/ProfilerInternal.h"
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
 #include "Ignition/Renderer/Vulkan/VulkanShaderTypes.h"
 
@@ -152,6 +153,10 @@ namespace Ignition
 		m_VulkanGPUTimer = std::make_unique<VulkanGPUTimer>();
 		m_VulkanGPUTimer->Initialize(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetTimestampPeriod());
 
+		// Calibration records and submits on the given buffer, so this has to happen while nothing is in flight
+		IG_PROFILE_GPU_CREATE(m_GPUProfiler, m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanFrameContext->GetCommandBuffer(0));
+		IG_PROFILE_GPU_NAME(m_GPUProfiler, "Graphics");
+
 		constexpr uint8_t whitePixel[4] = { 255, 255, 255, 255 };
 
 		m_WhiteTexture = std::make_unique<VulkanTexture>();
@@ -208,6 +213,8 @@ namespace Ignition
 			m_VulkanImGui->Shutdown();
 			m_VulkanImGui.reset();
 		}
+
+		IG_PROFILE_GPU_DESTROY(m_GPUProfiler);
 
 		if (m_VulkanGPUTimer)
 		{
@@ -339,6 +346,8 @@ namespace Ignition
 
 	void VulkanRenderer::BeginFrame()
 	{
+		IG_PROFILE_ZONE();
+
 		m_FrameStarted = false;
 
 		if (!m_VulkanSwapchain || !m_VulkanFrameContext || !m_VulkanDevice || !m_DepthImage || !m_DepthImage->IsValid())
@@ -426,9 +435,14 @@ namespace Ignition
 		}
 
 		// Compute cannot be recorded inside a dynamic rendering block, so every registered solver runs here
-		for (VulkanFluidSolver2D* solver : m_FluidSolvers)
 		{
-			solver->RecordCompute(commandBuffer, m_FrameIndex, m_VulkanGPUTimer.get());
+			IG_PROFILE_ZONE_NAMED("Fluid Record");
+			IG_PROFILE_GPU_ZONE(m_GPUProfiler, commandBuffer, "Fluid");
+
+			for (VulkanFluidSolver2D* solver : m_FluidSolvers)
+			{
+				solver->RecordCompute(commandBuffer, m_FrameIndex, m_VulkanGPUTimer.get());
+			}
 		}
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
@@ -498,6 +512,8 @@ namespace Ignition
 
 	void VulkanRenderer::EndFrame()
 	{
+		IG_PROFILE_ZONE();
+
 		if (!m_FrameStarted)
 		{
 			// Nothing recorded this frame; drop the queued lines so they cannot leak into the next one
@@ -563,6 +579,8 @@ namespace Ignition
 		{
 			const uint32_t userInterfacePass = m_VulkanGPUTimer ? m_VulkanGPUTimer->BeginPass(commandBuffer, "UI") : UINT32_MAX;
 
+			IG_PROFILE_GPU_ZONE(m_GPUProfiler, commandBuffer, "UI");
+
 			m_VulkanImGui->Render(commandBuffer);
 
 			if (m_VulkanGPUTimer)
@@ -576,6 +594,9 @@ namespace Ignition
 		vkCmdEndRendering(commandBuffer);
 
 		m_ScenePassActive = false;
+
+		// Must sit outside any rendering block, once per frame
+		IG_PROFILE_GPU_COLLECT(m_GPUProfiler, commandBuffer);
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
 
@@ -647,7 +668,13 @@ namespace Ignition
 		presentInfo.pSwapchains = &swapchain;
 		presentInfo.pImageIndices = &m_ImageIndex;
 
-		const VkResult presentResult = vkQueuePresentKHR(m_VulkanDevice->GetPresentQueue(), &presentInfo);
+		VkResult presentResult = VK_SUCCESS;
+		{
+			// Where the frame actually waits when the GPU is the bottleneck - worth its own zone
+			IG_PROFILE_ZONE_NAMED("Present");
+
+			presentResult = vkQueuePresentKHR(m_VulkanDevice->GetPresentQueue(), &presentInfo);
+		}
 
 		if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || m_ResizeRequested)
 		{

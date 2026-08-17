@@ -353,6 +353,8 @@ namespace Editor
 
 	void EditorLayer::OnRender()
 	{
+		IG_PROFILE_FUNCTION();
+
 		if (!Ignition::UI::IsFrameActive())
 		{
 			return;
@@ -382,6 +384,8 @@ namespace Editor
 
 	void EditorLayer::UpdateFluidLab()
 	{
+		IG_PROFILE_FUNCTION();
+
 		if (!m_Fluid || !m_Fluid->IsValid())
 		{
 			return;
@@ -416,6 +420,9 @@ namespace Editor
 
 		PushHistory(m_DragHistory, forces.Drag);
 		PushHistory(m_LiftHistory, forces.Lift);
+
+		IG_PROFILE_PLOT("Fluid Drag (N/m)", forces.Drag);
+		IG_PROFILE_PLOT("Fluid Lift (N/m)", forces.Lift);
 
 		// Lift crosses zero twice per shedding cycle; the upward crossings mark one full period
 		if (m_PreviousLift < 0.0f && forces.Lift >= 0.0f)
@@ -1090,6 +1097,19 @@ namespace Editor
 				{
 					Ignition::UI::Text("{}: {:.3f} ms", timing.Name, timing.Milliseconds);
 				}
+			}
+
+			const bool capturing = Ignition::Profiler::IsConnected();
+
+			Ignition::UI::SeparatorText("Profiler");
+
+			if (capturing)
+			{
+				Ignition::UI::Text("Tracy: capturing");
+			}
+			else
+			{
+				Ignition::UI::TextDisabled("Tracy: waiting for a viewer");
 			}
 		}
 

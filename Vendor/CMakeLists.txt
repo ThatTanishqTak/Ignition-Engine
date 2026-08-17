@@ -138,3 +138,17 @@ add_subdirectory(JoltPhysics/Build SYSTEM EXCLUDE_FROM_ALL)
 
 set_target_properties(Jolt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # --------------
+
+# Tracy -------
+set(TRACY_ENABLE ${IGNITION_PROFILE})
+set(TRACY_ON_DEMAND ON) # collect nothing until a viewer attaches
+set(TRACY_DELAYED_INIT ON) # the client lives inside Ignition.dll
+set(TRACY_MANUAL_LIFETIME ON) # started/stopped by Profiler::Initialize/Shutdown
+set(TRACY_ONLY_LOCALHOST ON) # do not listen on external interfaces
+set(TRACY_NO_BROADCAST OFF) # keep discovery so the viewer finds the app without typing an address
+set(TRACY_STATIC ON) # exactly one client, linked PRIVATE into the engine - see Ignition/CMakeLists
+
+add_subdirectory(tracy SYSTEM EXCLUDE_FROM_ALL)
+
+set_target_properties(TracyClient PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# --------------

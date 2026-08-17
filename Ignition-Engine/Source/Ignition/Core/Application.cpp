@@ -3,6 +3,7 @@
 #include "Ignition/Core/ApplicationImplementation.h"
 #include "Ignition/Core/Engine.h"
 #include "Ignition/Core/Log.h"
+#include "Ignition/Core/ProfilerInternal.h"
 #include "Ignition/UI/ImGuiLayer.h"
 #include "Ignition/Core/Time.h"
 #include "Ignition/Events/EventQueue.h"
@@ -83,33 +84,46 @@ namespace Ignition
 		{
 			Time::Update();
 
-			m_Implementation->Engine->PollEvents();
-
-			const auto queuedEvents = m_Implementation->Engine->GetEventQueue().Take();
-
-			for (const auto& queuedEvent : queuedEvents)
 			{
-				m_Implementation->Engine->OnEvent(*queuedEvent);
+				IG_PROFILE_ZONE_NAMED("Events");
 
-				if (!queuedEvent->IsHandled())
-				{
-					m_Implementation->Layers.OnEvent(*queuedEvent);
-				}
+				m_Implementation->Engine->PollEvents();
 
-				if (!queuedEvent->IsHandled())
+				const auto queuedEvents = m_Implementation->Engine->GetEventQueue().Take();
+
+				for (const auto& queuedEvent : queuedEvents)
 				{
-					OnEvent(*queuedEvent);
+					m_Implementation->Engine->OnEvent(*queuedEvent);
+
+					if (!queuedEvent->IsHandled())
+					{
+						m_Implementation->Layers.OnEvent(*queuedEvent);
+					}
+
+					if (!queuedEvent->IsHandled())
+					{
+						OnEvent(*queuedEvent);
+					}
 				}
 			}
 
-			while (Time::NextFixedStep())
 			{
-				OnFixedUpdate(Time::GetFixedTimeStep());
-				m_Implementation->Layers.OnFixedUpdate(Time::GetFixedTimeStep());
+				// One zone for the whole catch-up loop: a frame running several steps is exactly what you want to see as one wide block rather than as several you have to add up
+				IG_PROFILE_ZONE_NAMED("Fixed Update");
+
+				while (Time::NextFixedStep())
+				{
+					OnFixedUpdate(Time::GetFixedTimeStep());
+					m_Implementation->Layers.OnFixedUpdate(Time::GetFixedTimeStep());
+				}
 			}
 
-			OnUpdate(Time::GetDeltaTime());
-			m_Implementation->Layers.OnUpdate(Time::GetDeltaTime());
+			{
+				IG_PROFILE_ZONE_NAMED("Update");
+
+				OnUpdate(Time::GetDeltaTime());
+				m_Implementation->Layers.OnUpdate(Time::GetDeltaTime());
+			}
 
 			if (!m_Implementation->Engine->IsRunning())
 			{
@@ -123,10 +137,16 @@ namespace Ignition
 				m_Implementation->ImGui->BeginFrame();
 			}
 
-			OnRender();
-			m_Implementation->Layers.OnRender();
+			{
+				IG_PROFILE_ZONE_NAMED("Render");
+
+				OnRender();
+				m_Implementation->Layers.OnRender();
+			}
 
 			m_Implementation->Engine->EndFrame();
+
+			IG_PROFILE_MARK_FRAME();
 		}
 	}
 

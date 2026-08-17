@@ -5,6 +5,7 @@
 #include "Ignition/Core/Layer.h"
 #include "Ignition/Core/LayerStack.h"
 #include "Ignition/Core/Log.h"
+#include "Ignition/Core/Profiler.h"
 #include "Ignition/Core/Time.h"
 
 // Events
