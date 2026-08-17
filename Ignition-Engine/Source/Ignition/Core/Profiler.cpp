@@ -70,37 +70,33 @@ namespace Ignition
 		TracyMessage(message.data(), message.size());
 	}
 
-	uint64_t Profiler::BeginZone(const char* name, const char* file, int line, const char* function)
+	ProfileScope::ProfileScope(const char* name, const char* file, int line, const char* function)
 	{
 #if defined(TRACY_ENABLE)
-		const uint64_t sourceLocation = ___tracy_alloc_srcloc_name(static_cast<uint32_t>(line), file, std::strlen(file), function, std::strlen(function), name, std::strlen(name), 0);
+		static_assert(sizeof(tracy::ScopedZone) <= sizeof(m_Storage), "ProfileScope storage is too small for tracy::ScopedZone");
+		static_assert(alignof(tracy::ScopedZone) <= 16, "ProfileScope storage is under-aligned for tracy::ScopedZone");
 
-		return PackZone(___tracy_emit_zone_begin_alloc(sourceLocation, 1));
+		new (m_Storage) tracy::ScopedZone(static_cast<uint32_t>(line), file, std::strlen(file), function, std::strlen(function), name, std::strlen(name), true);
 #else
 		(void)name;
 		(void)file;
 		(void)line;
 		(void)function;
-
-		return 0;
 #endif
 	}
 
-	void Profiler::EndZone(uint64_t zone)
+	ProfileScope::~ProfileScope()
 	{
 #if defined(TRACY_ENABLE)
-		___tracy_emit_zone_end(UnpackZone(zone));
-#else
-		(void)zone;
+		std::launder(reinterpret_cast<tracy::ScopedZone*>(m_Storage))->~ScopedZone();
 #endif
 	}
 
-	void Profiler::AnnotateZone(uint64_t zone, std::string_view text)
+	void ProfileScope::Annotate(std::string_view text) const
 	{
 #if defined(TRACY_ENABLE)
-		___tracy_emit_zone_text(UnpackZone(zone), text.data(), text.size());
+		std::launder(reinterpret_cast<tracy::ScopedZone*>(m_Storage))->Text(text.data(), text.size());
 #else
-		(void)zone;
 		(void)text;
 #endif
 	}

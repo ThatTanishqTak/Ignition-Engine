@@ -20,26 +20,21 @@ namespace Ignition
 		// `name` must outlive the process - pass a string literal, Tracy stores the pointer
 		IGNITION_API static void Plot(const char* name, float value);
 		IGNITION_API static void Message(std::string_view message);
-
-		// Raw zone handles behind ProfileScope; prefer the macros
-		IGNITION_API static uint64_t BeginZone(const char* name, const char* file, int line, const char* function);
-		IGNITION_API static void EndZone(uint64_t zone);
-		IGNITION_API static void AnnotateZone(uint64_t zone, std::string_view text);
 	};
 
 	class ProfileScope
 	{
 	public:
-		ProfileScope(const char* name, const char* file, int line, const char* function) : m_Zone(Profiler::BeginZone(name, file, line, function)) {}
-		~ProfileScope() { Profiler::EndZone(m_Zone); }
+		IGNITION_API ProfileScope(const char* name, const char* file, int line, const char* function);
+		IGNITION_API ~ProfileScope();
 
 		ProfileScope(const ProfileScope&) = delete;
 		ProfileScope& operator=(const ProfileScope&) = delete;
 
-		void Annotate(std::string_view text) const { Profiler::AnnotateZone(m_Zone, text); }
+		IGNITION_API void Annotate(std::string_view text) const;
 
 	private:
-		uint64_t m_Zone = 0;
+		mutable alignas(16) unsigned char m_Storage[64] = {};
 	};
 }
 
