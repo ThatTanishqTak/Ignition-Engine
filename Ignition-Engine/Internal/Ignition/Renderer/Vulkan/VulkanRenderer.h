@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include "Ignition/Fluid/FluidSolver2D.h"
+#include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Vertex.h"
 
 #include <glm/mat4x4.hpp>
@@ -31,6 +33,8 @@ namespace Ignition
 	class VulkanDescriptorAllocator;
 	class VulkanTexture;
 	class VulkanImage;
+	class VulkanGPUTimer;
+	class VulkanFluidSolver2D;
 
 	class VulkanRenderer
 	{
@@ -60,10 +64,18 @@ namespace Ignition
 		std::unique_ptr<VulkanMesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 		std::unique_ptr<VulkanTexture> CreateTexture(const std::string& filepath);
 		std::unique_ptr<VulkanTexture> CreateTextureFromMemory(const void* data, size_t size);
+		std::unique_ptr<VulkanFluidSolver2D> CreateFluidSolver2D(const FluidSolver2DSettings& settings);
 
 		void Retire(std::unique_ptr<VulkanMesh> mesh);
 		void Retire(std::unique_ptr<VulkanTexture> texture);
 		void Retire(std::unique_ptr<VulkanImage> image);
+		void Retire(std::unique_ptr<VulkanFluidSolver2D> solver);
+
+		// Publishes a renderer-owned image view to ImGui with the shared linear sampler
+		VkDescriptorSet AddImGuiTexture(VkImageView imageView);
+		void RemoveImGuiTexture(VkDescriptorSet descriptorSet);
+
+		const std::vector<PassTiming>& GetPassTimings() const;
 
 		std::shared_ptr<VulkanRenderer*> GetSelfReference() const { return m_SelfReference; }
 
@@ -81,6 +93,7 @@ namespace Ignition
 
 	private:
 		void RecreateSwapchain();
+		VkSampler EnsureLinearSampler();
 		void CreateSceneRenderTarget(uint32_t width, uint32_t height);
 		void DestroySceneRenderTarget();
 		void GetWindowPixelSize(uint32_t& outWidth, uint32_t& outHeight) const;
@@ -109,12 +122,19 @@ namespace Ignition
 		std::unique_ptr<VulkanDescriptorAllocator> m_VulkanDescriptorAllocator;
 		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;
 		std::unique_ptr<VulkanLineRenderer> m_VulkanLineRenderer;
+		std::unique_ptr<VulkanGPUTimer> m_VulkanGPUTimer;
 		std::unique_ptr<VulkanTexture> m_WhiteTexture;
 		std::unique_ptr<VulkanImGui> m_VulkanImGui;
 
+		// Compute work is recorded at the top of the frame, before any rendering begins
+		std::vector<VulkanFluidSolver2D*> m_FluidSolvers;
+
+		uint32_t m_FramePassTimer = UINT32_MAX;
+		uint32_t m_ScenePassTimer = UINT32_MAX;
+
 		std::unique_ptr<VulkanImage> m_SceneColorImage;
 		std::unique_ptr<VulkanImage> m_SceneDepthImage;
-		VkSampler m_SceneColorSampler = VK_NULL_HANDLE;
+		VkSampler m_LinearSampler = VK_NULL_HANDLE;
 		VkDescriptorSet m_SceneTextureDescriptor = VK_NULL_HANDLE;
 		uint32_t m_PendingSceneTargetWidth = 0;
 		uint32_t m_PendingSceneTargetHeight = 0;

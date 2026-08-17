@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -21,6 +22,15 @@ namespace Ignition
 			static bool SubmitOneShotCommands(VkDevice device, VkQueue queue, uint32_t queueFamily, const std::function<void(VkCommandBuffer)>& record);
 			static bool UploadViaStaging(VkDevice device, VkQueue queue, uint32_t queueFamily, VmaAllocator allocator, const void* data, VkDeviceSize size, const std::function<void(VkCommandBuffer, const VulkanBuffer& staging)>& recordCopy);
 			static void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageAspectFlags aspectMask, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess);
+
+			static VkShaderModule CreateShaderModule(VkDevice device, const std::string& spirvPath);
+
+			static void MemoryBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess);
+			static void BufferBarrier(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess);
+
+			// The two patterns compute work repeats constantly
+			static void ComputeToComputeBarrier(VkCommandBuffer commandBuffer);   // ping-pong: this dispatch writes, the next reads
+			static void ComputeToGraphicsBarrier(VkCommandBuffer commandBuffer);  // the sim writes a field, a draw samples it
 		};
 	}
 }

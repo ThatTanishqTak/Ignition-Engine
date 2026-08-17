@@ -26,6 +26,9 @@ namespace Ignition
 		uint32_t GetGraphicsQueueFamily() const { return m_GraphicsQueueFamily; }
 		uint32_t GetPresentQueueFamily() const { return m_PresentQueueFamily; }
 
+		// Nanoseconds per timestamp tick; zero when the device reports no timestamp support
+		float GetTimestampPeriod() const { return m_TimestampPeriod; }
+
 	private:
 		void PickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface);
 		void CreateLogicalDevice();
@@ -39,5 +42,6 @@ namespace Ignition
 		VkQueue m_PresentQueue = VK_NULL_HANDLE;
 		uint32_t m_GraphicsQueueFamily = UINT32_MAX;
 		uint32_t m_PresentQueueFamily = UINT32_MAX;
+		float m_TimestampPeriod = 0.0f;
 	};
 }

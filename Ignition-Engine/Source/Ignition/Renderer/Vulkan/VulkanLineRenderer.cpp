@@ -256,7 +256,7 @@ namespace Ignition
 			size *= 2;
 		}
 
-		buffer.Initialize(m_Allocator, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, true);
+		buffer.Initialize(m_Allocator, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VulkanBufferAccess::HostWrite);
 
 		return buffer.IsValid();
 	}

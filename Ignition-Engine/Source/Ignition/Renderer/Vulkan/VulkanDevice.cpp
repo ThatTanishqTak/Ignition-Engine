@@ -213,6 +213,8 @@ namespace Ignition
 		VkPhysicalDeviceProperties physicalDeviceProperties{};
 		vkGetPhysicalDeviceProperties(m_PhysicalDevice, &physicalDeviceProperties);
 
+		m_TimestampPeriod = physicalDeviceProperties.limits.timestampPeriod;
+
 		IG_CORE_TRACE("Selected GPU: {}", physicalDeviceProperties.deviceName);
 
 		const QueueFamilyIndices indices = FindQueueFamilies(m_PhysicalDevice, surface);

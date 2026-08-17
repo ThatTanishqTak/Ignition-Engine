@@ -10,12 +10,13 @@ namespace Ignition
 	VulkanBuffer::VulkanBuffer() = default;
 	VulkanBuffer::~VulkanBuffer() = default;
 
-	void VulkanBuffer::Initialize(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, bool hostVisible)
+	void VulkanBuffer::Initialize(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VulkanBufferAccess access)
 	{
 		IG_CORE_INFO("------- INITIALIZING VULKAN BUFFER -------");
 
 		m_Allocator = allocator;
 		m_Size = size;
+		m_Access = access;
 
 		VkBufferCreateInfo bufferCreateInfo{};
 		bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -26,9 +27,14 @@ namespace Ignition
 		VmaAllocationCreateInfo allocationCreateInfo{};
 		allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
-		if (hostVisible)
+		if (access == VulkanBufferAccess::HostWrite)
 		{
 			allocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+		}
+		else if (access == VulkanBufferAccess::HostRead)
+		{
+			// Readback wants cached memory, not the write-combined kind sequential writes get
+			allocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
 		}
 
 		if (!VK_CHECK(vmaCreateBuffer(m_Allocator, &bufferCreateInfo, &allocationCreateInfo, &m_Buffer, &m_Allocation, nullptr)))
@@ -54,6 +60,7 @@ namespace Ignition
 		m_Allocation = VK_NULL_HANDLE;
 		m_Allocator = VK_NULL_HANDLE;
 		m_Size = 0;
+		m_Access = VulkanBufferAccess::DeviceLocal;
 
 		IG_CORE_INFO("------- VULKAN BUFFER SHUTDOWN COMPLETE -------");
 	}
@@ -72,7 +79,19 @@ namespace Ignition
 
 	void VulkanBuffer::Unmap()
 	{
-		vmaFlushAllocation(m_Allocator, m_Allocation, 0, VK_WHOLE_SIZE);
+		if (m_Access == VulkanBufferAccess::HostWrite)
+		{
+			vmaFlushAllocation(m_Allocator, m_Allocation, 0, VK_WHOLE_SIZE);
+		}
+
 		vmaUnmapMemory(m_Allocator, m_Allocation);
+	}
+
+	void VulkanBuffer::Invalidate()
+	{
+		if (m_Access == VulkanBufferAccess::HostRead && m_Allocation != VK_NULL_HANDLE)
+		{
+			vmaInvalidateAllocation(m_Allocator, m_Allocation, 0, VK_WHOLE_SIZE);
+		}
 	}
 }

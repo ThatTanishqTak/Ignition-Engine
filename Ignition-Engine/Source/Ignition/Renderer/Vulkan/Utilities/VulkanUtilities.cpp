@@ -1,6 +1,7 @@
 #include "Ignition/Renderer/Vulkan/Utilities/VulkanUtilities.h"
 
 #include "Ignition/Core/Log.h"
+#include "Ignition/Core/Utilities.h"
 
 #include <cstring>
 
@@ -90,7 +91,7 @@ namespace Ignition
 		bool VulkanUtilities::UploadViaStaging(VkDevice device, VkQueue queue, uint32_t queueFamily, VmaAllocator allocator, const void* data, VkDeviceSize size, const std::function<void(VkCommandBuffer, const VulkanBuffer& staging)>& recordCopy)
 		{
 			VulkanBuffer stagingBuffer;
-			stagingBuffer.Initialize(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true);
+			stagingBuffer.Initialize(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VulkanBufferAccess::HostWrite);
 
 			if (!stagingBuffer.IsValid())
 			{
@@ -144,6 +145,79 @@ namespace Ignition
 			dependencyInfo.pImageMemoryBarriers = &imageMemoryBarrier;
 
 			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+		}
+
+		VkShaderModule VulkanUtilities::CreateShaderModule(VkDevice device, const std::string& spirvPath)
+		{
+			const std::vector<char> code = CoreUtilities::ReadBinaryFile(spirvPath);
+
+			if (code.empty())
+			{
+				return VK_NULL_HANDLE;
+			}
+
+			VkShaderModuleCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+			createInfo.codeSize = code.size();
+			createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+			VkShaderModule shaderModule = VK_NULL_HANDLE;
+
+			if (!VK_CHECK(vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule)))
+			{
+				return VK_NULL_HANDLE;
+			}
+
+			return shaderModule;
+		}
+
+		void VulkanUtilities::MemoryBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess)
+		{
+			VkMemoryBarrier2 memoryBarrier{};
+			memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+			memoryBarrier.srcStageMask = sourceStage;
+			memoryBarrier.srcAccessMask = sourceAccess;
+			memoryBarrier.dstStageMask = destinationStage;
+			memoryBarrier.dstAccessMask = destinationAccess;
+
+			VkDependencyInfo dependencyInfo{};
+			dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+			dependencyInfo.memoryBarrierCount = 1;
+			dependencyInfo.pMemoryBarriers = &memoryBarrier;
+
+			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+		}
+
+		void VulkanUtilities::BufferBarrier(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkPipelineStageFlags2 sourceStage, VkAccessFlags2 sourceAccess, VkPipelineStageFlags2 destinationStage, VkAccessFlags2 destinationAccess)
+		{
+			VkBufferMemoryBarrier2 bufferMemoryBarrier{};
+			bufferMemoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+			bufferMemoryBarrier.srcStageMask = sourceStage;
+			bufferMemoryBarrier.srcAccessMask = sourceAccess;
+			bufferMemoryBarrier.dstStageMask = destinationStage;
+			bufferMemoryBarrier.dstAccessMask = destinationAccess;
+			bufferMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferMemoryBarrier.buffer = buffer;
+			bufferMemoryBarrier.offset = offset;
+			bufferMemoryBarrier.size = size;
+
+			VkDependencyInfo dependencyInfo{};
+			dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+			dependencyInfo.bufferMemoryBarrierCount = 1;
+			dependencyInfo.pBufferMemoryBarriers = &bufferMemoryBarrier;
+
+			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+		}
+
+		void VulkanUtilities::ComputeToComputeBarrier(VkCommandBuffer commandBuffer)
+		{
+			MemoryBarrier(commandBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+		}
+
+		void VulkanUtilities::ComputeToGraphicsBarrier(VkCommandBuffer commandBuffer)
+		{
+			MemoryBarrier(commandBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
 		}
 	}
 }

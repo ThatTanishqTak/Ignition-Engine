@@ -42,6 +42,9 @@
 #include "Ignition/Physics/PhysicsComponents.h"
 #include "Ignition/Physics/PhysicsWorld.h"
 
+// Fluid
+#include "Ignition/Fluid/FluidSolver2D.h"
+
 // Scene
 #include "Ignition/Scene/Scene.h"
 #include "Ignition/Scene/Entity.h"

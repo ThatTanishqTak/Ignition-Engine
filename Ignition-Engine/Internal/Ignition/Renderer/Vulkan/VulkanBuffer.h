@@ -7,6 +7,13 @@ VK_DEFINE_HANDLE(VmaAllocation)
 
 namespace Ignition
 {
+	enum class VulkanBufferAccess
+	{
+		DeviceLocal = 0, // GPU only, filled through a staging copy
+		HostWrite,       // mapped for sequential CPU writes (staging, per-frame vertex data)
+		HostRead         // mapped for CPU reads of GPU results (compute readback)
+	};
+
 	class VulkanBuffer
 	{
 	public:
@@ -16,7 +23,7 @@ namespace Ignition
 		VulkanBuffer(const VulkanBuffer&) = delete;
 		VulkanBuffer& operator=(const VulkanBuffer&) = delete;
 
-		void Initialize(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, bool hostVisible);
+		void Initialize(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, VulkanBufferAccess access = VulkanBufferAccess::DeviceLocal);
 		void Shutdown();
 
 		bool IsValid() const { return m_Buffer != VK_NULL_HANDLE; }
@@ -27,10 +34,14 @@ namespace Ignition
 		void* Map();
 		void Unmap();
 
+		// Makes device writes visible to the host before a mapped read
+		void Invalidate();
+
 	private:
 		VmaAllocator m_Allocator = VK_NULL_HANDLE;
 		VmaAllocation m_Allocation = VK_NULL_HANDLE;
 		VkBuffer m_Buffer = VK_NULL_HANDLE;
 		VkDeviceSize m_Size = 0;
+		VulkanBufferAccess m_Access = VulkanBufferAccess::DeviceLocal;
 	};
 }

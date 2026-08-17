@@ -20,6 +20,41 @@ namespace Editor
 		constexpr size_t FrameHistorySize = 240;
 		constexpr const char* DefaultScenePath = "Assets/Scenes/Scene.yaml";
 
+		struct FluidResolution
+		{
+			const char* Label;
+			uint32_t Width;
+			uint32_t Height;
+		};
+
+		// Wide and short: the channel needs room downstream for the wake to develop
+		constexpr std::array<FluidResolution, 4> FluidResolutions = { {
+			{ "256 x 64", 256, 64 },
+			{ "512 x 128", 512, 128 },
+			{ "1024 x 256", 1024, 256 },
+			{ "2048 x 512", 2048, 512 },
+		} };
+
+		void PushHistory(std::vector<float>& history, float value)
+		{
+			if (history.size() >= FrameHistorySize)
+			{
+				history.erase(history.begin());
+			}
+
+			history.push_back(value);
+		}
+
+		float HistoryMinimum(const std::vector<float>& history, float fallback)
+		{
+			return history.empty() ? fallback : *std::min_element(history.begin(), history.end());
+		}
+
+		float HistoryMaximum(const std::vector<float>& history, float fallback)
+		{
+			return history.empty() ? fallback : *std::max_element(history.begin(), history.end());
+		}
+
 		constexpr glm::vec4 ColliderColor{ 0.2f, 0.9f, 0.3f, 1.0f };
 		constexpr glm::vec4 PlayBorderColor{ 1.0f, 0.55f, 0.1f, 1.0f };
 
@@ -39,16 +74,33 @@ namespace Editor
 	EditorLayer::EditorLayer(EditorContext* context, Ignition::Camera* camera, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input) : m_Context(context), m_Camera(camera), m_Assets(assets), m_Renderer(renderer), m_Input(input)
 	{
 		m_FrameTimeHistory.reserve(FrameHistorySize);
+		m_DragHistory.reserve(FrameHistorySize);
+		m_LiftHistory.reserve(FrameHistorySize);
 	}
 
 	void EditorLayer::OnAttach()
 	{
-		// Edit-mode raycasts need a live PxScene, so the query world is created up front and kept alive
+		// Edit-mode raycasts need a live query world, so it is created up front and kept alive
 		Ignition::PhysicsSettings settings{};
 		settings.QueryOnly = true;
 
 		m_EditorPhysics = std::make_unique<Ignition::PhysicsWorld>(m_Context->Scene, m_Assets, settings);
 		m_Context->PhysicsSceneDirty = true;
+
+		m_FluidSettings.Width = FluidResolutions[m_FluidResolutionIndex].Width;
+		m_FluidSettings.Height = FluidResolutions[m_FluidResolutionIndex].Height;
+
+		m_Fluid = std::make_unique<Ignition::FluidSolver2D>(m_Renderer, m_FluidSettings);
+
+		if (m_Fluid->IsValid())
+		{
+			m_Fluid->SetVisualizationField(static_cast<Ignition::FluidField>(m_FluidFieldIndex));
+			m_Fluid->SetColorScale(m_FluidColorScale);
+		}
+		else
+		{
+			IG_APP_ERROR("Fluid Lab unavailable: the compute solver could not be created");
+		}
 	}
 
 	void EditorLayer::OnFixedUpdate(float fixedTimeStep)
@@ -89,6 +141,8 @@ namespace Editor
 		{
 			RefreshEditorPhysics();
 		}
+
+		UpdateFluidLab();
 
 		if (m_Context->ViewportHovered && !m_Context->GizmoUsing && m_Input->IsMouseButtonPressed(Ignition::MouseCode::LEFT))
 		{
@@ -323,6 +377,196 @@ namespace Editor
 		DrawHierarchyPanel();
 		DrawInspectorPanel();
 		DrawStatsPanel();
+		DrawFluidLabPanel();
+	}
+
+	void EditorLayer::UpdateFluidLab()
+	{
+		if (!m_Fluid || !m_Fluid->IsValid())
+		{
+			return;
+		}
+
+		// The lattice has its own timestep, so the solver is driven per rendered frame rather than per fixed step
+		uint32_t steps = 0;
+
+		if (m_FluidRunning)
+		{
+			steps = static_cast<uint32_t>(m_FluidStepsPerFrame);
+		}
+		else if (m_FluidStepRequested)
+		{
+			steps = 1;
+		}
+
+		m_FluidStepRequested = false;
+
+		if (steps > 0)
+		{
+			m_Fluid->Step(steps);
+		}
+
+		RecordFluidHistory();
+	}
+
+	void EditorLayer::RecordFluidHistory()
+	{
+		const Ignition::FluidForces forces = m_Fluid->GetForces();
+		const float simulatedTime = m_Fluid->GetSimulatedTime();
+
+		PushHistory(m_DragHistory, forces.Drag);
+		PushHistory(m_LiftHistory, forces.Lift);
+
+		// Lift crosses zero twice per shedding cycle; the upward crossings mark one full period
+		if (m_PreviousLift < 0.0f && forces.Lift >= 0.0f)
+		{
+			if (m_PreviousCrossingTime >= 0.0f)
+			{
+				const float period = simulatedTime - m_PreviousCrossingTime;
+
+				if (period > 0.0f)
+				{
+					m_StrouhalNumber = m_Fluid->GetSettings().ObstacleDiameter / (period * m_Fluid->GetSettings().InletSpeed);
+				}
+			}
+
+			m_PreviousCrossingTime = simulatedTime;
+		}
+
+		m_PreviousLift = forces.Lift;
+	}
+
+	void EditorLayer::ClearFluidHistory()
+	{
+		m_DragHistory.clear();
+		m_LiftHistory.clear();
+		m_PreviousLift = 0.0f;
+		m_PreviousCrossingTime = -1.0f;
+		m_StrouhalNumber = 0.0f;
+	}
+
+	void EditorLayer::DrawFluidLabPanel()
+	{
+		if (!m_FluidLabOpen)
+		{
+			return;
+		}
+
+		if (Ignition::UI::BeginWindow("Fluid Lab", &m_FluidLabOpen))
+		{
+			if (!m_Fluid || !m_Fluid->IsValid())
+			{
+				Ignition::UI::TextDisabled("Compute solver unavailable - check that Fluid2D.spv built and the log for pipeline errors");
+
+				Ignition::UI::EndWindow();
+
+				return;
+			}
+
+			const Ignition::FluidLatticeScaling& scaling = m_Fluid->GetScaling();
+			const Ignition::FluidForces forces = m_Fluid->GetForces();
+
+			const float panelWidth = Ignition::UI::GetContentRegionAvailable().x;
+			const float aspect = static_cast<float>(m_Fluid->GetVisualizationHeight()) / static_cast<float>(m_Fluid->GetVisualizationWidth());
+
+			Ignition::UI::Image(m_Fluid->GetVisualizationTextureID(), panelWidth, panelWidth * aspect);
+
+			if (Ignition::UI::Button(m_FluidRunning ? "Pause##Fluid" : "Run##Fluid"))
+			{
+				m_FluidRunning = !m_FluidRunning;
+			}
+
+			Ignition::UI::SameLine();
+
+			if (Ignition::UI::Button("Step##Fluid"))
+			{
+				m_FluidStepRequested = true;
+			}
+
+			Ignition::UI::SameLine();
+
+			if (Ignition::UI::Button("Reset##Fluid"))
+			{
+				m_Fluid->Reset();
+				ClearFluidHistory();
+			}
+
+			Ignition::UI::SliderInt("Steps / Frame", &m_FluidStepsPerFrame, 1, 64);
+
+			static const char* const fields[] = { "Velocity", "Vorticity", "Density" };
+
+			if (Ignition::UI::Combo("Field", &m_FluidFieldIndex, fields, 3))
+			{
+				m_Fluid->SetVisualizationField(static_cast<Ignition::FluidField>(m_FluidFieldIndex));
+			}
+
+			if (Ignition::UI::SliderFloat("Color Scale", &m_FluidColorScale, 0.1f, 4.0f))
+			{
+				m_Fluid->SetColorScale(m_FluidColorScale);
+			}
+
+			bool reconfigured = false;
+
+			Ignition::UI::SeparatorText("Flow");
+
+			reconfigured |= Ignition::UI::SliderFloat("Inlet Speed (m/s)", &m_FluidSettings.InletSpeed, 1.0f, 90.0f);
+			reconfigured |= Ignition::UI::SliderFloat("Reynolds Number", &m_FluidSettings.ReynoldsNumber, 10.0f, 2000.0f);
+			reconfigured |= Ignition::UI::SliderFloat("Lattice Velocity", &m_FluidSettings.LatticeVelocity, 0.01f, 0.15f);
+			reconfigured |= Ignition::UI::SliderFloat("Smagorinsky C", &m_FluidSettings.SmagorinskyConstant, 0.0f, 0.3f);
+
+			Ignition::UI::SeparatorText("Obstacle");
+
+			reconfigured |= Ignition::UI::SliderFloat("Diameter (m)", &m_FluidSettings.ObstacleDiameter, 0.02f, 0.5f);
+			reconfigured |= Ignition::UI::SliderFloat("Center X", &m_FluidSettings.ObstacleCenter.x, 0.05f, 0.95f);
+			reconfigured |= Ignition::UI::SliderFloat("Center Y", &m_FluidSettings.ObstacleCenter.y, 0.05f, 0.95f);
+
+			Ignition::UI::SeparatorText("Domain");
+
+			static const char* const resolutions[] = { FluidResolutions[0].Label, FluidResolutions[1].Label, FluidResolutions[2].Label, FluidResolutions[3].Label };
+
+			if (Ignition::UI::Combo("Resolution", &m_FluidResolutionIndex, resolutions, static_cast<int>(FluidResolutions.size())))
+			{
+				// The only change that reallocates: everything else applies without touching a buffer
+				m_FluidSettings.Width = FluidResolutions[m_FluidResolutionIndex].Width;
+				m_FluidSettings.Height = FluidResolutions[m_FluidResolutionIndex].Height;
+
+				reconfigured = true;
+			}
+
+			reconfigured |= Ignition::UI::SliderFloat("Domain Height (m)", &m_FluidSettings.DomainHeight, 0.1f, 5.0f);
+
+			if (reconfigured)
+			{
+				m_Fluid->Configure(m_FluidSettings);
+				ClearFluidHistory();
+			}
+
+			Ignition::UI::SeparatorText("Lattice Mapping");
+
+			Ignition::UI::Text("Cell {:.4f} m | dt {:.3e} s | {} cells across the cylinder", scaling.CellSize, scaling.TimeStep, static_cast<int>(scaling.ObstacleDiameterCells));
+			Ignition::UI::Text("tau {:.4f} | u_lattice {:.3f} | nu {:.3e} m2/s", scaling.RelaxationTime, scaling.LatticeVelocity, scaling.KinematicViscosity);
+			Ignition::UI::Text("Steps {} | simulated {:.4f} s", m_Fluid->GetStepCount(), m_Fluid->GetSimulatedTime());
+
+			if (!scaling.Stable)
+			{
+				// Every first-run LBM blow-up lands on one of these three
+				Ignition::UI::TextDisabled("Unstable mapping: keep tau above 0.51, lattice velocity at or below 0.1, and at least 8 cells across the cylinder");
+			}
+
+			Ignition::UI::SeparatorText("Force (per metre of span)");
+
+			Ignition::UI::Text("Drag {:>9.2f} N/m   Cd {:.3f}", forces.Drag, forces.DragCoefficient);
+			Ignition::UI::Text("Lift {:>9.2f} N/m   Cl {:.3f}", forces.Lift, forces.LiftCoefficient);
+			Ignition::UI::Text("Strouhal {:.3f} (expect 0.16 - 0.20 at Re 100 - 200)", m_StrouhalNumber);
+
+			if (!m_DragHistory.empty())
+			{
+				Ignition::UI::PlotLines("##Drag", m_DragHistory.data(), static_cast<int>(m_DragHistory.size()), HistoryMinimum(m_DragHistory, 0.0f), HistoryMaximum(m_DragHistory, 1.0f), 60.0f, "Drag (N/m)");
+				Ignition::UI::PlotLines("##Lift", m_LiftHistory.data(), static_cast<int>(m_LiftHistory.size()), HistoryMinimum(m_LiftHistory, -1.0f), HistoryMaximum(m_LiftHistory, 1.0f), 60.0f, "Lift (N/m)");
+			}
+		}
+
+		Ignition::UI::EndWindow();
 	}
 
 	void EditorLayer::DrawToolbarPanel()
@@ -420,6 +664,16 @@ namespace Editor
 			if (Ignition::UI::MenuItem("Save Scene As..."))
 			{
 				PromptForPath(PathPrompt::SaveAs);
+			}
+
+			Ignition::UI::EndMenu();
+		}
+
+		if (Ignition::UI::BeginMenu("View"))
+		{
+			if (Ignition::UI::MenuItem("Fluid Lab"))
+			{
+				m_FluidLabOpen = true;
 			}
 
 			Ignition::UI::EndMenu();
@@ -824,6 +1078,18 @@ namespace Editor
 			if (!m_FrameTimeHistory.empty())
 			{
 				Ignition::UI::PlotLines("##FrameTimes", m_FrameTimeHistory.data(), static_cast<int>(m_FrameTimeHistory.size()), 0.0f, 33.3f, 60.0f, "Frame time (ms)");
+			}
+
+			const std::vector<Ignition::PassTiming>& timings = m_Renderer->GetPassTimings();
+
+			if (!timings.empty())
+			{
+				Ignition::UI::SeparatorText("GPU");
+
+				for (const Ignition::PassTiming& timing : timings)
+				{
+					Ignition::UI::Text("{}: {:.3f} ms", timing.Name, timing.Milliseconds);
+				}
 			}
 		}
 

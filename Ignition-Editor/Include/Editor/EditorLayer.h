@@ -2,8 +2,8 @@
 
 #include "Editor/EditorContext.h"
 
-#include <Ignition/Core/Layer.h>
-#include <Ignition/UI/UI.h>
+#include "Ignition/Core/Layer.h"
+#include "Ignition/UI/UI.h"
 
 #include <glm/vec3.hpp>
 
@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 #include <array>
+
+#include "Ignition/Fluid/FluidSolver2D.h"
 
 namespace Ignition
 {
@@ -51,8 +53,13 @@ namespace Editor
 		void DrawHierarchyPanel();
 		void DrawInspectorPanel();
 		void DrawStatsPanel();
+		void DrawFluidLabPanel();
 		void DrawPathPrompt();
 		void PromptForPath(PathPrompt prompt);
+
+		void UpdateFluidLab();
+		void RecordFluidHistory();
+		void ClearFluidHistory();
 
 		void NewScene();
 		void OpenScene(const std::string& filepath);
@@ -91,5 +98,22 @@ namespace Editor
 		std::array<char, 260> m_PathBuffer{};
 
 		std::vector<float> m_FrameTimeHistory;
+
+		// Fluid Lab - the 2D rung of the validation ladder
+		std::unique_ptr<Ignition::FluidSolver2D> m_Fluid;
+		Ignition::FluidSolver2DSettings m_FluidSettings;
+		bool m_FluidLabOpen = true;
+		bool m_FluidRunning = false;
+		bool m_FluidStepRequested = false;
+		int m_FluidStepsPerFrame = 8;
+		int m_FluidFieldIndex = 1;
+		int m_FluidResolutionIndex = 1;
+		float m_FluidColorScale = 1.0f;
+
+		std::vector<float> m_DragHistory;
+		std::vector<float> m_LiftHistory;
+		float m_PreviousLift = 0.0f;
+		float m_PreviousCrossingTime = -1.0f;
+		float m_StrouhalNumber = 0.0f;
 	};
 }

@@ -156,6 +156,13 @@ namespace Ignition
 		return m_Implementation->Backend ? m_Implementation->Backend->GetSceneRenderTargetHeight() : 0;
 	}
 
+	const std::vector<PassTiming>& Renderer::GetPassTimings() const
+	{
+		static const std::vector<PassTiming> empty;
+
+		return m_Implementation->Backend ? m_Implementation->Backend->GetPassTimings() : empty;
+	}
+
 	bool Renderer::IsImGuiFrameActive() const
 	{
 		return m_Implementation->Backend && m_Implementation->Backend->IsImGuiFrameActive();

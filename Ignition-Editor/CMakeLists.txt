@@ -27,7 +27,7 @@ else()
     target_compile_options(Editor PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-target_link_libraries(Editor PRIVATE Ignition imguizmo)
+target_link_libraries(Editor PRIVATE Ignition)
 
 add_dependencies(Editor IgnitionShaders)
 

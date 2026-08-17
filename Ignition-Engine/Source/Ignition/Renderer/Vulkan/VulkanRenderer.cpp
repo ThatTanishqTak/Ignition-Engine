@@ -11,6 +11,8 @@
 #include "Ignition/Renderer/Vulkan/VulkanImGui.h"
 #include "Ignition/Renderer/Vulkan/VulkanLineRenderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanDescriptorAllocator.h"
+#include "Ignition/Renderer/Vulkan/VulkanFluidSolver2D.h"
+#include "Ignition/Renderer/Vulkan/VulkanGPUTimer.h"
 #include "Ignition/Renderer/DebugDrawBuffer.h"
 #include "Ignition/Renderer/Vulkan/VulkanTexture.h"
 #include "Ignition/Renderer/Vulkan/VulkanImage.h"
@@ -147,6 +149,9 @@ namespace Ignition
 			IG_CORE_ERROR("Vulkan renderer: debug line pipeline unavailable, DebugDraw output will be dropped");
 		}
 
+		m_VulkanGPUTimer = std::make_unique<VulkanGPUTimer>();
+		m_VulkanGPUTimer->Initialize(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetTimestampPeriod());
+
 		constexpr uint8_t whitePixel[4] = { 255, 255, 255, 255 };
 
 		m_WhiteTexture = std::make_unique<VulkanTexture>();
@@ -186,20 +191,28 @@ namespace Ignition
 			m_SelfReference.reset();
 		}
 
+		m_FluidSolvers.clear();
+
 		DestroySceneRenderTarget();
 
 		FlushRetirementQueue();
 
-		if (m_SceneColorSampler != VK_NULL_HANDLE && m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
+		if (m_LinearSampler != VK_NULL_HANDLE && m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
 		{
-			vkDestroySampler(m_VulkanDevice->GetDevice(), m_SceneColorSampler, nullptr);
-			m_SceneColorSampler = VK_NULL_HANDLE;
+			vkDestroySampler(m_VulkanDevice->GetDevice(), m_LinearSampler, nullptr);
+			m_LinearSampler = VK_NULL_HANDLE;
 		}
 
 		if (m_VulkanImGui)
 		{
 			m_VulkanImGui->Shutdown();
 			m_VulkanImGui.reset();
+		}
+
+		if (m_VulkanGPUTimer)
+		{
+			m_VulkanGPUTimer->Shutdown();
+			m_VulkanGPUTimer.reset();
 		}
 
 		if (m_VulkanLineRenderer)
@@ -406,6 +419,18 @@ namespace Ignition
 			return;
 		}
 
+		if (m_VulkanGPUTimer)
+		{
+			m_VulkanGPUTimer->BeginFrame(commandBuffer, m_FrameIndex);
+			m_FramePassTimer = m_VulkanGPUTimer->BeginPass(commandBuffer, "Frame");
+		}
+
+		// Compute cannot be recorded inside a dynamic rendering block, so every registered solver runs here
+		for (VulkanFluidSolver2D* solver : m_FluidSolvers)
+		{
+			solver->RecordCompute(commandBuffer, m_FrameIndex, m_VulkanGPUTimer.get());
+		}
+
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_DepthImage->GetImage(), VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
@@ -445,6 +470,11 @@ namespace Ignition
 		renderingInfo.colorAttachmentCount = 1;
 		renderingInfo.pColorAttachments = &renderingColorAttachmentInfo;
 		renderingInfo.pDepthAttachment = &renderingDepthAttachmentInfo;
+
+		if (m_VulkanGPUTimer)
+		{
+			m_ScenePassTimer = m_VulkanGPUTimer->BeginPass(commandBuffer, "Scene");
+		}
 
 		vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
@@ -488,6 +518,11 @@ namespace Ignition
 
 		DebugDrawBuffer::Get().Clear();
 
+		if (m_VulkanGPUTimer)
+		{
+			m_VulkanGPUTimer->EndPass(commandBuffer, m_ScenePassTimer);
+		}
+
 		if (m_ScenePassActive)
 		{
 			vkCmdEndRendering(commandBuffer);
@@ -526,7 +561,15 @@ namespace Ignition
 
 		if (m_ImGuiFrameActive)
 		{
+			const uint32_t userInterfacePass = m_VulkanGPUTimer ? m_VulkanGPUTimer->BeginPass(commandBuffer, "UI") : UINT32_MAX;
+
 			m_VulkanImGui->Render(commandBuffer);
+
+			if (m_VulkanGPUTimer)
+			{
+				m_VulkanGPUTimer->EndPass(commandBuffer, userInterfacePass);
+			}
+
 			m_ImGuiFrameActive = false;
 		}
 
@@ -535,6 +578,11 @@ namespace Ignition
 		m_ScenePassActive = false;
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0);
+
+		if (m_VulkanGPUTimer)
+		{
+			m_VulkanGPUTimer->EndPass(commandBuffer, m_FramePassTimer);
+		}
 
 		if (!VK_CHECK(vkEndCommandBuffer(commandBuffer)))
 		{
@@ -823,6 +871,93 @@ namespace Ignition
 		};
 	}
 
+	VkSampler VulkanRenderer::EnsureLinearSampler()
+	{
+		if (m_LinearSampler != VK_NULL_HANDLE || !m_VulkanDevice)
+		{
+			return m_LinearSampler;
+		}
+
+		VkSamplerCreateInfo samplerCreateInfo{};
+		samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+		samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+		samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+		if (!VK_CHECK(vkCreateSampler(m_VulkanDevice->GetDevice(), &samplerCreateInfo, nullptr, &m_LinearSampler)))
+		{
+			m_LinearSampler = VK_NULL_HANDLE;
+		}
+
+		return m_LinearSampler;
+	}
+
+	VkDescriptorSet VulkanRenderer::AddImGuiTexture(VkImageView imageView)
+	{
+		const VkSampler sampler = EnsureLinearSampler();
+
+		if (sampler == VK_NULL_HANDLE || imageView == VK_NULL_HANDLE || !m_VulkanImGui || !m_VulkanImGui->IsValid())
+		{
+			return VK_NULL_HANDLE;
+		}
+
+		return m_VulkanImGui->AddTexture(sampler, imageView);
+	}
+
+	void VulkanRenderer::RemoveImGuiTexture(VkDescriptorSet descriptorSet)
+	{
+		if (m_VulkanImGui)
+		{
+			m_VulkanImGui->RemoveTexture(descriptorSet);
+		}
+	}
+
+	const std::vector<PassTiming>& VulkanRenderer::GetPassTimings() const
+	{
+		static const std::vector<PassTiming> empty;
+
+		return m_VulkanGPUTimer ? m_VulkanGPUTimer->GetResults() : empty;
+	}
+
+	std::unique_ptr<VulkanFluidSolver2D> VulkanRenderer::CreateFluidSolver2D(const FluidSolver2DSettings& settings)
+	{
+		if (!IsValid() || !m_VulkanAllocator || !m_VulkanDescriptorAllocator)
+		{
+			return nullptr;
+		}
+
+		const char* basePath = SDL_GetBasePath();
+		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Fluid2D.spv";
+
+		auto solver = std::make_unique<VulkanFluidSolver2D>();
+		solver->Initialize(*this, m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
+
+		if (!solver->IsValid())
+		{
+			solver->Shutdown();
+
+			return nullptr;
+		}
+
+		m_FluidSolvers.push_back(solver.get());
+
+		return solver;
+	}
+
+	void VulkanRenderer::Retire(std::unique_ptr<VulkanFluidSolver2D> solver)
+	{
+		if (!solver)
+		{
+			return;
+		}
+
+		std::erase(m_FluidSolvers, solver.get());
+
+		RetireResource(std::move(solver));
+	}
+
 	void VulkanRenderer::CreateSceneRenderTarget(uint32_t width, uint32_t height)
 	{
 		DestroySceneRenderTarget();
@@ -831,7 +966,7 @@ namespace Ignition
 		{
 			return;
 		}
-		
+
 		m_SceneColorImage = std::make_unique<VulkanImage>();
 		m_SceneColorImage->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), width, height, m_VulkanSwapchain->GetImageFormat(), VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
@@ -846,28 +981,11 @@ namespace Ignition
 			return;
 		}
 
-		if (m_SceneColorSampler == VK_NULL_HANDLE)
+		m_SceneTextureDescriptor = AddImGuiTexture(m_SceneColorImage->GetImageView());
+
+		if (m_SceneTextureDescriptor == VK_NULL_HANDLE)
 		{
-			VkSamplerCreateInfo samplerCreateInfo{};
-			samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-			samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
-			samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
-			samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-
-			if (!VK_CHECK(vkCreateSampler(m_VulkanDevice->GetDevice(), &samplerCreateInfo, nullptr, &m_SceneColorSampler)))
-			{
-				m_SceneColorSampler = VK_NULL_HANDLE;
-				DestroySceneRenderTarget();
-
-				return;
-			}
-		}
-
-		if (m_VulkanImGui && m_VulkanImGui->IsValid())
-		{
-			m_SceneTextureDescriptor = m_VulkanImGui->AddTexture(m_SceneColorSampler, m_SceneColorImage->GetImageView());
+			IG_CORE_ERROR("Vulkan renderer: scene render target could not be published to ImGui");
 		}
 	}
 

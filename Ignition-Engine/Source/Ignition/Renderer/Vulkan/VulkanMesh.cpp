@@ -10,7 +10,7 @@ namespace Ignition
 
 		bool UploadDeviceLocalBuffer(VulkanBuffer& outBuffer, VkDevice device, VkQueue queue, uint32_t queueFamily, VmaAllocator allocator, const void* data, VkDeviceSize size, VkBufferUsageFlags usage)
 		{
-			outBuffer.Initialize(allocator, size, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false);
+			outBuffer.Initialize(allocator, size, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VulkanBufferAccess::DeviceLocal);
 
 			if (!outBuffer.IsValid())
 			{

@@ -53,6 +53,7 @@ namespace Ignition
 
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
+		ImGui::LoadIniSettingsFromDisk("Assets/imgui.ini");
 
 		ImGuiIO& io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;

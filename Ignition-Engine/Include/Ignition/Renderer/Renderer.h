@@ -19,6 +19,13 @@ namespace Ignition
 	struct Material;
 	struct RendererImplementation;
 
+	// One GPU pass, timed by timestamp queries, resolved a frame late
+	struct PassTiming
+	{
+		std::string Name;
+		float Milliseconds = 0.0f;
+	};
+
 	class Renderer
 	{
 	public:
@@ -50,8 +57,11 @@ namespace Ignition
 		IGNITION_API uint32_t GetSceneRenderTargetWidth() const;
 		IGNITION_API uint32_t GetSceneRenderTargetHeight() const;
 
+		IGNITION_API const std::vector<PassTiming>& GetPassTimings() const;
+
 	private:
 		friend class Engine;
+		friend class FluidSolver2D;
 
 		Renderer();
 
