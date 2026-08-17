@@ -9,7 +9,9 @@
 #include "Ignition/Renderer/Vulkan/VulkanPipeline.h"
 #include "Ignition/Renderer/Vulkan/VulkanMesh.h"
 #include "Ignition/Renderer/Vulkan/VulkanImGui.h"
+#include "Ignition/Renderer/Vulkan/VulkanLineRenderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanDescriptorAllocator.h"
+#include "Ignition/Renderer/DebugDrawBuffer.h"
 #include "Ignition/Renderer/Vulkan/VulkanTexture.h"
 #include "Ignition/Renderer/Vulkan/VulkanImage.h"
 
@@ -135,6 +137,16 @@ namespace Ignition
 			IG_CORE_ERROR("Vulkan renderer: demo pipeline unavailable, the quad will not draw");
 		}
 
+		const std::string linePath = std::string(basePath ? basePath : "") + ShaderDirectory + "DebugLine.spv";
+
+		m_VulkanLineRenderer = std::make_unique<VulkanLineRenderer>();
+		m_VulkanLineRenderer->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), m_VulkanSwapchain->GetImageFormat(), DepthFormat, linePath);
+
+		if (!m_VulkanLineRenderer->IsValid())
+		{
+			IG_CORE_ERROR("Vulkan renderer: debug line pipeline unavailable, DebugDraw output will be dropped");
+		}
+
 		constexpr uint8_t whitePixel[4] = { 255, 255, 255, 255 };
 
 		m_WhiteTexture = std::make_unique<VulkanTexture>();
@@ -188,6 +200,12 @@ namespace Ignition
 		{
 			m_VulkanImGui->Shutdown();
 			m_VulkanImGui.reset();
+		}
+
+		if (m_VulkanLineRenderer)
+		{
+			m_VulkanLineRenderer->Shutdown();
+			m_VulkanLineRenderer.reset();
 		}
 
 		if (m_VulkanPipeline)
@@ -452,10 +470,23 @@ namespace Ignition
 	{
 		if (!m_FrameStarted)
 		{
+			// Nothing recorded this frame; drop the queued lines so they cannot leak into the next one
+			DebugDrawBuffer::Get().Clear();
+
 			return;
 		}
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
+
+		// The scene (or main) pass is still open here, which is exactly where debug lines belong
+		if (m_VulkanLineRenderer && m_VulkanLineRenderer->IsValid())
+		{
+			const DebugDrawBuffer& debugDrawBuffer = DebugDrawBuffer::Get();
+
+			m_VulkanLineRenderer->Draw(commandBuffer, m_FrameIndex, m_SceneViewProjection, debugDrawBuffer.GetDepthTestedVertices(), debugDrawBuffer.GetOverlayVertices());
+		}
+
+		DebugDrawBuffer::Get().Clear();
 
 		if (m_ScenePassActive)
 		{

@@ -27,6 +27,7 @@ namespace Ignition
 	class VulkanPipeline;
 	class VulkanMesh;
 	class VulkanImGui;
+	class VulkanLineRenderer;
 	class VulkanDescriptorAllocator;
 	class VulkanTexture;
 	class VulkanImage;
@@ -107,6 +108,7 @@ namespace Ignition
 		std::unique_ptr<VulkanFrameContext> m_VulkanFrameContext;
 		std::unique_ptr<VulkanDescriptorAllocator> m_VulkanDescriptorAllocator;
 		std::unique_ptr<VulkanPipeline> m_VulkanPipeline;
+		std::unique_ptr<VulkanLineRenderer> m_VulkanLineRenderer;
 		std::unique_ptr<VulkanTexture> m_WhiteTexture;
 		std::unique_ptr<VulkanImGui> m_VulkanImGui;
 

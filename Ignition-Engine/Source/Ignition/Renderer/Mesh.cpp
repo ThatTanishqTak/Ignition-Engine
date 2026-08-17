@@ -11,6 +11,11 @@ namespace Ignition
 
 	Mesh::~Mesh() = default;
 
+	const MeshGeometry& Mesh::GetGeometry() const
+	{
+		return m_Implementation->Geometry;
+	}
+
 	MeshBounds Mesh::GetBounds() const
 	{
 		return m_Implementation->Bounds;

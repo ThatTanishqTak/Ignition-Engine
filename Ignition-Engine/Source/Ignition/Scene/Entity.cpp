@@ -49,4 +49,33 @@ namespace Ignition
 
 		return m_Scene->m_Registry->Registry.try_get<MeshRendererComponent>(ToHandle(m_ID));
 	}
+	
+// Every body expands inside an Entity member - Scene befriends the class, not free helpers
+#define IG_DEFINE_COMPONENT_ACCESSORS(Type, Name)                                                 \
+	Type& Entity::Add##Name(const Type& component)                                                \
+	{                                                                                             \
+		return m_Scene->m_Registry->Registry.emplace_or_replace<Type>(ToHandle(m_ID), component); \
+	}                                                                                             \
+                                                                                                  \
+	Type* Entity::Get##Name() const                                                               \
+	{                                                                                             \
+		return IsValid() ? m_Scene->m_Registry->Registry.try_get<Type>(ToHandle(m_ID)) : nullptr; \
+	}                                                                                             \
+                                                                                                  \
+	void Entity::Remove##Name()                                                                   \
+	{                                                                                             \
+		if (IsValid())                                                                            \
+		{                                                                                         \
+			m_Scene->m_Registry->Registry.remove<Type>(ToHandle(m_ID));                           \
+		}                                                                                         \
+	}
+
+	IG_DEFINE_COMPONENT_ACCESSORS(RigidBodyComponent, RigidBody)
+	IG_DEFINE_COMPONENT_ACCESSORS(BoxColliderComponent, BoxCollider)
+	IG_DEFINE_COMPONENT_ACCESSORS(SphereColliderComponent, SphereCollider)
+	IG_DEFINE_COMPONENT_ACCESSORS(CapsuleColliderComponent, CapsuleCollider)
+	IG_DEFINE_COMPONENT_ACCESSORS(MeshColliderComponent, MeshCollider)
+	IG_DEFINE_COMPONENT_ACCESSORS(PhysicsMaterialComponent, PhysicsMaterial)
+
+#undef IG_DEFINE_COMPONENT_ACCESSORS
 }

@@ -9,5 +9,6 @@ namespace Ignition
 	struct MeshImplementation : ResourceImplementation<VulkanMesh>
 	{
 		MeshBounds Bounds;
+		MeshGeometry Geometry;
 	};
 }

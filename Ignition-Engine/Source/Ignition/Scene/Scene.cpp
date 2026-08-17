@@ -1,5 +1,6 @@
 #include "Ignition/Scene/Scene.h"
 
+#include "Ignition/Physics/PhysicsComponents.h"
 #include "Ignition/Scene/Components.h"
 #include "Ignition/Scene/SceneRegistry.h"
 #include "Ignition/Renderer/Renderer.h"
@@ -7,6 +8,18 @@
 
 namespace Ignition
 {
+	namespace
+	{
+		template<typename TComponent>
+		void CopyComponent(Entity source, Entity destination, entt::registry& registry)
+		{
+			if (const TComponent* component = registry.try_get<TComponent>(static_cast<entt::entity>(source.GetID())))
+			{
+				registry.emplace_or_replace<TComponent>(static_cast<entt::entity>(destination.GetID()), *component);
+			}
+		}
+	}
+
 	Scene::Scene() : m_Registry(std::make_unique<SceneRegistry>())
 	{
 
@@ -39,6 +52,13 @@ namespace Ignition
 		{
 			m_Registry->Registry.emplace_or_replace<MeshRendererComponent>(static_cast<entt::entity>(duplicate.GetID()), *meshRenderer);
 		}
+
+		CopyComponent<RigidBodyComponent>(entity, duplicate, m_Registry->Registry);
+		CopyComponent<PhysicsMaterialComponent>(entity, duplicate, m_Registry->Registry);
+		CopyComponent<BoxColliderComponent>(entity, duplicate, m_Registry->Registry);
+		CopyComponent<SphereColliderComponent>(entity, duplicate, m_Registry->Registry);
+		CopyComponent<CapsuleColliderComponent>(entity, duplicate, m_Registry->Registry);
+		CopyComponent<MeshColliderComponent>(entity, duplicate, m_Registry->Registry);
 
 		return duplicate;
 	}

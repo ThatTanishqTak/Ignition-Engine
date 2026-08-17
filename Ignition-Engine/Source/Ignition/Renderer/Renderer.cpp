@@ -60,13 +60,20 @@ namespace Ignition
 		{
 			MeshBounds bounds{ vertices.front().Position, vertices.front().Position };
 
+			MeshGeometry geometry;
+			geometry.Positions.reserve(vertices.size());
+			geometry.Indices = indices;
+
 			for (const Vertex& vertex : vertices)
 			{
 				bounds.Minimum = glm::min(bounds.Minimum, vertex.Position);
 				bounds.Maximum = glm::max(bounds.Maximum, vertex.Position);
+
+				geometry.Positions.push_back(vertex.Position);
 			}
 
 			mesh->m_Implementation->Bounds = bounds;
+			mesh->m_Implementation->Geometry = std::move(geometry);
 		}
 
 		return mesh;

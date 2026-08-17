@@ -33,9 +33,14 @@
 #include "Ignition/Renderer/Texture.h"
 #include "Ignition/Renderer/Material.h"
 #include "Ignition/Renderer/Vertex.h"
+#include "Ignition/Renderer/DebugDraw.h"
 
 // Assets
 #include "Ignition/Assets/AssetRegistry.h"
+
+// Physics
+#include "Ignition/Physics/PhysicsComponents.h"
+#include "Ignition/Physics/PhysicsWorld.h"
 
 // Scene
 #include "Ignition/Scene/Scene.h"

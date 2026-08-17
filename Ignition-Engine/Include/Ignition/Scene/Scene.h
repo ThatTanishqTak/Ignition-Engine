@@ -10,8 +10,10 @@
 namespace Ignition
 {
 	class Camera;
+	class PhysicsWorld;
 	class Renderer;
 	class SceneRegistry;
+	class SceneSerializer;
 
 	class Scene
 	{
@@ -32,6 +34,8 @@ namespace Ignition
 
 	private:
 		friend class Entity;
+		friend class PhysicsWorld;
+		friend class SceneSerializer;
 
 		std::unique_ptr<SceneRegistry> m_Registry;
 	};

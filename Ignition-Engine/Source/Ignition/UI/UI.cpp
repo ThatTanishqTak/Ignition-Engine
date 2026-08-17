@@ -2,9 +2,27 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <ImGuizmo.h>
+
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/trigonometric.hpp>
+
+#include <array>
 
 namespace
 {
+	ImGuizmo::OPERATION ToImGuizmoOperation(Ignition::UI::GizmoOperation operation)
+	{
+		switch (operation)
+		{
+			case Ignition::UI::GizmoOperation::Translate: return ImGuizmo::TRANSLATE;
+			case Ignition::UI::GizmoOperation::Rotate: return ImGuizmo::ROTATE;
+			case Ignition::UI::GizmoOperation::Scale: return ImGuizmo::SCALE;
+		}
+
+		return ImGuizmo::TRANSLATE;
+	}
+
 	bool CanDraw()
 	{
 		const ImGuiContext* context = ImGui::GetCurrentContext();
@@ -429,6 +447,106 @@ namespace Ignition
 			{
 				ImGui::PopID();
 			}
+		}
+
+		void PushWindowBorder(float size, const glm::vec4& color)
+		{
+			if (CanDraw())
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, size);
+				ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(color.r, color.g, color.b, color.a));
+			}
+		}
+
+		void PopWindowBorder()
+		{
+			if (CanDraw())
+			{
+				ImGui::PopStyleColor();
+				ImGui::PopStyleVar();
+			}
+		}
+
+		void BeginDisabled(bool disabled)
+		{
+			if (CanDraw())
+			{
+				ImGui::BeginDisabled(disabled);
+			}
+		}
+
+		void EndDisabled()
+		{
+			if (CanDraw())
+			{
+				ImGui::EndDisabled();
+			}
+		}
+
+		void BeginGizmoFrame()
+		{
+			if (CanDraw())
+			{
+				ImGuizmo::BeginFrame();
+			}
+		}
+
+		void SetGizmoViewportRect(const glm::vec2& position, const glm::vec2& size)
+		{
+			if (!CanDraw())
+			{
+				return;
+			}
+
+			ImGuizmo::SetOrthographic(false);
+			ImGuizmo::SetDrawlist();
+			ImGuizmo::SetRect(position.x, position.y, size.x, size.y);
+		}
+
+		bool TransformGizmo(const glm::mat4& view, const glm::mat4& projection, GizmoOperation operation, GizmoMode mode, glm::vec3& position, glm::vec3& rotationRadians, glm::vec3& scale, float snap)
+		{
+			if (!CanDraw())
+			{
+				return false;
+			}
+
+			std::array<float, 3> translation = { position.x, position.y, position.z };
+
+			const glm::vec3 degrees = glm::degrees(rotationRadians);
+			std::array<float, 3> rotationDegrees = { degrees.x, degrees.y, degrees.z };
+			std::array<float, 3> scaleValues = { scale.x, scale.y, scale.z };
+
+			glm::mat4 matrix(1.0f);
+			ImGuizmo::RecomposeMatrixFromComponents(translation.data(), rotationDegrees.data(), scaleValues.data(), glm::value_ptr(matrix));
+
+			// ImGuizmo only ever scales in local space
+			const ImGuizmo::MODE gizmoMode = (mode == GizmoMode::World && operation != GizmoOperation::Scale) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+			const std::array<float, 3> snapValues = { snap, snap, snap };
+
+			ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection), ToImGuizmoOperation(operation), gizmoMode, glm::value_ptr(matrix), nullptr, snap > 0.0f ? snapValues.data() : nullptr);
+
+			if (!ImGuizmo::IsUsing())
+			{
+				return false;
+			}
+
+			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(matrix), translation.data(), rotationDegrees.data(), scaleValues.data());
+
+			position = { translation[0], translation[1], translation[2] };
+			rotationRadians = glm::radians(glm::vec3(rotationDegrees[0], rotationDegrees[1], rotationDegrees[2]));
+			scale = { scaleValues[0], scaleValues[1], scaleValues[2] };
+
+			return true;
+		}
+
+		bool IsGizmoInUse()
+		{
+			return CanDraw() ? ImGuizmo::IsUsing() : false;
+		}
+
+		bool IsGizmoHovered()
+		{
+			return CanDraw() ? ImGuizmo::IsOver() : false;
 		}
 	}
 }

@@ -31,14 +31,36 @@ namespace Editor
 		m_Camera.SetPerspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 1000.0f);
 		m_CameraController = std::make_unique<EditorCameraController>(GetInput());
 
-		// Starter content so a fresh session has something selectable
-		Ignition::Entity quad = m_Scene->CreateEntity("Quad");
+		// Confirms the PhysX link before anything depends on it
+		Ignition::PhysicsWorld::SelfTest();
 
-		if (auto mesh = m_Assets->LoadMesh("builtin:quad"))
+		// Starter content so a fresh session has something to select and something to drop
+		Ignition::Entity ground = m_Scene->CreateEntity("Ground");
+		ground.GetTransform().Scale = { 20.0f, 0.5f, 20.0f };
+		ground.GetTransform().Position = { 0.0f, -0.25f, 0.0f };
+
+		if (auto mesh = m_Assets->LoadMesh("builtin:cube"))
 		{
-			auto& meshRenderer = quad.AddMeshRenderer(mesh);
-			meshRenderer.MeshAsset = "builtin:quad";
+			auto& meshRenderer = ground.AddMeshRenderer(mesh);
+			meshRenderer.MeshAsset = "builtin:cube";
 		}
+
+		Ignition::RigidBodyComponent groundBody;
+		groundBody.Type = Ignition::RigidBodyType::Static;
+		ground.AddRigidBody(groundBody);
+		ground.AddBoxCollider();
+
+		Ignition::Entity box = m_Scene->CreateEntity("Box");
+		box.GetTransform().Position = { 0.0f, 3.0f, 0.0f };
+
+		if (auto mesh = m_Assets->LoadMesh("builtin:cube"))
+		{
+			auto& meshRenderer = box.AddMeshRenderer(mesh);
+			meshRenderer.MeshAsset = "builtin:cube";
+		}
+
+		box.AddRigidBody();
+		box.AddBoxCollider();
 
 		PushLayer(std::make_unique<EditorLayer>(&m_Context, &m_Camera, m_Assets.get(), GetRenderer(), GetInput()));
 

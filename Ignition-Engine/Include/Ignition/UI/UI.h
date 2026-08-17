@@ -2,6 +2,7 @@
 
 #include "Ignition/Core/Export.h"
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -66,6 +67,13 @@ namespace Ignition
 		IGNITION_API void PushWindowPadding(float x, float y);
 		IGNITION_API void PopStyleVariable(int count = 1);
 
+		// Tints the next window's frame - used to mark play mode in the viewport
+		IGNITION_API void PushWindowBorder(float size, const glm::vec4& color);
+		IGNITION_API void PopWindowBorder();
+
+		IGNITION_API void BeginDisabled(bool disabled = true);
+		IGNITION_API void EndDisabled();
+
 		IGNITION_API bool CollapsingHeader(const char* label, bool defaultOpen = true);
 
 		IGNITION_API void Text(const char* text);
@@ -113,5 +121,29 @@ namespace Ignition
 		IGNITION_API void PushID(int id);
 		IGNITION_API void PushID(const char* id);
 		IGNITION_API void PopID();
+
+		// Gizmos - retires the editor's direct ImGuizmo dependency
+		enum class GizmoOperation
+		{
+			Translate = 0,
+			Rotate,
+			Scale
+		};
+
+		enum class GizmoMode
+		{
+			World = 0,
+			Local
+		};
+
+		IGNITION_API void BeginGizmoFrame();
+
+		// Call inside the window the gizmo draws into, before TransformGizmo
+		IGNITION_API void SetGizmoViewportRect(const glm::vec2& position, const glm::vec2& size);
+
+		IGNITION_API bool TransformGizmo(const glm::mat4& view, const glm::mat4& projection, GizmoOperation operation, GizmoMode mode, glm::vec3& position, glm::vec3& rotationRadians, glm::vec3& scale, float snap = 0.0f);
+
+		IGNITION_API bool IsGizmoInUse();
+		IGNITION_API bool IsGizmoHovered();
 	}
 }

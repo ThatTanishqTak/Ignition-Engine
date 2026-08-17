@@ -60,8 +60,6 @@ namespace Ignition
 
 	void* VulkanBuffer::Map()
 	{
-		IG_CORE_TRACE("Maping Data");
-
 		void* data = nullptr;
 
 		if (!VK_CHECK(vmaMapMemory(m_Allocator, m_Allocation, &data)))
@@ -69,18 +67,12 @@ namespace Ignition
 			return nullptr;
 		}
 
-		IG_CORE_TRACE("Data Maped");
-
 		return data;
 	}
 
 	void VulkanBuffer::Unmap()
 	{
-		IG_CORE_TRACE("Unmaping Data");
-
 		vmaFlushAllocation(m_Allocator, m_Allocation, 0, VK_WHOLE_SIZE);
 		vmaUnmapMemory(m_Allocator, m_Allocation);
-
-		IG_CORE_TRACE("Data Unmaped");
 	}
 }

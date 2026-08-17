@@ -13,6 +13,13 @@ namespace Ignition
 
 namespace Editor
 {
+	enum class PlayState
+	{
+		Edit = 0,
+		Playing,
+		Paused
+	};
+
 	struct EditorContext
 	{
 		Ignition::Scene* Scene = nullptr;
@@ -24,5 +31,14 @@ namespace Editor
 		bool GizmoUsing = false;
 		glm::vec2 ViewportPosition{ 0.0f };
 		glm::vec2 ViewportSize{ 0.0f };
+
+		PlayState Play = PlayState::Edit;
+		bool StepRequested = false;
+
+		bool DrawColliders = true;
+		bool DrawPhysXVisualization = false;
+
+		// Set whenever colliders or transforms change so the edit-mode query scene can be rebuilt
+		bool PhysicsSceneDirty = true;
 	};
 }

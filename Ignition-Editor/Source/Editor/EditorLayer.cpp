@@ -2,10 +2,9 @@
 
 #include "Ignition/Ignition.h"
 
-#include <imgui.h>
-#include <ImGuizmo.h>
-
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
 
 #include <algorithm>
@@ -18,22 +17,52 @@ namespace Editor
 	{
 		constexpr size_t FrameHistorySize = 240;
 		constexpr const char* DefaultScenePath = "Assets/Scenes/Scene.yaml";
+
+		constexpr glm::vec4 ColliderColor{ 0.2f, 0.9f, 0.3f, 1.0f };
+		constexpr glm::vec4 PlayBorderColor{ 1.0f, 0.55f, 0.1f, 1.0f };
+
+		glm::mat4 ColliderTransform(const Ignition::TransformComponent& transform, const glm::vec3& offset)
+		{
+			return glm::translate(glm::mat4(1.0f), transform.Position + glm::vec3(glm::mat4_cast(glm::quat(transform.Rotation)) * glm::vec4(offset * transform.Scale, 0.0f))) * glm::mat4_cast(glm::quat(transform.Rotation));
+		}
+
+		float UniformScale(const glm::vec3& scale)
+		{
+			return glm::max(glm::max(std::abs(scale.x), std::abs(scale.y)), std::abs(scale.z));
+		}
 	}
 
-	EditorLayer::EditorLayer(EditorContext* context, Ignition::Camera* camera, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input) : m_Context(context), m_Camera(camera), m_Assets(assets), m_Renderer(renderer), m_Input(input), m_GizmoOperation(ImGuizmo::TRANSLATE)
+	EditorLayer::EditorLayer(EditorContext* context, Ignition::Camera* camera, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input) : m_Context(context), m_Camera(camera), m_Assets(assets), m_Renderer(renderer), m_Input(input)
 	{
 		m_FrameTimeHistory.reserve(FrameHistorySize);
 	}
 
 	void EditorLayer::OnAttach()
 	{
-		void* allocateFunction = nullptr;
-		void* freeFunction = nullptr;
-		void* userData = nullptr;
-		Ignition::UI::GetAllocatorFunctions(allocateFunction, freeFunction, userData);
+		// Edit-mode raycasts need a live PxScene, so the query world is created up front and kept alive
+		Ignition::PhysicsSettings settings{};
+		settings.QueryOnly = true;
 
-		ImGui::SetAllocatorFunctions(reinterpret_cast<ImGuiMemAllocFunc>(allocateFunction), reinterpret_cast<ImGuiMemFreeFunc>(freeFunction), userData);
-		ImGui::SetCurrentContext(static_cast<ImGuiContext*>(Ignition::UI::GetContext()));
+		m_EditorPhysics = std::make_unique<Ignition::PhysicsWorld>(m_Context->Scene, m_Assets, settings);
+		m_Context->PhysicsSceneDirty = true;
+	}
+
+	void EditorLayer::OnFixedUpdate(float fixedTimeStep)
+	{
+		if (!m_RuntimePhysics)
+		{
+			return;
+		}
+
+		if (m_Context->Play == PlayState::Playing)
+		{
+			m_RuntimePhysics->Step(fixedTimeStep);
+		}
+		else if (m_Context->Play == PlayState::Paused && m_Context->StepRequested)
+		{
+			m_RuntimePhysics->Step(fixedTimeStep);
+			m_Context->StepRequested = false;
+		}
 	}
 
 	void EditorLayer::OnUpdate(float deltaTime)
@@ -46,6 +75,21 @@ namespace Editor
 		}
 
 		m_FrameTimeHistory.push_back(Ignition::Time::GetUnscaledDeltaTime().GetMilliseconds());
+
+		if (m_RuntimePhysics)
+		{
+			// 120 Hz physics rendered smoothly at whatever the display rate happens to be
+			m_RuntimePhysics->SyncTransforms(m_Context->Play == PlayState::Playing ? Ignition::Time::GetFixedAlpha() : 1.0f);
+		}
+		else
+		{
+			RefreshEditorPhysics();
+		}
+
+		if (m_Context->ViewportHovered && !m_Context->GizmoUsing && m_Input->IsMouseButtonPressed(Ignition::MouseCode::LEFT))
+		{
+			PickEntityUnderCursor();
+		}
 
 		// Ctrl+S / Ctrl+O work regardless of which panel has focus
 		if (m_Input->IsKeyDown(Ignition::ScanCode::LCTRL))
@@ -64,23 +108,188 @@ namespace Editor
 		{
 			if (m_Input->IsKeyPressed(Ignition::ScanCode::W))
 			{
-				m_GizmoOperation = ImGuizmo::TRANSLATE;
+				m_GizmoOperation = Ignition::UI::GizmoOperation::Translate;
 			}
-			
+
 			if (m_Input->IsKeyPressed(Ignition::ScanCode::E))
 			{
-				m_GizmoOperation = ImGuizmo::ROTATE;
+				m_GizmoOperation = Ignition::UI::GizmoOperation::Rotate;
 			}
-			
+
 			if (m_Input->IsKeyPressed(Ignition::ScanCode::R))
 			{
-				m_GizmoOperation = ImGuizmo::SCALE;
+				m_GizmoOperation = Ignition::UI::GizmoOperation::Scale;
 			}
-			
+
 			if (m_Input->IsKeyPressed(Ignition::ScanCode::X))
 			{
 				m_GizmoWorldSpace = !m_GizmoWorldSpace;
 			}
+		}
+	}
+
+	Ignition::PhysicsWorld* EditorLayer::GetActivePhysicsWorld() const
+	{
+		return m_RuntimePhysics ? m_RuntimePhysics.get() : m_EditorPhysics.get();
+	}
+
+	void EditorLayer::RefreshEditorPhysics()
+	{
+		if (!m_EditorPhysics || !m_Context->PhysicsSceneDirty)
+		{
+			return;
+		}
+
+		m_EditorPhysics->Rebuild();
+		m_Context->PhysicsSceneDirty = false;
+	}
+
+	void EditorLayer::PickEntityUnderCursor()
+	{
+		Ignition::PhysicsWorld* physics = GetActivePhysicsWorld();
+
+		if (!physics || !physics->IsValid() || m_Context->ViewportSize.x <= 0.0f || m_Context->ViewportSize.y <= 0.0f)
+		{
+			return;
+		}
+
+		const glm::vec2 local = m_Input->GetMousePosition() - m_Context->ViewportPosition;
+
+		if (local.x < 0.0f || local.y < 0.0f || local.x > m_Context->ViewportSize.x || local.y > m_Context->ViewportSize.y)
+		{
+			return;
+		}
+
+		// The renderer flips the viewport height, so screen-top maps to NDC +Y
+		const glm::vec2 ndc(
+			(local.x / m_Context->ViewportSize.x) * 2.0f - 1.0f,
+			1.0f - (local.y / m_Context->ViewportSize.y) * 2.0f);
+
+		const glm::mat4 inverseViewProjection = glm::inverse(m_Camera->GetProjection() * m_Camera->GetView());
+
+		const glm::vec4 nearPoint = inverseViewProjection * glm::vec4(ndc.x, ndc.y, 0.0f, 1.0f); // zero-to-one depth
+		const glm::vec4 farPoint = inverseViewProjection * glm::vec4(ndc.x, ndc.y, 1.0f, 1.0f);
+
+		const glm::vec3 origin = glm::vec3(nearPoint) / nearPoint.w;
+		const glm::vec3 direction = glm::normalize((glm::vec3(farPoint) / farPoint.w) - origin);
+
+		const Ignition::RaycastHit hit = physics->Raycast(origin, direction);
+
+		if (!hit.Hit)
+		{
+			m_Context->Selection = {};
+
+			return;
+		}
+
+		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		{
+			if (entity.GetID() == hit.EntityID)
+			{
+				m_Context->Selection = entity;
+
+				break;
+			}
+		}
+	}
+
+	void EditorLayer::OnPlay()
+	{
+		if (m_Context->Play != PlayState::Edit)
+		{
+			return;
+		}
+
+		// The serializer is the snapshot format: it can never drift from what Save/Load produce
+		const Ignition::SceneSerializer serializer(m_Context->Scene, m_Assets);
+		m_Snapshot = serializer.SaveToString();
+
+		if (m_Snapshot.empty())
+		{
+			IG_APP_ERROR("Could not snapshot the scene, staying in edit mode");
+
+			return;
+		}
+
+		m_RuntimePhysics = std::make_unique<Ignition::PhysicsWorld>(m_Context->Scene, m_Assets);
+		m_RuntimePhysics->SetDebugVisualizationEnabled(m_Context->DrawPhysXVisualization);
+
+		m_Context->Play = PlayState::Playing;
+
+		IG_APP_INFO("Play: {} physics bodies instantiated", m_RuntimePhysics->GetBodyCount());
+	}
+
+	void EditorLayer::OnStop()
+	{
+		if (m_Context->Play == PlayState::Edit)
+		{
+			return;
+		}
+
+		const uint32_t selectionID = m_Context->Selection.IsValid() ? m_Context->Selection.GetID() : 0xFFFFFFFF;
+
+		m_RuntimePhysics.reset();
+		m_Context->Selection = {};
+		m_Context->Play = PlayState::Edit;
+		m_Context->StepRequested = false;
+
+		const Ignition::SceneSerializer serializer(m_Context->Scene, m_Assets);
+
+		if (!serializer.LoadFromString(m_Snapshot))
+		{
+			IG_APP_ERROR("Snapshot restore failed, the scene is left as the simulation ended it");
+		}
+
+		m_Snapshot.clear();
+		m_Context->PhysicsSceneDirty = true;
+
+		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		{
+			if (entity.GetID() == selectionID)
+			{
+				m_Context->Selection = entity;
+
+				break;
+			}
+		}
+	}
+
+	void EditorLayer::SubmitColliderGizmos()
+	{
+		if (Ignition::PhysicsWorld* physics = GetActivePhysicsWorld())
+		{
+			physics->SubmitDebugLines();
+		}
+
+		if (!m_Context->DrawColliders)
+		{
+			return;
+		}
+
+		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		{
+			const Ignition::TransformComponent& transform = entity.GetTransform();
+			const float scale = UniformScale(transform.Scale);
+
+			if (const Ignition::BoxColliderComponent* collider = entity.GetBoxCollider())
+			{
+				Ignition::DebugDraw::Box(ColliderTransform(transform, collider->Offset), collider->HalfExtents * transform.Scale, ColliderColor);
+			}
+
+			if (const Ignition::SphereColliderComponent* collider = entity.GetSphereCollider())
+			{
+				Ignition::DebugDraw::Sphere(ColliderTransform(transform, collider->Offset), collider->Radius * scale, ColliderColor);
+			}
+
+			if (const Ignition::CapsuleColliderComponent* collider = entity.GetCapsuleCollider())
+			{
+				Ignition::DebugDraw::Capsule(ColliderTransform(transform, collider->Offset), collider->Radius * scale, collider->HalfHeight * scale, ColliderColor);
+			}
+		}
+
+		if (m_Context->Selection.IsValid())
+		{
+			Ignition::DebugDraw::Axes(ColliderTransform(m_Context->Selection.GetTransform(), glm::vec3(0.0f)), 0.75f);
 		}
 	}
 
@@ -91,7 +300,9 @@ namespace Editor
 			return;
 		}
 
-		ImGuizmo::BeginFrame();
+		SubmitColliderGizmos();
+
+		Ignition::UI::BeginGizmoFrame();
 
 		const unsigned int dockspaceID = Ignition::UI::DockSpaceOverMainViewport();
 
@@ -103,10 +314,79 @@ namespace Editor
 
 		DrawMenuBar();
 		DrawPathPrompt();
+		DrawToolbarPanel();
 		DrawViewportPanel();
 		DrawHierarchyPanel();
 		DrawInspectorPanel();
 		DrawStatsPanel();
+	}
+
+	void EditorLayer::DrawToolbarPanel()
+	{
+		if (Ignition::UI::BeginWindow("Toolbar"))
+		{
+			Ignition::UI::BeginDisabled(m_Context->Play == PlayState::Playing);
+
+			if (Ignition::UI::Button(m_Context->Play == PlayState::Paused ? "Resume" : "Play"))
+			{
+				if (m_Context->Play == PlayState::Paused)
+				{
+					m_Context->Play = PlayState::Playing;
+				}
+				else
+				{
+					OnPlay();
+				}
+			}
+
+			Ignition::UI::EndDisabled();
+			Ignition::UI::SameLine();
+
+			Ignition::UI::BeginDisabled(m_Context->Play != PlayState::Playing);
+
+			if (Ignition::UI::Button("Pause"))
+			{
+				m_Context->Play = PlayState::Paused;
+			}
+
+			Ignition::UI::EndDisabled();
+			Ignition::UI::SameLine();
+
+			Ignition::UI::BeginDisabled(m_Context->Play != PlayState::Paused);
+
+			if (Ignition::UI::Button("Step"))
+			{
+				m_Context->StepRequested = true;
+			}
+
+			Ignition::UI::EndDisabled();
+			Ignition::UI::SameLine();
+
+			Ignition::UI::BeginDisabled(m_Context->Play == PlayState::Edit);
+
+			if (Ignition::UI::Button("Stop"))
+			{
+				OnStop();
+			}
+
+			Ignition::UI::EndDisabled();
+
+			Ignition::UI::SameLine();
+			Ignition::UI::Separator();
+
+			Ignition::UI::Checkbox("Colliders", &m_Context->DrawColliders);
+			Ignition::UI::SameLine();
+
+			if (Ignition::UI::Checkbox("PhysX Visualization", &m_Context->DrawPhysXVisualization))
+			{
+				if (Ignition::PhysicsWorld* physics = GetActivePhysicsWorld())
+				{
+					physics->SetDebugVisualizationEnabled(m_Context->DrawPhysXVisualization);
+				}
+			}
+		}
+
+		Ignition::UI::EndWindow();
 	}
 
 	void EditorLayer::DrawMenuBar()
@@ -148,6 +428,10 @@ namespace Editor
 	{
 		Ignition::UI::PushWindowPadding(0.0f, 0.0f);
 
+		// Play mode is never ambiguous: the viewport frame goes orange while the simulation owns the scene
+		const bool playing = m_Context->Play != PlayState::Edit;
+		Ignition::UI::PushWindowBorder(playing ? 3.0f : 0.0f, PlayBorderColor);
+
 		if (Ignition::UI::BeginWindow("Viewport"))
 		{
 			m_Context->ViewportHovered = Ignition::UI::IsWindowHovered();
@@ -172,6 +456,7 @@ namespace Editor
 		}
 
 		Ignition::UI::EndWindow();
+		Ignition::UI::PopWindowBorder();
 		Ignition::UI::PopStyleVariable();
 	}
 
@@ -184,36 +469,32 @@ namespace Editor
 			return;
 		}
 
-		ImGuizmo::SetOrthographic(false);
-		ImGuizmo::SetDrawlist();
-		ImGuizmo::SetRect(m_Context->ViewportPosition.x, m_Context->ViewportPosition.y, m_Context->ViewportSize.x, m_Context->ViewportSize.y);
+		Ignition::UI::SetGizmoViewportRect(m_Context->ViewportPosition, m_Context->ViewportSize);
 
 		Ignition::TransformComponent& transform = m_Context->Selection.GetTransform();
-		glm::mat4 transformMatrix = transform.GetMatrix();
 
 		// Hold Ctrl to snap: 0.5 m translate, 15 degrees rotate
-		const bool snap = m_Input->IsKeyDown(Ignition::ScanCode::LCTRL);
-		const float snapValue = m_GizmoOperation == ImGuizmo::ROTATE ? 15.0f : 0.5f;
-		const std::array<float, 3> snapValues = { snapValue, snapValue, snapValue };
+		const bool snapping = m_Input->IsKeyDown(Ignition::ScanCode::LCTRL);
+		const float snap = snapping ? (m_GizmoOperation == Ignition::UI::GizmoOperation::Rotate ? 15.0f : 0.5f) : 0.0f;
+		const Ignition::UI::GizmoMode mode = m_GizmoWorldSpace ? Ignition::UI::GizmoMode::World : Ignition::UI::GizmoMode::Local;
 
-		const ImGuizmo::MODE mode = (m_GizmoWorldSpace && m_GizmoOperation != ImGuizmo::SCALE) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
-
-		ImGuizmo::Manipulate(glm::value_ptr(m_Camera->GetView()), glm::value_ptr(m_Camera->GetProjection()), static_cast<ImGuizmo::OPERATION>(m_GizmoOperation), mode, glm::value_ptr(transformMatrix), nullptr, snap ? snapValues.data() : nullptr);
+		const bool manipulated = Ignition::UI::TransformGizmo(m_Camera->GetView(), m_Camera->GetProjection(), m_GizmoOperation, mode, transform.Position, transform.Rotation, transform.Scale, snap);
 
 		// Suppress camera input while the gizmo is hot
-		m_Context->GizmoUsing = ImGuizmo::IsUsing() || ImGuizmo::IsOver();
+		m_Context->GizmoUsing = Ignition::UI::IsGizmoInUse() || Ignition::UI::IsGizmoHovered();
 
-		if (ImGuizmo::IsUsing())
+		if (!manipulated)
 		{
-			std::array<float, 3> translation{};
-			std::array<float, 3> rotationDegrees{};
-			std::array<float, 3> scale{};
+			return;
+		}
 
-			ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transformMatrix), translation.data(), rotationDegrees.data(), scale.data());
-
-			transform.Position = { translation[0], translation[1], translation[2] };
-			transform.Rotation = glm::radians(glm::vec3(rotationDegrees[0], rotationDegrees[1], rotationDegrees[2]));
-			transform.Scale = { scale[0], scale[1], scale[2] };
+		if (m_RuntimePhysics)
+		{
+			m_RuntimePhysics->PushTransform(m_Context->Selection);
+		}
+		else
+		{
+			m_Context->PhysicsSceneDirty = true;
 		}
 	}
 
@@ -237,6 +518,7 @@ namespace Editor
 					if (Ignition::UI::MenuItem("Duplicate"))
 					{
 						m_Context->Selection = m_Context->Scene->DuplicateEntity(entity);
+						m_Context->PhysicsSceneDirty = true;
 					}
 
 					if (Ignition::UI::MenuItem("Delete"))
@@ -268,6 +550,7 @@ namespace Editor
 				}
 
 				m_Context->Scene->DestroyEntity(deferredDelete);
+				m_Context->PhysicsSceneDirty = true;
 			}
 		}
 
@@ -301,7 +584,7 @@ namespace Editor
 			{
 				Ignition::TransformComponent& transform = entity.GetTransform();
 
-				Ignition::UI::DragFloat3("Position", transform.Position, 0.01f);
+				bool transformEdited = Ignition::UI::DragFloat3("Position", transform.Position, 0.01f);
 
 				// Radians in the component, degrees at the UI boundary only
 				glm::vec3 rotationDegrees = glm::degrees(transform.Rotation);
@@ -309,9 +592,22 @@ namespace Editor
 				if (Ignition::UI::DragFloat3("Rotation", rotationDegrees, 0.5f))
 				{
 					transform.Rotation = glm::radians(rotationDegrees);
+					transformEdited = true;
 				}
 
-				Ignition::UI::DragFloat3("Scale", transform.Scale, 0.01f);
+				transformEdited |= Ignition::UI::DragFloat3("Scale", transform.Scale, 0.01f);
+
+				if (transformEdited)
+				{
+					if (m_RuntimePhysics)
+					{
+						m_RuntimePhysics->PushTransform(entity);
+					}
+					else
+					{
+						m_Context->PhysicsSceneDirty = true;
+					}
+				}
 			}
 
 			if (Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer())
@@ -330,6 +626,103 @@ namespace Editor
 
 					Ignition::UI::ColorEdit4("Tint", meshRenderer->Material.Tint, true);
 					Ignition::UI::Checkbox("Two Sided", &meshRenderer->Material.TwoSided);
+				}
+			}
+
+			if (Ignition::RigidBodyComponent* rigidBody = entity.GetRigidBody())
+			{
+				if (Ignition::UI::CollapsingHeader("Rigid Body"))
+				{
+					static const char* const bodyTypes[] = { "Static", "Kinematic", "Dynamic" };
+					int bodyType = static_cast<int>(rigidBody->Type);
+
+					if (Ignition::UI::Combo("Type", &bodyType, bodyTypes, 3))
+					{
+						rigidBody->Type = static_cast<Ignition::RigidBodyType>(bodyType);
+						m_Context->PhysicsSceneDirty = true;
+					}
+
+					Ignition::UI::DragFloat("Mass (kg)", &rigidBody->Mass, 0.05f, 0.001f, 100000.0f);
+					Ignition::UI::DragFloat("Linear Damping", &rigidBody->LinearDamping, 0.005f, 0.0f, 10.0f);
+					Ignition::UI::DragFloat("Angular Damping", &rigidBody->AngularDamping, 0.005f, 0.0f, 10.0f);
+					Ignition::UI::Checkbox("Use Gravity", &rigidBody->UseGravity);
+				}
+			}
+
+			if (Ignition::BoxColliderComponent* collider = entity.GetBoxCollider())
+			{
+				if (Ignition::UI::CollapsingHeader("Box Collider"))
+				{
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat3("Half Extents", collider->HalfExtents, 0.01f);
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat3("Offset##Box", collider->Offset, 0.01f);
+
+					if (Ignition::UI::SmallButton("Remove##Box"))
+					{
+						entity.RemoveBoxCollider();
+						m_Context->PhysicsSceneDirty = true;
+					}
+				}
+			}
+
+			if (Ignition::SphereColliderComponent* collider = entity.GetSphereCollider())
+			{
+				if (Ignition::UI::CollapsingHeader("Sphere Collider"))
+				{
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat("Radius##Sphere", &collider->Radius, 0.01f, 0.001f, 1000.0f);
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat3("Offset##Sphere", collider->Offset, 0.01f);
+
+					if (Ignition::UI::SmallButton("Remove##Sphere"))
+					{
+						entity.RemoveSphereCollider();
+						m_Context->PhysicsSceneDirty = true;
+					}
+				}
+			}
+
+			if (Ignition::CapsuleColliderComponent* collider = entity.GetCapsuleCollider())
+			{
+				if (Ignition::UI::CollapsingHeader("Capsule Collider"))
+				{
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat("Radius##Capsule", &collider->Radius, 0.01f, 0.001f, 1000.0f);
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat("Half Height", &collider->HalfHeight, 0.01f, 0.001f, 1000.0f);
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat3("Offset##Capsule", collider->Offset, 0.01f);
+
+					if (Ignition::UI::SmallButton("Remove##Capsule"))
+					{
+						entity.RemoveCapsuleCollider();
+						m_Context->PhysicsSceneDirty = true;
+					}
+				}
+			}
+
+			if (Ignition::MeshColliderComponent* collider = entity.GetMeshCollider())
+			{
+				if (Ignition::UI::CollapsingHeader("Mesh Collider"))
+				{
+					Ignition::UI::LabelText("Mesh", collider->MeshAsset.empty() ? "<unreferenced>" : collider->MeshAsset.c_str());
+
+					if (Ignition::UI::Checkbox("Convex", &collider->Convex))
+					{
+						m_Context->PhysicsSceneDirty = true;
+					}
+
+					Ignition::UI::TextDisabled("Triangle meshes are static-only; dynamic bodies always cook convex");
+
+					if (Ignition::UI::SmallButton("Remove##Mesh"))
+					{
+						entity.RemoveMeshCollider();
+						m_Context->PhysicsSceneDirty = true;
+					}
+				}
+			}
+
+			if (Ignition::PhysicsMaterialComponent* physicsMaterial = entity.GetPhysicsMaterial())
+			{
+				if (Ignition::UI::CollapsingHeader("Physics Material"))
+				{
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat("Static Friction", &physicsMaterial->StaticFriction, 0.01f, 0.0f, 2.0f);
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat("Dynamic Friction", &physicsMaterial->DynamicFriction, 0.01f, 0.0f, 2.0f);
+					m_Context->PhysicsSceneDirty |= Ignition::UI::DragFloat("Restitution", &physicsMaterial->Restitution, 0.01f, 0.0f, 1.0f);
 				}
 			}
 
@@ -357,6 +750,49 @@ namespace Editor
 					}
 				}
 
+				if (!entity.GetRigidBody() && Ignition::UI::MenuItem("Rigid Body"))
+				{
+					entity.AddRigidBody();
+					m_Context->PhysicsSceneDirty = true;
+				}
+
+				if (!entity.GetBoxCollider() && Ignition::UI::MenuItem("Box Collider"))
+				{
+					entity.AddBoxCollider();
+					m_Context->PhysicsSceneDirty = true;
+				}
+
+				if (!entity.GetSphereCollider() && Ignition::UI::MenuItem("Sphere Collider"))
+				{
+					entity.AddSphereCollider();
+					m_Context->PhysicsSceneDirty = true;
+				}
+
+				if (!entity.GetCapsuleCollider() && Ignition::UI::MenuItem("Capsule Collider"))
+				{
+					entity.AddCapsuleCollider();
+					m_Context->PhysicsSceneDirty = true;
+				}
+
+				if (!entity.GetMeshCollider() && Ignition::UI::MenuItem("Mesh Collider"))
+				{
+					Ignition::MeshColliderComponent collider;
+
+					if (const Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer())
+					{
+						collider.MeshAsset = meshRenderer->MeshAsset;
+					}
+
+					entity.AddMeshCollider(collider);
+					m_Context->PhysicsSceneDirty = true;
+				}
+
+				if (!entity.GetPhysicsMaterial() && Ignition::UI::MenuItem("Physics Material"))
+				{
+					entity.AddPhysicsMaterial();
+					m_Context->PhysicsSceneDirty = true;
+				}
+
 				Ignition::UI::EndPopup();
 			}
 		}
@@ -372,6 +808,10 @@ namespace Editor
 			Ignition::UI::Text("Frame Time: {:.2f} ms", Ignition::Time::GetAverageFrameTimeMilliseconds());
 			Ignition::UI::Text("Entities: {}", m_Context->Scene->GetEntities().size());
 			Ignition::UI::Text("Scene: {}", m_Context->ScenePath.empty() ? "<unsaved>" : m_Context->ScenePath);
+
+			const Ignition::PhysicsWorld* physics = GetActivePhysicsWorld();
+
+			Ignition::UI::Text("Physics: {} ({} bodies @ {:.0f} Hz)", m_Context->Play == PlayState::Edit ? "edit" : (m_Context->Play == PlayState::Playing ? "playing" : "paused"), physics ? physics->GetBodyCount() : 0, 1.0f / Ignition::Time::GetFixedTimeStep());
 
 			if (!m_FrameTimeHistory.empty())
 			{
@@ -444,6 +884,8 @@ namespace Editor
 
 	void EditorLayer::NewScene()
 	{
+		OnStop();
+
 		m_Context->Selection = {};
 
 		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
@@ -452,11 +894,15 @@ namespace Editor
 		}
 
 		m_Context->ScenePath.clear();
+		m_Context->PhysicsSceneDirty = true;
 	}
 
 	void EditorLayer::OpenScene(const std::string& filepath)
 	{
+		OnStop();
+
 		m_Context->Selection = {};
+		m_Context->PhysicsSceneDirty = true;
 
 		const Ignition::SceneSerializer serializer(m_Context->Scene, m_Assets);
 

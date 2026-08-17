@@ -25,7 +25,7 @@ namespace Ignition
 		float g_TimeScale = 1.0f;
 		float g_MaximumDeltaTime = 0.25f;
 
-		float g_FixedTimeStep = 1.0f / 60.0f;
+		float g_FixedTimeStep = 1.0f / 120.0f; // Conventions: physics runs at 120 Hz
 		float g_FixedAccumulator = 0.0f;
 		int g_FixedStepsThisFrame = 0;
 

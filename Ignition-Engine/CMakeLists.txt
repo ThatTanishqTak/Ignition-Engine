@@ -59,6 +59,7 @@ target_link_libraries(Ignition PRIVATE
     spdlog::spdlog
     imgui
     imguizmo
+    Jolt
     stb
     entt
     assimp::assimp

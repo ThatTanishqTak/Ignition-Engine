@@ -29,3 +29,6 @@
 [submodule "Vendor/yaml-cpp"]
 	path = Vendor/yaml-cpp
 	url = https://github.com/ThatTanishqTak/yaml-cpp.git
+[submodule "Vendor/JoltPhysics"]
+	path = Vendor/JoltPhysics
+	url = https://github.com/ThatTanishqTak/JoltPhysics.git

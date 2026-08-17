@@ -3,7 +3,9 @@
 #include "Editor/EditorContext.h"
 
 #include <Ignition/Core/Layer.h>
+#include <Ignition/UI/UI.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 #include <array>
@@ -13,6 +15,7 @@ namespace Ignition
 	class AssetRegistry;
 	class Camera;
 	class Input;
+	class PhysicsWorld;
 	class Renderer;
 }
 
@@ -27,6 +30,7 @@ namespace Editor
 
 		void OnAttach() override;
 		void OnUpdate(float deltaTime) override;
+		void OnFixedUpdate(float fixedTimeStep) override;
 		void OnRender() override;
 
 	private:
@@ -38,6 +42,7 @@ namespace Editor
 		};
 
 		void DrawMenuBar();
+		void DrawToolbarPanel();
 		void DrawViewportPanel();
 		void DrawGizmo();
 		void DrawHierarchyPanel();
@@ -50,6 +55,15 @@ namespace Editor
 		void OpenScene(const std::string& filepath);
 		void SaveScene(const std::string& filepath);
 
+		void OnPlay();
+		void OnStop();
+
+		void SubmitColliderGizmos();
+		void RefreshEditorPhysics();
+		void PickEntityUnderCursor();
+
+		Ignition::PhysicsWorld* GetActivePhysicsWorld() const;
+
 	private:
 		EditorContext* m_Context = nullptr;
 		Ignition::Camera* m_Camera = nullptr;
@@ -57,7 +71,11 @@ namespace Editor
 		Ignition::Renderer* m_Renderer = nullptr;
 		Ignition::Input* m_Input = nullptr;
 
-		int m_GizmoOperation = 0; // ImGuizmo::OPERATION, stored as int to keep this header ImGuizmo-free
+		std::unique_ptr<Ignition::PhysicsWorld> m_EditorPhysics;  // always alive, static shapes, raycast picking
+		std::unique_ptr<Ignition::PhysicsWorld> m_RuntimePhysics; // built on Play, destroyed on Stop
+		std::string m_Snapshot;
+
+		Ignition::UI::GizmoOperation m_GizmoOperation = Ignition::UI::GizmoOperation::Translate;
 		bool m_GizmoWorldSpace = true;
 		bool m_DockLayoutInitialized = false;
 
