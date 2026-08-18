@@ -4,7 +4,9 @@
 
 #include "Ignition/Core/ProfilerVulkan.h"
 #include "Ignition/Fluid/FluidSolver2D.h"
+#include "Ignition/Fluid/FluidSolver3D.h"
 #include "Ignition/Renderer/Renderer.h"
+#include "Ignition/Renderer/Vulkan/VulkanComputePass.h"
 #include "Ignition/Renderer/Vertex.h"
 
 #include <glm/mat4x4.hpp>
@@ -36,6 +38,7 @@ namespace Ignition
 	class VulkanImage;
 	class VulkanGPUTimer;
 	class VulkanFluidSolver2D;
+	class VulkanFluidSolver3D;
 
 	class VulkanRenderer
 	{
@@ -66,11 +69,13 @@ namespace Ignition
 		std::unique_ptr<VulkanTexture> CreateTexture(const std::string& filepath);
 		std::unique_ptr<VulkanTexture> CreateTextureFromMemory(const void* data, size_t size);
 		std::unique_ptr<VulkanFluidSolver2D> CreateFluidSolver2D(const FluidSolver2DSettings& settings);
+		std::unique_ptr<VulkanFluidSolver3D> CreateFluidSolver3D(const FluidSolver3DSettings& settings);
 
 		void Retire(std::unique_ptr<VulkanMesh> mesh);
 		void Retire(std::unique_ptr<VulkanTexture> texture);
 		void Retire(std::unique_ptr<VulkanImage> image);
 		void Retire(std::unique_ptr<VulkanFluidSolver2D> solver);
+		void Retire(std::unique_ptr<VulkanFluidSolver3D> solver);
 
 		// Publishes a renderer-owned image view to ImGui with the shared linear sampler
 		VkDescriptorSet AddImGuiTexture(VkImageView imageView);
@@ -127,8 +132,8 @@ namespace Ignition
 		std::unique_ptr<VulkanTexture> m_WhiteTexture;
 		std::unique_ptr<VulkanImGui> m_VulkanImGui;
 
-		// Compute work is recorded at the top of the frame, before any rendering begins
-		std::vector<VulkanFluidSolver2D*> m_FluidSolvers;
+		// Compute work is recorded at the top of the frame, before any rendering begins - one slot, whatever registers into it
+		std::vector<VulkanComputePass*> m_ComputePasses;
 
 		uint32_t m_FramePassTimer = UINT32_MAX;
 		uint32_t m_ScenePassTimer = UINT32_MAX;

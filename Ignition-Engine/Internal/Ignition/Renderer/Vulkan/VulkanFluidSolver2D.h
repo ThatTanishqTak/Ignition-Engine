@@ -2,6 +2,7 @@
 
 #include "Ignition/Fluid/FluidSolver2D.h"
 #include "Ignition/Renderer/Vulkan/VulkanBuffer.h"
+#include "Ignition/Renderer/Vulkan/VulkanComputePass.h"
 #include "Ignition/Renderer/Vulkan/VulkanComputePipeline.h"
 #include "Ignition/Renderer/Vulkan/VulkanFrameContext.h"
 
@@ -21,13 +22,13 @@ namespace Ignition
 	class VulkanImage;
 	class VulkanRenderer;
 
-	class VulkanFluidSolver2D
+	class VulkanFluidSolver2D final : public VulkanComputePass
 	{
 	public:
 		static constexpr uint32_t ReductionGroups = 64;
 
 		VulkanFluidSolver2D();
-		~VulkanFluidSolver2D();
+		~VulkanFluidSolver2D() override;
 
 		VulkanFluidSolver2D(const VulkanFluidSolver2D&) = delete;
 		VulkanFluidSolver2D& operator=(const VulkanFluidSolver2D&) = delete;
@@ -47,7 +48,7 @@ namespace Ignition
 		void SetColorScale(float scale) { m_ColorScale = scale; }
 
 		// Recorded by the renderer before the scene pass opens - compute cannot run inside dynamic rendering
-		void RecordCompute(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanGPUTimer* timer);
+		void RecordCompute(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanGPUTimer* timer) override;
 
 		uint64_t GetVisualizationTextureID() const { return reinterpret_cast<uint64_t>(m_ImGuiTexture); }
 		uint64_t GetStepCount() const { return m_StepCount; }

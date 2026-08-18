@@ -76,6 +76,7 @@ namespace Ignition
 	IG_DEFINE_COMPONENT_ACCESSORS(CapsuleColliderComponent, CapsuleCollider)
 	IG_DEFINE_COMPONENT_ACCESSORS(MeshColliderComponent, MeshCollider)
 	IG_DEFINE_COMPONENT_ACCESSORS(PhysicsMaterialComponent, PhysicsMaterial)
+	IG_DEFINE_COMPONENT_ACCESSORS(WindTunnelComponent, WindTunnel)
 
 #undef IG_DEFINE_COMPONENT_ACCESSORS
 }

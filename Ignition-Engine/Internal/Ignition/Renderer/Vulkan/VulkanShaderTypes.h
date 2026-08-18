@@ -2,6 +2,7 @@
 
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
 #include <cstdint>
@@ -32,4 +33,21 @@ namespace Ignition
 	};
 
 	static_assert(sizeof(FluidPushConstants) == 48, "Fluid push constant block must stay 48 bytes to match Fluid2D.slang");
+
+	// Mirrors FluidParameters3D in Fluid3D.slang. Every vec3 sits on a 16-byte boundary so the C++ offsets and the shader's std140 rows agree
+	struct FluidPushConstants3D
+	{
+		glm::uvec3 Resolution{ 0, 0, 0 };
+		uint32_t ReductionGroups = 0;
+		glm::vec3 ObstacleCenter{ 0.0f };          // lattice cells
+		float ObstacleRadius = 0.0f;               // lattice cells
+		glm::vec3 ReferencePoint{ 0.0f };          // lattice cells, torque is taken about this
+		float LatticeVelocity = 0.0f;
+		float RelaxationTime = 0.0f;
+		float SmagorinskyConstant = 0.0f;
+		uint32_t Flags = 0;                        // bit 0: rolling road
+		uint32_t Padding = 0;
+	};
+
+	static_assert(sizeof(FluidPushConstants3D) == 64, "Wind tunnel push constant block must stay 64 bytes to match Fluid3D.slang");
 }

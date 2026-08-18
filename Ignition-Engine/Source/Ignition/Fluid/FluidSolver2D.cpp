@@ -37,6 +37,10 @@ namespace Ignition
 		scaling.RelaxationTime = 3.0f * scaling.LatticeViscosity + 0.5f;
 		scaling.KinematicViscosity = scaling.LatticeViscosity * scaling.CellSize * scaling.CellSize / std::max(scaling.TimeStep, 1e-12f);
 
+		// The lab derives viscosity from the requested Reynolds number, so the lattice always carries exactly what was asked for - nothing is ever clamped away
+		scaling.EffectiveViscosity = scaling.KinematicViscosity;
+		scaling.SubgridLimited = false;
+
 		// Lattice force -> N per metre of span: density * length^3 / time^2 in two dimensions
 		scaling.ForceScale = settings.AirDensity * scaling.CellSize * scaling.CellSize * scaling.CellSize / std::max(scaling.TimeStep * scaling.TimeStep, 1e-24f);
 

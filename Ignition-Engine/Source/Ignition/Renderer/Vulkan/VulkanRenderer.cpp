@@ -12,6 +12,7 @@
 #include "Ignition/Renderer/Vulkan/VulkanLineRenderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanDescriptorAllocator.h"
 #include "Ignition/Renderer/Vulkan/VulkanFluidSolver2D.h"
+#include "Ignition/Renderer/Vulkan/VulkanFluidSolver3D.h"
 #include "Ignition/Renderer/Vulkan/VulkanGPUTimer.h"
 #include "Ignition/Renderer/DebugDrawBuffer.h"
 #include "Ignition/Renderer/Vulkan/VulkanTexture.h"
@@ -196,7 +197,7 @@ namespace Ignition
 			m_SelfReference.reset();
 		}
 
-		m_FluidSolvers.clear();
+		m_ComputePasses.clear();
 
 		DestroySceneRenderTarget();
 
@@ -434,14 +435,14 @@ namespace Ignition
 			m_FramePassTimer = m_VulkanGPUTimer->BeginPass(commandBuffer, "Frame");
 		}
 
-		// Compute cannot be recorded inside a dynamic rendering block, so every registered solver runs here
+		// Compute cannot be recorded inside a dynamic rendering block, so every registered pass runs here
 		{
 			IG_PROFILE_ZONE_NAMED("Fluid Record");
 			IG_PROFILE_GPU_ZONE(m_GPUProfiler, commandBuffer, "Fluid");
 
-			for (VulkanFluidSolver2D* solver : m_FluidSolvers)
+			for (VulkanComputePass* computePass : m_ComputePasses)
 			{
-				solver->RecordCompute(commandBuffer, m_FrameIndex, m_VulkanGPUTimer.get());
+				computePass->RecordCompute(commandBuffer, m_FrameIndex, m_VulkanGPUTimer.get());
 			}
 		}
 
@@ -968,7 +969,32 @@ namespace Ignition
 			return nullptr;
 		}
 
-		m_FluidSolvers.push_back(solver.get());
+		m_ComputePasses.push_back(solver.get());
+
+		return solver;
+	}
+
+	std::unique_ptr<VulkanFluidSolver3D> VulkanRenderer::CreateFluidSolver3D(const FluidSolver3DSettings& settings)
+	{
+		if (!IsValid() || !m_VulkanAllocator || !m_VulkanDescriptorAllocator)
+		{
+			return nullptr;
+		}
+
+		const char* basePath = SDL_GetBasePath();
+		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Fluid3D.spv";
+
+		auto solver = std::make_unique<VulkanFluidSolver3D>();
+		solver->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
+
+		if (!solver->IsValid())
+		{
+			solver->Shutdown();
+
+			return nullptr;
+		}
+
+		m_ComputePasses.push_back(solver.get());
 
 		return solver;
 	}
@@ -980,7 +1006,19 @@ namespace Ignition
 			return;
 		}
 
-		std::erase(m_FluidSolvers, solver.get());
+		std::erase(m_ComputePasses, static_cast<VulkanComputePass*>(solver.get()));
+
+		RetireResource(std::move(solver));
+	}
+
+	void VulkanRenderer::Retire(std::unique_ptr<VulkanFluidSolver3D> solver)
+	{
+		if (!solver)
+		{
+			return;
+		}
+
+		std::erase(m_ComputePasses, static_cast<VulkanComputePass*>(solver.get()));
 
 		RetireResource(std::move(solver));
 	}

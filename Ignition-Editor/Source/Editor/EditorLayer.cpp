@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <numeric>
 
 namespace Editor
 {
@@ -55,8 +56,42 @@ namespace Editor
 			return history.empty() ? fallback : *std::max_element(history.begin(), history.end());
 		}
 
+		// Instantaneous LBM forces oscillate because the flow does; averaging is a reading choice, not noise reduction
+		float HistoryAverage(const std::vector<float>& history, float fallback)
+		{
+			return history.empty() ? fallback : std::accumulate(history.begin(), history.end(), 0.0f) / static_cast<float>(history.size());
+		}
+
+		struct TunnelResolution
+		{
+			const char* Label;
+			uint32_t X;
+			uint32_t Y;
+			uint32_t Z;
+		};
+
+		// Long in Z: the wake needs room downstream, the same reason the 2D channel is wide
+		constexpr std::array<TunnelResolution, 4> TunnelResolutions = { {
+			{ "64 x 32 x 128",    64,  32, 128 },
+			{ "128 x 64 x 256",  128,  64, 256 },
+			{ "128 x 128 x 256", 128, 128, 256 },
+			{ "256 x 128 x 512", 256, 128, 512 },
+		} };
+
+		// D3Q19 ping-pong plus mask, macroscopic fields and per-cell force - Appendix B's budget, measured off the actual layout rather than quoted
+		float LatticeMegabytes(const glm::uvec3& resolution)
+		{
+			const double cells = static_cast<double>(resolution.x) * resolution.y * resolution.z;
+			const double bytes = cells * (19.0 * 2.0 * sizeof(float) + sizeof(uint32_t) + 4.0 * sizeof(float) + 3.0 * sizeof(float));
+
+			return static_cast<float>(bytes / (1024.0 * 1024.0));
+		}
+
 		constexpr glm::vec4 ColliderColor{ 0.2f, 0.9f, 0.3f, 1.0f };
 		constexpr glm::vec4 PlayBorderColor{ 1.0f, 0.55f, 0.1f, 1.0f };
+		constexpr glm::vec4 TunnelColor{ 0.35f, 0.65f, 1.0f, 1.0f };
+		constexpr glm::vec4 FlowColor{ 0.95f, 0.85f, 0.2f, 1.0f };
+		constexpr glm::vec4 ObstacleColor{ 1.0f, 0.45f, 0.35f, 1.0f };
 
 		glm::mat4 ColliderTransform(const Ignition::TransformComponent& transform, const glm::vec3& offset)
 		{
@@ -76,6 +111,8 @@ namespace Editor
 		m_FrameTimeHistory.reserve(FrameHistorySize);
 		m_DragHistory.reserve(FrameHistorySize);
 		m_LiftHistory.reserve(FrameHistorySize);
+		m_TunnelDragHistory.reserve(FrameHistorySize);
+		m_TunnelDownforceHistory.reserve(FrameHistorySize);
 	}
 
 	void EditorLayer::OnAttach()
@@ -143,6 +180,7 @@ namespace Editor
 		}
 
 		UpdateFluidLab();
+		UpdateWindTunnel();
 
 		if (m_Context->ViewportHovered && !m_Context->GizmoUsing && m_Input->IsMouseButtonPressed(Ignition::MouseCode::LEFT))
 		{
@@ -361,6 +399,7 @@ namespace Editor
 		}
 
 		SubmitColliderGizmos();
+		SubmitTunnelGizmos();
 
 		Ignition::UI::BeginGizmoFrame();
 
@@ -380,6 +419,243 @@ namespace Editor
 		DrawInspectorPanel();
 		DrawStatsPanel();
 		DrawFluidLabPanel();
+		DrawAeroPanel();
+	}
+
+	Ignition::FluidSolver3DSettings EditorLayer::BuildTunnelSettings(const Ignition::TransformComponent& transform, const Ignition::WindTunnelComponent& tunnel) const
+	{
+		Ignition::FluidSolver3DSettings settings{};
+
+		settings.Resolution = tunnel.Resolution;
+		settings.DomainSize = tunnel.DomainSize;
+
+		// The entity sits on the floor at the centre of the tunnel, so placing it on the ground plane puts the rolling road where the road belongs
+		settings.Origin = transform.Position;
+		settings.ReferencePoint = transform.Position + tunnel.ReferencePoint;
+
+		settings.InletSpeed = tunnel.InletSpeed;
+		settings.AirDensity = tunnel.AirDensity;
+		settings.KinematicViscosity = tunnel.KinematicViscosity;
+		settings.SmagorinskyConstant = tunnel.SmagorinskyConstant;
+		settings.LatticeVelocity = tunnel.LatticeVelocity;
+		settings.MinimumRelaxationTime = tunnel.MinimumRelaxationTime;
+
+		settings.ReferenceLength = tunnel.ReferenceLength;
+		settings.Wheelbase = tunnel.Wheelbase;
+
+		settings.ObstacleDiameter = tunnel.ObstacleDiameter;
+		settings.ObstacleCenter = tunnel.ObstacleCenter;
+
+		settings.RollingRoad = tunnel.RollingRoad;
+
+		return settings;
+	}
+
+	void EditorLayer::UpdateWindTunnel()
+	{
+		IG_PROFILE_FUNCTION();
+
+		Ignition::Entity owner{};
+
+		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		{
+			if (entity.GetWindTunnel())
+			{
+				owner = entity;
+
+				break;
+			}
+		}
+
+		if (!owner.IsValid())
+		{
+			// Half a gigabyte of lattice has no business outliving the component that asked for it
+			if (m_Tunnel)
+			{
+				m_Tunnel.reset();
+				ClearAeroHistory();
+			}
+
+			return;
+		}
+
+		const Ignition::FluidSolver3DSettings settings = BuildTunnelSettings(owner.GetTransform(), *owner.GetWindTunnel());
+
+		if (!m_Tunnel)
+		{
+			m_Tunnel = std::make_unique<Ignition::FluidSolver3D>(m_Renderer, settings);
+			m_TunnelSettings = settings;
+
+			ClearAeroHistory();
+
+			if (!m_Tunnel->IsValid())
+			{
+				IG_APP_ERROR("Wind tunnel unavailable: check that Fluid3D.spv built, and the log for allocation or pipeline errors");
+			}
+		}
+		else if (settings != m_TunnelSettings)
+		{
+			// Resolution changes rebuild inside the facade; everything else rides in on push constants
+			m_TunnelSettings = settings;
+			m_Tunnel->Configure(settings);
+		}
+
+		if (!m_Tunnel->IsValid())
+		{
+			return;
+		}
+
+		uint32_t steps = 0;
+
+		if (m_TunnelRunning)
+		{
+			steps = static_cast<uint32_t>(m_TunnelStepsPerFrame);
+		}
+		else if (m_TunnelStepRequested)
+		{
+			steps = 1;
+		}
+
+		m_TunnelStepRequested = false;
+
+		if (steps > 0)
+		{
+			m_Tunnel->Step(steps);
+		}
+
+		RecordAeroHistory();
+	}
+
+	void EditorLayer::RecordAeroHistory()
+	{
+		const Ignition::AeroForces forces = m_Tunnel->GetForces();
+
+		PushHistory(m_TunnelDragHistory, forces.Drag);
+		PushHistory(m_TunnelDownforceHistory, forces.Downforce);
+
+		IG_PROFILE_PLOT("Tunnel Drag (N)", forces.Drag);
+		IG_PROFILE_PLOT("Tunnel Downforce (N)", forces.Downforce);
+	}
+
+	void EditorLayer::ClearAeroHistory()
+	{
+		m_TunnelDragHistory.clear();
+		m_TunnelDownforceHistory.clear();
+	}
+
+	void EditorLayer::SubmitTunnelGizmos()
+	{
+		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		{
+			const Ignition::WindTunnelComponent* tunnel = entity.GetWindTunnel();
+
+			if (!tunnel || !tunnel->DrawBounds)
+			{
+				continue;
+			}
+
+			const Ignition::FluidSolver3DSettings settings = BuildTunnelSettings(entity.GetTransform(), *tunnel);
+			const Ignition::FluidLatticeScaling scaling = Ignition::FluidSolver3D::ComputeScaling(settings);
+
+			// The lattice is what actually gets simulated, so the lattice is what gets drawn - cubic cells make it a little larger than the requested box
+			const glm::vec3 extent = glm::vec3(settings.Resolution) * scaling.CellSize;
+			const glm::vec3 center = settings.Origin + glm::vec3(0.0f, 0.5f * extent.y, 0.0f);
+			const glm::vec3 minimum = settings.Origin - glm::vec3(0.5f * extent.x, 0.0f, 0.5f * extent.z);
+
+			Ignition::DebugDraw::Box(glm::translate(glm::mat4(1.0f), center), extent * 0.5f, TunnelColor);
+
+			// Air flows in -Z, so the arrow leaves the inlet face pointing at the car's nose
+			const glm::vec3 inlet = center + glm::vec3(0.0f, 0.0f, 0.5f * extent.z);
+			Ignition::DebugDraw::Arrow(inlet, inlet - glm::vec3(0.0f, 0.0f, glm::min(1.0f, 0.25f * extent.z)), FlowColor);
+
+			Ignition::DebugDraw::Sphere(glm::translate(glm::mat4(1.0f), minimum + settings.ObstacleCenter * extent), 0.5f * settings.ObstacleDiameter, ObstacleColor);
+		}
+	}
+
+	void EditorLayer::DrawAeroPanel()
+	{
+		if (!m_AeroPanelOpen)
+		{
+			return;
+		}
+
+		if (Ignition::UI::BeginWindow("Aero", &m_AeroPanelOpen))
+		{
+			if (!m_Tunnel || !m_Tunnel->IsValid())
+			{
+				Ignition::UI::TextDisabled("No wind tunnel in the scene - add a Wind Tunnel component to an entity sitting on the ground plane");
+
+				Ignition::UI::EndWindow();
+
+				return;
+			}
+
+			const Ignition::FluidLatticeScaling& scaling = m_Tunnel->GetScaling();
+			const Ignition::AeroForces forces = m_Tunnel->GetForces();
+
+			if (Ignition::UI::Button(m_TunnelRunning ? "Pause##Tunnel" : "Run##Tunnel"))
+			{
+				m_TunnelRunning = !m_TunnelRunning;
+			}
+
+			Ignition::UI::SameLine();
+
+			if (Ignition::UI::Button("Step##Tunnel"))
+			{
+				m_TunnelStepRequested = true;
+			}
+
+			Ignition::UI::SameLine();
+
+			if (Ignition::UI::Button("Reset##Tunnel"))
+			{
+				m_Tunnel->Reset();
+				ClearAeroHistory();
+			}
+
+			Ignition::UI::SliderInt("Steps / Frame##Tunnel", &m_TunnelStepsPerFrame, 1, 16);
+			Ignition::UI::Checkbox("Moving Average", &m_AeroAveraged);
+
+			Ignition::UI::SeparatorText("Lattice Mapping");
+
+			Ignition::UI::Text("Cell {:.4f} m | dt {:.3e} s | {} cells across the reference length", scaling.CellSize, scaling.TimeStep, static_cast<int>(scaling.ObstacleDiameterCells));
+			Ignition::UI::Text("tau {:.5f} | u_lattice {:.3f} | Re {:.3e}", scaling.RelaxationTime, scaling.LatticeVelocity, scaling.ReynoldsNumber);
+			Ignition::UI::Text("nu {:.3e} requested | {:.3e} m2/s resolved", scaling.KinematicViscosity, scaling.EffectiveViscosity);
+			Ignition::UI::Text("Steps {} | simulated {:.4f} s", m_Tunnel->GetStepCount(), m_Tunnel->GetSimulatedTime());
+
+			if (scaling.SubgridLimited)
+			{
+				Ignition::UI::TextDisabled("Air's viscosity is finer than this lattice resolves - the relaxation floor and Smagorinsky are carrying it, which is what a large-eddy simulation does");
+			}
+
+			if (!scaling.Stable)
+			{
+				Ignition::UI::TextDisabled("Unstable mapping: keep the lattice velocity at or below 0.1 and at least 8 cells across the reference length");
+			}
+
+			Ignition::UI::SeparatorText("Force (Newtons)");
+
+			const float drag = m_AeroAveraged ? HistoryAverage(m_TunnelDragHistory, forces.Drag) : forces.Drag;
+			const float downforce = m_AeroAveraged ? HistoryAverage(m_TunnelDownforceHistory, forces.Downforce) : forces.Downforce;
+
+			Ignition::UI::Text("Drag      {:>10.2f} N   Cd {:.3f}", drag, forces.DragCoefficient);
+			Ignition::UI::Text("Downforce {:>10.2f} N   Cl {:.3f}", downforce, forces.LiftCoefficient);
+			Ignition::UI::Text("Side      {:>10.2f} N", forces.SideForce);
+			Ignition::UI::Text("Balance   {:>9.1f}% front | frontal area {:.4f} m2", forces.FrontBalance * 100.0f, forces.ReferenceArea);
+
+			if (forces.ReferenceArea <= 0.0f)
+			{
+				Ignition::UI::TextDisabled("No solid cells in the lattice - the coefficients are undefined until the obstacle lands inside the domain");
+			}
+
+			if (!m_TunnelDragHistory.empty())
+			{
+				Ignition::UI::PlotLines("##TunnelDrag", m_TunnelDragHistory.data(), static_cast<int>(m_TunnelDragHistory.size()), HistoryMinimum(m_TunnelDragHistory, 0.0f), HistoryMaximum(m_TunnelDragHistory, 1.0f), 60.0f, "Drag (N)");
+				Ignition::UI::PlotLines("##TunnelDownforce", m_TunnelDownforceHistory.data(), static_cast<int>(m_TunnelDownforceHistory.size()), HistoryMinimum(m_TunnelDownforceHistory, -1.0f), HistoryMaximum(m_TunnelDownforceHistory, 1.0f), 60.0f, "Downforce (N)");
+			}
+		}
+
+		Ignition::UI::EndWindow();
 	}
 
 	void EditorLayer::UpdateFluidLab()
@@ -681,6 +957,11 @@ namespace Editor
 			if (Ignition::UI::MenuItem("Fluid Lab"))
 			{
 				m_FluidLabOpen = true;
+			}
+
+			if (Ignition::UI::MenuItem("Aero"))
+			{
+				m_AeroPanelOpen = true;
 			}
 
 			Ignition::UI::EndMenu();
@@ -995,6 +1276,67 @@ namespace Editor
 				}
 			}
 
+			if (Ignition::WindTunnelComponent* tunnel = entity.GetWindTunnel())
+			{
+				if (Ignition::UI::CollapsingHeader("Wind Tunnel"))
+				{
+					int resolutionIndex = 0;
+
+					for (size_t preset = 0; preset < TunnelResolutions.size(); ++preset)
+					{
+						if (tunnel->Resolution.x == TunnelResolutions[preset].X && tunnel->Resolution.y == TunnelResolutions[preset].Y && tunnel->Resolution.z == TunnelResolutions[preset].Z)
+						{
+							resolutionIndex = static_cast<int>(preset);
+
+							break;
+						}
+					}
+
+					static const char* const resolutions[] = { TunnelResolutions[0].Label, TunnelResolutions[1].Label, TunnelResolutions[2].Label, TunnelResolutions[3].Label };
+
+					// The only control that reallocates, and the only one worth checking against the dev GPU's VRAM first
+					if (Ignition::UI::Combo("Resolution", &resolutionIndex, resolutions, static_cast<int>(TunnelResolutions.size())))
+					{
+						tunnel->Resolution = { TunnelResolutions[resolutionIndex].X, TunnelResolutions[resolutionIndex].Y, TunnelResolutions[resolutionIndex].Z };
+					}
+
+					Ignition::UI::Text("Lattice: {:.0f} MB", LatticeMegabytes(tunnel->Resolution));
+
+					Ignition::UI::DragFloat3("Domain Size (m)", tunnel->DomainSize, 0.05f);
+
+					Ignition::UI::SeparatorText("Flow");
+
+					Ignition::UI::DragFloat("Inlet Speed (m/s)", &tunnel->InletSpeed, 0.5f, 1.0f, 120.0f);
+					Ignition::UI::DragFloat("Air Density", &tunnel->AirDensity, 0.001f, 0.1f, 5.0f);
+					Ignition::UI::DragFloat("Kinematic Viscosity", &tunnel->KinematicViscosity, 1e-7f, 1e-7f, 1e-3f);
+					Ignition::UI::SliderFloat("Lattice Velocity", &tunnel->LatticeVelocity, 0.01f, 0.15f);
+					Ignition::UI::SliderFloat("Smagorinsky C", &tunnel->SmagorinskyConstant, 0.0f, 0.3f);
+					Ignition::UI::SliderFloat("Minimum tau", &tunnel->MinimumRelaxationTime, 0.5005f, 0.55f);
+
+					Ignition::UI::Checkbox("Rolling Road", &tunnel->RollingRoad);
+					Ignition::UI::TextDisabled("A static floor grows a false boundary layer that corrupts underbody flow - not optional for automotive work");
+
+					Ignition::UI::SeparatorText("Reference");
+
+					Ignition::UI::DragFloat("Reference Length (m)", &tunnel->ReferenceLength, 0.01f, 0.01f, 20.0f);
+					Ignition::UI::DragFloat("Wheelbase (m)", &tunnel->Wheelbase, 0.01f, 0.1f, 20.0f);
+					Ignition::UI::DragFloat3("Reference Point", tunnel->ReferencePoint, 0.01f);
+
+					Ignition::UI::SeparatorText("Obstacle");
+
+					Ignition::UI::TextDisabled("Analytic sphere until the voxelizer lands - the sphere rung needs no mesh, and it keeps solver bugs separable from voxelizer bugs");
+					Ignition::UI::DragFloat("Diameter (m)", &tunnel->ObstacleDiameter, 0.01f, 0.01f, 20.0f);
+					Ignition::UI::DragFloat3("Center (fraction)", tunnel->ObstacleCenter, 0.005f);
+
+					Ignition::UI::Checkbox("Draw Bounds", &tunnel->DrawBounds);
+
+					if (Ignition::UI::SmallButton("Remove##WindTunnel"))
+					{
+						entity.RemoveWindTunnel();
+					}
+				}
+			}
+
 			Ignition::UI::Separator();
 
 			if (Ignition::UI::Button("Add Component"))
@@ -1060,6 +1402,11 @@ namespace Editor
 				{
 					entity.AddPhysicsMaterial();
 					m_Context->PhysicsSceneDirty = true;
+				}
+
+				if (!entity.GetWindTunnel() && Ignition::UI::MenuItem("Wind Tunnel"))
+				{
+					entity.AddWindTunnel();
 				}
 
 				Ignition::UI::EndPopup();

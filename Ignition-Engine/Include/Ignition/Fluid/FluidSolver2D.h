@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Ignition/Core/Export.h"
+#include "Ignition/Fluid/FluidTypes.h"
 
 #include <glm/vec2.hpp>
 
@@ -11,13 +12,6 @@ namespace Ignition
 {
 	class Renderer;
 	struct FluidSolver2DImplementation;
-
-	enum class FluidField
-	{
-		VelocityMagnitude = 0,
-		Vorticity,
-		Density
-	};
 
 	struct FluidSolver2DSettings
 	{
@@ -35,21 +29,6 @@ namespace Ignition
 
 		float ObstacleDiameter = 0.2f;             // m
 		glm::vec2 ObstacleCenter{ 0.25f, 0.5f };   // fraction of the domain, (0,0) = inlet floor
-	};
-
-	// Physical inputs mapped onto the lattice - the numbers most first-time LBM confusion lives in
-	struct FluidLatticeScaling
-	{
-		float CellSize = 0.0f;                     // m per cell
-		float TimeStep = 0.0f;                     // s per lattice step
-		float LatticeVelocity = 0.0f;
-		float LatticeViscosity = 0.0f;
-		float RelaxationTime = 0.0f;
-		float ObstacleDiameterCells = 0.0f;
-		float KinematicViscosity = 0.0f;           // m2/s implied by the requested Reynolds number
-		float ReynoldsNumber = 0.0f;
-		float ForceScale = 0.0f;                   // lattice force -> N per metre of span
-		bool Stable = false;
 	};
 
 	// Forces are per metre of span, as a 2D simulation measures them

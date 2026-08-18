@@ -50,6 +50,10 @@ namespace Ignition
 		IGNITION_API PhysicsMaterialComponent* GetPhysicsMaterial() const;
 		IGNITION_API void RemovePhysicsMaterial();
 
+		IGNITION_API WindTunnelComponent& AddWindTunnel(const WindTunnelComponent& tunnel = {});
+		IGNITION_API WindTunnelComponent* GetWindTunnel() const;
+		IGNITION_API void RemoveWindTunnel();
+
 		uint32_t GetID() const { return m_ID; }
 
 		bool operator==(const Entity& other) const { return m_ID == other.m_ID && m_Scene == other.m_Scene; }

@@ -50,4 +50,30 @@ namespace Ignition
 		std::string MeshAsset;
 		std::string AlbedoAsset;
 	};
+
+	// The tunnel is a scene object like anything else: serialized, inspectable, gizmo-positionable.
+	// The entity's position is the centre of the floor, so the rolling road sits exactly on it
+	struct WindTunnelComponent
+	{
+		glm::uvec3 Resolution{ 128, 64, 256 };        // X across, Y up, Z along the flow
+		glm::vec3 DomainSize{ 4.0f, 2.0f, 8.0f };     // m; cells are cubic, so the lattice covers at least this
+
+		float InletSpeed = 40.0f;                     // m/s, air flows in -Z
+		float AirDensity = 1.225f;                    // kg/m3
+		float KinematicViscosity = 1.48e-5f;          // m2/s
+		float SmagorinskyConstant = 0.16f;
+		float LatticeVelocity = 0.06f;
+		float MinimumRelaxationTime = 0.503f;         // the floor Smagorinsky relaxes around once air's viscosity outruns the lattice
+
+		float ReferenceLength = 1.0f;                 // m, sets the reported Reynolds number
+		float Wheelbase = 3.6f;                       // m, the moment arm aero balance is split over
+		glm::vec3 ReferencePoint{ 0.0f };             // relative to the entity, torque is taken about it
+
+		// Analytic sphere until the voxelizer lands - the second rung of the ladder needs no mesh, and it keeps solver bugs separable from voxelizer bugs
+		float ObstacleDiameter = 1.0f;                // m
+		glm::vec3 ObstacleCenter{ 0.5f, 0.5f, 0.7f }; // fraction of the lattice
+
+		bool RollingRoad = true;
+		bool DrawBounds = true;
+	};
 }

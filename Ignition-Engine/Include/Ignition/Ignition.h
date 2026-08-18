@@ -45,6 +45,7 @@
 
 // Fluid
 #include "Ignition/Fluid/FluidSolver2D.h"
+#include "Ignition/Fluid/FluidSolver3D.h"
 
 // Scene
 #include "Ignition/Scene/Scene.h"

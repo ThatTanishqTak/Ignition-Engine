@@ -14,6 +14,7 @@
 #include <array>
 
 #include "Ignition/Fluid/FluidSolver2D.h"
+#include "Ignition/Fluid/FluidSolver3D.h"
 
 namespace Ignition
 {
@@ -22,6 +23,8 @@ namespace Ignition
 	class Input;
 	class PhysicsWorld;
 	class Renderer;
+	struct TransformComponent;
+	struct WindTunnelComponent;
 }
 
 namespace Editor
@@ -54,12 +57,19 @@ namespace Editor
 		void DrawInspectorPanel();
 		void DrawStatsPanel();
 		void DrawFluidLabPanel();
+		void DrawAeroPanel();
 		void DrawPathPrompt();
 		void PromptForPath(PathPrompt prompt);
 
 		void UpdateFluidLab();
 		void RecordFluidHistory();
 		void ClearFluidHistory();
+
+		void UpdateWindTunnel();
+		void SubmitTunnelGizmos();
+		void RecordAeroHistory();
+		void ClearAeroHistory();
+		Ignition::FluidSolver3DSettings BuildTunnelSettings(const Ignition::TransformComponent& transform, const Ignition::WindTunnelComponent& tunnel) const;
 
 		void NewScene();
 		void OpenScene(const std::string& filepath);
@@ -115,5 +125,17 @@ namespace Editor
 		float m_PreviousLift = 0.0f;
 		float m_PreviousCrossingTime = -1.0f;
 		float m_StrouhalNumber = 0.0f;
+
+		// Wind tunnel - the 3D rung. Created lazily, because the lattice is hundreds of megabytes and most scenes have no tunnel in them
+		std::unique_ptr<Ignition::FluidSolver3D> m_Tunnel;
+		Ignition::FluidSolver3DSettings m_TunnelSettings;
+		bool m_AeroPanelOpen = true;
+		bool m_TunnelRunning = false;
+		bool m_TunnelStepRequested = false;
+		bool m_AeroAveraged = true;
+		int m_TunnelStepsPerFrame = 2;
+
+		std::vector<float> m_TunnelDragHistory;
+		std::vector<float> m_TunnelDownforceHistory;
 	};
 }

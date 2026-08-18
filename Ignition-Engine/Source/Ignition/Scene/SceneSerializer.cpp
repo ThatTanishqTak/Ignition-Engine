@@ -49,6 +49,33 @@ namespace YAML
 	};
 
 	template<>
+	struct convert<glm::uvec3>
+	{
+		static Node encode(const glm::uvec3& value)
+		{
+			Node node;
+			node.push_back(value.x);
+			node.push_back(value.y);
+			node.push_back(value.z);
+			node.SetStyle(EmitterStyle::Flow);
+
+			return node;
+		}
+
+		static bool decode(const Node& node, glm::uvec3& value)
+		{
+			if (!node.IsSequence() || node.size() != 3)
+			{
+				return false;
+			}
+
+			value = { node[0].as<uint32_t>(), node[1].as<uint32_t>(), node[2].as<uint32_t>() };
+
+			return true;
+		}
+	};
+
+	template<>
 	struct convert<glm::vec4>
 	{
 		static Node encode(const glm::vec4& value)
@@ -82,6 +109,13 @@ namespace Ignition
 	namespace
 	{
 		YAML::Emitter& operator<<(YAML::Emitter& out, const glm::vec3& value)
+		{
+			out << YAML::Flow << YAML::BeginSeq << value.x << value.y << value.z << YAML::EndSeq;
+
+			return out;
+		}
+
+		YAML::Emitter& operator<<(YAML::Emitter& out, const glm::uvec3& value)
 		{
 			out << YAML::Flow << YAML::BeginSeq << value.x << value.y << value.z << YAML::EndSeq;
 
@@ -233,6 +267,27 @@ namespace Ignition
 				out << YAML::EndMap;
 			}
 
+			if (const WindTunnelComponent* tunnel = entity.GetWindTunnel())
+			{
+				out << YAML::Key << "WindTunnel" << YAML::Value << YAML::BeginMap;
+				out << YAML::Key << "Resolution" << YAML::Value << tunnel->Resolution;
+				out << YAML::Key << "DomainSize" << YAML::Value << tunnel->DomainSize;
+				out << YAML::Key << "InletSpeed" << YAML::Value << tunnel->InletSpeed;
+				out << YAML::Key << "AirDensity" << YAML::Value << tunnel->AirDensity;
+				out << YAML::Key << "KinematicViscosity" << YAML::Value << tunnel->KinematicViscosity;
+				out << YAML::Key << "SmagorinskyConstant" << YAML::Value << tunnel->SmagorinskyConstant;
+				out << YAML::Key << "LatticeVelocity" << YAML::Value << tunnel->LatticeVelocity;
+				out << YAML::Key << "MinimumRelaxationTime" << YAML::Value << tunnel->MinimumRelaxationTime;
+				out << YAML::Key << "ReferenceLength" << YAML::Value << tunnel->ReferenceLength;
+				out << YAML::Key << "Wheelbase" << YAML::Value << tunnel->Wheelbase;
+				out << YAML::Key << "ReferencePoint" << YAML::Value << tunnel->ReferencePoint;
+				out << YAML::Key << "ObstacleDiameter" << YAML::Value << tunnel->ObstacleDiameter;
+				out << YAML::Key << "ObstacleCenter" << YAML::Value << tunnel->ObstacleCenter;
+				out << YAML::Key << "RollingRoad" << YAML::Value << tunnel->RollingRoad;
+				out << YAML::Key << "DrawBounds" << YAML::Value << tunnel->DrawBounds;
+				out << YAML::EndMap;
+			}
+
 			out << YAML::EndMap;
 		}
 
@@ -367,6 +422,28 @@ namespace Ignition
 				collider.Offset = colliderNode["Offset"].as<glm::vec3>(glm::vec3(0.0f));
 
 				entity.AddMeshCollider(collider);
+			}
+
+			if (const YAML::Node tunnelNode = entityNode["WindTunnel"])
+			{
+				WindTunnelComponent tunnel;
+				tunnel.Resolution = tunnelNode["Resolution"].as<glm::uvec3>(glm::uvec3(128, 64, 256));
+				tunnel.DomainSize = tunnelNode["DomainSize"].as<glm::vec3>(glm::vec3(4.0f, 2.0f, 8.0f));
+				tunnel.InletSpeed = tunnelNode["InletSpeed"].as<float>(40.0f);
+				tunnel.AirDensity = tunnelNode["AirDensity"].as<float>(1.225f);
+				tunnel.KinematicViscosity = tunnelNode["KinematicViscosity"].as<float>(1.48e-5f);
+				tunnel.SmagorinskyConstant = tunnelNode["SmagorinskyConstant"].as<float>(0.16f);
+				tunnel.LatticeVelocity = tunnelNode["LatticeVelocity"].as<float>(0.06f);
+				tunnel.MinimumRelaxationTime = tunnelNode["MinimumRelaxationTime"].as<float>(0.503f);
+				tunnel.ReferenceLength = tunnelNode["ReferenceLength"].as<float>(1.0f);
+				tunnel.Wheelbase = tunnelNode["Wheelbase"].as<float>(3.6f);
+				tunnel.ReferencePoint = tunnelNode["ReferencePoint"].as<glm::vec3>(glm::vec3(0.0f));
+				tunnel.ObstacleDiameter = tunnelNode["ObstacleDiameter"].as<float>(1.0f);
+				tunnel.ObstacleCenter = tunnelNode["ObstacleCenter"].as<glm::vec3>(glm::vec3(0.5f, 0.5f, 0.7f));
+				tunnel.RollingRoad = tunnelNode["RollingRoad"].as<bool>(true);
+				tunnel.DrawBounds = tunnelNode["DrawBounds"].as<bool>(true);
+
+				entity.AddWindTunnel(tunnel);
 			}
 		}
 
