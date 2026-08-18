@@ -125,6 +125,11 @@ namespace Ignition
 		return static_cast<float>(GetStepCount()) * m_Scaling.TimeStep;
 	}
 
+	uint64_t FluidSolver3D::GetSliceTextureID() const
+	{
+		return m_Implementation->Handle ? m_Implementation->Handle->GetSliceTextureID() : 0;
+	}
+
 	AeroForces FluidSolver3D::GetForces() const
 	{
 		AeroForces forces{};

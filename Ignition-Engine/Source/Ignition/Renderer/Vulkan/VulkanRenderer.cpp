@@ -171,6 +171,28 @@ namespace Ignition
 			m_WhiteTexture.reset();
 		}
 
+		// Unit quad for in-scene overlays. UV v runs top-down because the slice kernels store their top row first
+		{
+			const std::vector<Vertex> quadVertices = {
+				{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+				{ {  0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+				{ {  0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f } },
+				{ { -0.5f,  0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
+			};
+			const std::vector<uint32_t> quadIndices = { 0, 1, 2, 2, 3, 0 };
+
+			m_OverlayQuad = std::make_unique<VulkanMesh>();
+			m_OverlayQuad->Initialize(m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), quadVertices, quadIndices);
+
+			if (!m_OverlayQuad->IsValid())
+			{
+				IG_CORE_ERROR("Vulkan renderer: overlay quad unavailable, fluid slice planes will not draw");
+
+				m_OverlayQuad->Shutdown();
+				m_OverlayQuad.reset();
+			}
+		}
+
 		m_VulkanImGui = std::make_unique<VulkanImGui>();
 		m_VulkanImGui->Initialize(window, m_VulkanInstance->GetInstance(), m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanSwapchain->GetImageCount(), m_VulkanSwapchain->GetImageFormat(), DepthFormat);
 
@@ -239,6 +261,12 @@ namespace Ignition
 		{
 			m_WhiteTexture->Shutdown();
 			m_WhiteTexture.reset();
+		}
+
+		if (m_OverlayQuad)
+		{
+			m_OverlayQuad->Shutdown();
+			m_OverlayQuad.reset();
 		}
 
 		if (m_VulkanDescriptorAllocator)
@@ -524,6 +552,42 @@ namespace Ignition
 		}
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
+
+		// Fluid overlays draw into the still-open scene pass: translucent slice quads first, then GPU-resident line work (tracers, pressure shells)
+		if (m_VulkanPipeline && m_VulkanPipeline->IsValid() && m_OverlayQuad && m_OverlayQuad->IsValid())
+		{
+			for (VulkanComputePass* computePass : m_ComputePasses)
+			{
+				VulkanSceneQuad quad;
+
+				if (!computePass->GetSceneQuad(quad) || quad.Texture == VK_NULL_HANDLE)
+				{
+					continue;
+				}
+
+				m_VulkanPipeline->BindTransparent(commandBuffer);
+
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VulkanPipeline->GetPipelineLayout(), 0, 1, &quad.Texture, 0, nullptr);
+
+				PushConstantData pushConstantData{};
+				pushConstantData.MVP = m_SceneViewProjection * quad.Transform;
+				pushConstantData.Tint = quad.Tint;
+
+				vkCmdPushConstants(commandBuffer, m_VulkanPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstantData), &pushConstantData);
+
+				m_OverlayQuad->Bind(commandBuffer);
+
+				vkCmdDrawIndexed(commandBuffer, m_OverlayQuad->GetIndexCount(), 1, 0, 0, 0);
+			}
+		}
+
+		if (m_VulkanLineRenderer && m_VulkanLineRenderer->IsValid())
+		{
+			for (VulkanComputePass* computePass : m_ComputePasses)
+			{
+				computePass->RecordSceneLines(commandBuffer, m_FrameIndex, *m_VulkanLineRenderer, m_SceneViewProjection);
+			}
+		}
 
 		// The scene (or main) pass is still open here, which is exactly where debug lines belong
 		if (m_VulkanLineRenderer && m_VulkanLineRenderer->IsValid())
@@ -985,7 +1049,7 @@ namespace Ignition
 		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Fluid3D.spv";
 
 		auto solver = std::make_unique<VulkanFluidSolver3D>();
-		solver->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
+		solver->Initialize(*this, m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
 
 		if (!solver->IsValid())
 		{

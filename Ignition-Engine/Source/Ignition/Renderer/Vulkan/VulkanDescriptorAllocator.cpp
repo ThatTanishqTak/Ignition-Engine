@@ -204,4 +204,22 @@ namespace Ignition
 
 		vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 	}
+
+	void VulkanDescriptorAllocator::WriteCombinedImageSampler(VkDevice device, VkDescriptorSet descriptorSet, uint32_t binding, VkImageView imageView, VkSampler sampler)
+	{
+		VkDescriptorImageInfo imageInfo{};
+		imageInfo.sampler = sampler;
+		imageInfo.imageView = imageView;
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		VkWriteDescriptorSet write{};
+		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write.dstSet = descriptorSet;
+		write.dstBinding = binding;
+		write.descriptorCount = 1;
+		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		write.pImageInfo = &imageInfo;
+
+		vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+	}
 }

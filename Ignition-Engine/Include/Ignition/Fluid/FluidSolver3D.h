@@ -41,6 +41,18 @@ namespace Ignition
 
 		bool RollingRoad = true;
 
+		bool SliceEnabled = true;
+		FluidSliceAxis SliceAxis = FluidSliceAxis::X;
+		float SlicePosition = 0.5f;                   // fraction along the axis
+		FluidField SliceField = FluidField::VelocityMagnitude;
+		float ColorScale = 1.0f;
+		float SliceOpacity = 0.85f;
+
+		bool ParticlesEnabled = true;
+		uint32_t ParticleCount = 100000;              // clamped to the solver's capacity
+
+		bool SurfacePressureEnabled = false;
+
 		bool operator==(const FluidSolver3DSettings&) const = default;
 	};
 
@@ -83,6 +95,9 @@ namespace Ignition
 
 		IGNITION_API uint64_t GetStepCount() const;
 		IGNITION_API float GetSimulatedTime() const;
+
+		// Panel preview of the slice plane; zero until the first frame has rendered it
+		IGNITION_API uint64_t GetSliceTextureID() const;
 
 		// One frame latent: the reduction lands in a readback buffer the frame after it is dispatched
 		IGNITION_API AeroForces GetForces() const;

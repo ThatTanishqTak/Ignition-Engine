@@ -9,6 +9,13 @@ namespace Ignition
 		Density
 	};
 
+	enum class FluidSliceAxis
+	{
+		X = 0, // side view - the classic tunnel profile
+		Y,     // top view
+		Z      // front view, looking into the wind
+	};
+
 	struct FluidLatticeScaling
 	{
 		float CellSize = 0.0f; // m per cell

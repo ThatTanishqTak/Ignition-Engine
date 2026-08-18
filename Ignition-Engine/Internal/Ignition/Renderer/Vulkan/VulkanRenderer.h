@@ -130,6 +130,7 @@ namespace Ignition
 		std::unique_ptr<VulkanLineRenderer> m_VulkanLineRenderer;
 		std::unique_ptr<VulkanGPUTimer> m_VulkanGPUTimer;
 		std::unique_ptr<VulkanTexture> m_WhiteTexture;
+		std::unique_ptr<VulkanMesh> m_OverlayQuad; // unit quad for fluid slice planes and other in-scene overlays
 		std::unique_ptr<VulkanImGui> m_VulkanImGui;
 
 		// Compute work is recorded at the top of the frame, before any rendering begins - one slot, whatever registers into it

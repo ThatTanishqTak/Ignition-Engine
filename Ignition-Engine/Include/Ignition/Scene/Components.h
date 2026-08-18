@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <cstdint>
 
 namespace Ignition
 {
@@ -75,5 +76,16 @@ namespace Ignition
 
 		bool RollingRoad = true;
 		bool DrawBounds = true;
+
+		// Visualization (Step 3.4) - all live, none reset the flow
+		bool SliceEnabled = true;
+		int SliceAxis = 0;                            // 0 = X (side), 1 = Y (top), 2 = Z (front)
+		float SlicePosition = 0.5f;                   // fraction along the axis
+		int SliceField = 0;                           // 0 = velocity, 1 = vorticity, 2 = pressure
+		float ColorScale = 1.0f;
+		float SliceOpacity = 0.85f;
+		bool ParticlesEnabled = true;
+		uint32_t ParticleCount = 100000;
+		bool SurfacePressureEnabled = false;
 	};
 }

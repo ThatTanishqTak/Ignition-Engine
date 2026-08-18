@@ -47,7 +47,17 @@ namespace Ignition
 		float SmagorinskyConstant = 0.0f;
 		uint32_t Flags = 0;                        // bit 0: rolling road
 		uint32_t Padding = 0;
+
+		// Visualization (Step 3.4)
+		uint32_t SliceAxis = 0;
+		uint32_t SliceField = 0;
+		float SliceFraction = 0.5f;
+		float ColorScale = 1.0f;
+		uint32_t ParticleCount = 0;
+		uint32_t FrameSeed = 0;
+		uint32_t ShellVertexCapacity = 0;
+		float AdvectSteps = 0.0f;                  // lattice steps this frame - zero while paused, which freezes the tracers
 	};
 
-	static_assert(sizeof(FluidPushConstants3D) == 64, "Wind tunnel push constant block must stay 64 bytes to match Fluid3D.slang");
+	static_assert(sizeof(FluidPushConstants3D) == 96, "Wind tunnel push constant block must stay 96 bytes to match Fluid3D.slang");
 }

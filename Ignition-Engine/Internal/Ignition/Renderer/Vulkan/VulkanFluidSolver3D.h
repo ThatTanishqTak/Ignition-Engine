@@ -8,16 +8,20 @@
 
 #include <vulkan/vulkan.h>
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace Ignition
 {
 	class VulkanDescriptorAllocator;
 	class VulkanGPUTimer;
+	class VulkanImage;
+	class VulkanRenderer;
 	struct FluidPushConstants3D;
 
 	class VulkanFluidSolver3D final : public VulkanComputePass
@@ -31,7 +35,7 @@ namespace Ignition
 		VulkanFluidSolver3D(const VulkanFluidSolver3D&) = delete;
 		VulkanFluidSolver3D& operator=(const VulkanFluidSolver3D&) = delete;
 
-		void Initialize(VkDevice device, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const FluidSolver3DSettings& settings);
+		void Initialize(VulkanRenderer& renderer, VkDevice device, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const FluidSolver3DSettings& settings);
 		void Shutdown();
 
 		bool IsValid() const;
@@ -43,6 +47,12 @@ namespace Ignition
 		void RequestSteps(uint32_t steps) { m_PendingSteps += steps; }
 
 		void RecordCompute(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanGPUTimer* timer) override;
+
+		// Scene-pass hooks: the slice plane as a translucent quad, tracers and the pressure shell as GPU-resident lines
+		bool GetSceneQuad(VulkanSceneQuad& quad) override;
+		void RecordSceneLines(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanLineRenderer& lines, const glm::mat4& viewProjection) override;
+
+		uint64_t GetSliceTextureID() const { return m_SliceInitialized ? reinterpret_cast<uint64_t>(m_SliceImGuiTexture) : 0; }
 
 		uint64_t GetStepCount() const { return m_StepCount; }
 		glm::vec3 GetLatticeForce() const { return m_LatticeForce; }
@@ -56,14 +66,19 @@ namespace Ignition
 
 		FluidPushConstants3D BuildParameters() const;
 
-		void Dispatch(VkCommandBuffer commandBuffer, const VulkanComputePipeline& pipeline, VkDescriptorSet descriptorSet, uint32_t groupsX, uint32_t groupsY = 1, uint32_t groupsZ = 1) const;
+		void Dispatch(VkCommandBuffer commandBuffer, const VulkanComputePipeline& pipeline, VkDescriptorSet descriptorSet, const FluidPushConstants3D& parameters, uint32_t groupsX, uint32_t groupsY = 1, uint32_t groupsZ = 1) const;
+		void RecordVisualization(VkCommandBuffer commandBuffer, const FluidPushConstants3D& parameters, uint32_t steps, VulkanGPUTimer* timer);
+		void TransitionSlice(VkCommandBuffer commandBuffer, bool toStorage);
 		void CopyResults(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 		void ReadResults(uint32_t frameIndex);
+
+		glm::mat4 LatticeToWorld() const;
 
 	private:
 		VkDevice m_Device = VK_NULL_HANDLE;
 		VmaAllocator m_Allocator = VK_NULL_HANDLE;
 		VulkanDescriptorAllocator* m_DescriptorAllocator = nullptr;
+		std::weak_ptr<VulkanRenderer*> m_Renderer;
 
 		FluidSolver3DSettings m_Settings;
 		FluidLatticeScaling m_Scaling;
@@ -78,6 +93,21 @@ namespace Ignition
 		std::array<VulkanBuffer, VulkanFrameContext::MaximumFramesInFlight> m_Readback;
 		std::array<bool, VulkanFrameContext::MaximumFramesInFlight> m_ReadbackPending{};
 
+		// Visualization (Step 3.4)
+		VulkanBuffer m_Particles;
+		VulkanBuffer m_ParticleVertices; // compute-written, drawn by the line pipeline - nothing is read back
+		VulkanBuffer m_ShellVertices;
+		VulkanBuffer m_ShellIndirect;    // VkDrawIndirectCommand appended to by the shell kernel
+
+		std::unique_ptr<VulkanImage> m_Slice;
+		VkSampler m_SliceSampler = VK_NULL_HANDLE;
+		VkDescriptorSet m_SliceSceneTexture = VK_NULL_HANDLE; // texture-layout set for the in-scene quad
+		VkDescriptorSet m_SliceImGuiTexture = VK_NULL_HANDLE; // panel preview
+		bool m_SliceInitialized = false;
+		bool m_ParticlesReady = false;
+		bool m_ShellReady = false;
+		uint32_t m_FrameCounter = 0;
+
 		VkDescriptorSetLayout m_SetLayout = VK_NULL_HANDLE;
 		std::array<VkDescriptorSet, 2> m_DescriptorSets{};
 
@@ -86,6 +116,11 @@ namespace Ignition
 		VulkanComputePipeline m_StreamCollidePipeline;
 		VulkanComputePipeline m_ReducePartialPipeline;
 		VulkanComputePipeline m_ReduceFinalPipeline;
+		VulkanComputePipeline m_SlicePipeline;
+		VulkanComputePipeline m_InitializeParticlesPipeline;
+		VulkanComputePipeline m_AdvectParticlesPipeline;
+		VulkanComputePipeline m_ShellPipeline;
+		VulkanComputePipeline m_ShellFinalizePipeline;
 
 		uint32_t m_CurrentSet = 0;
 		uint32_t m_PendingSteps = 0;

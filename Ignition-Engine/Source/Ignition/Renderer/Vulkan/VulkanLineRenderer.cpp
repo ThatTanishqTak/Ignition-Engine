@@ -261,6 +261,38 @@ namespace Ignition
 		return buffer.IsValid();
 	}
 
+	void VulkanLineRenderer::DrawExternal(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer, uint32_t vertexCount, const glm::mat4& viewProjection)
+	{
+		if (!IsValid() || vertexBuffer == VK_NULL_HANDLE || vertexCount == 0)
+		{
+			return;
+		}
+
+		const VkDeviceSize offset = 0;
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
+		vkCmdPushConstants(commandBuffer, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &viewProjection);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+		vkCmdDraw(commandBuffer, vertexCount, 1, 0, 0);
+	}
+
+	void VulkanLineRenderer::DrawExternalIndirect(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer, VkBuffer indirectBuffer, const glm::mat4& viewProjection)
+	{
+		if (!IsValid() || vertexBuffer == VK_NULL_HANDLE || indirectBuffer == VK_NULL_HANDLE)
+		{
+			return;
+		}
+
+		const VkDeviceSize offset = 0;
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
+		vkCmdPushConstants(commandBuffer, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &viewProjection);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+
+		// The vertex count was appended by a compute kernel; only the GPU knows it
+		vkCmdDrawIndirect(commandBuffer, indirectBuffer, 0, 1, sizeof(VkDrawIndirectCommand));
+	}
+
 	void VulkanLineRenderer::Draw(VkCommandBuffer commandBuffer, uint32_t frameIndex, const glm::mat4& viewProjection, const std::vector<DebugLineVertex>& depthTested, const std::vector<DebugLineVertex>& overlay)
 	{
 		if (!IsValid() || (depthTested.empty() && overlay.empty()))

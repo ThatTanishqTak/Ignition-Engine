@@ -32,6 +32,7 @@ namespace Ignition
 
 		static void WriteStorageBuffer(VkDevice device, VkDescriptorSet descriptorSet, uint32_t binding, VkBuffer buffer, VkDeviceSize range, VkDeviceSize offset = 0);
 		static void WriteStorageImage(VkDevice device, VkDescriptorSet descriptorSet, uint32_t binding, VkImageView imageView);
+		static void WriteCombinedImageSampler(VkDevice device, VkDescriptorSet descriptorSet, uint32_t binding, VkImageView imageView, VkSampler sampler);
 
 	private:
 		VkDevice m_Device = VK_NULL_HANDLE;

@@ -285,6 +285,15 @@ namespace Ignition
 				out << YAML::Key << "ObstacleCenter" << YAML::Value << tunnel->ObstacleCenter;
 				out << YAML::Key << "RollingRoad" << YAML::Value << tunnel->RollingRoad;
 				out << YAML::Key << "DrawBounds" << YAML::Value << tunnel->DrawBounds;
+				out << YAML::Key << "SliceEnabled" << YAML::Value << tunnel->SliceEnabled;
+				out << YAML::Key << "SliceAxis" << YAML::Value << tunnel->SliceAxis;
+				out << YAML::Key << "SlicePosition" << YAML::Value << tunnel->SlicePosition;
+				out << YAML::Key << "SliceField" << YAML::Value << tunnel->SliceField;
+				out << YAML::Key << "ColorScale" << YAML::Value << tunnel->ColorScale;
+				out << YAML::Key << "SliceOpacity" << YAML::Value << tunnel->SliceOpacity;
+				out << YAML::Key << "ParticlesEnabled" << YAML::Value << tunnel->ParticlesEnabled;
+				out << YAML::Key << "ParticleCount" << YAML::Value << tunnel->ParticleCount;
+				out << YAML::Key << "SurfacePressureEnabled" << YAML::Value << tunnel->SurfacePressureEnabled;
 				out << YAML::EndMap;
 			}
 
@@ -442,6 +451,15 @@ namespace Ignition
 				tunnel.ObstacleCenter = tunnelNode["ObstacleCenter"].as<glm::vec3>(glm::vec3(0.5f, 0.5f, 0.7f));
 				tunnel.RollingRoad = tunnelNode["RollingRoad"].as<bool>(true);
 				tunnel.DrawBounds = tunnelNode["DrawBounds"].as<bool>(true);
+				tunnel.SliceEnabled = tunnelNode["SliceEnabled"].as<bool>(true);
+				tunnel.SliceAxis = tunnelNode["SliceAxis"].as<int>(0);
+				tunnel.SlicePosition = tunnelNode["SlicePosition"].as<float>(0.5f);
+				tunnel.SliceField = tunnelNode["SliceField"].as<int>(0);
+				tunnel.ColorScale = tunnelNode["ColorScale"].as<float>(1.0f);
+				tunnel.SliceOpacity = tunnelNode["SliceOpacity"].as<float>(0.85f);
+				tunnel.ParticlesEnabled = tunnelNode["ParticlesEnabled"].as<bool>(true);
+				tunnel.ParticleCount = tunnelNode["ParticleCount"].as<uint32_t>(100000);
+				tunnel.SurfacePressureEnabled = tunnelNode["SurfacePressureEnabled"].as<bool>(false);
 
 				entity.AddWindTunnel(tunnel);
 			}

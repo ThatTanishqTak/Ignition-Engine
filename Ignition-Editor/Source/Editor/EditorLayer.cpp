@@ -448,6 +448,16 @@ namespace Editor
 
 		settings.RollingRoad = tunnel.RollingRoad;
 
+		settings.SliceEnabled = tunnel.SliceEnabled;
+		settings.SliceAxis = static_cast<Ignition::FluidSliceAxis>(glm::clamp(tunnel.SliceAxis, 0, 2));
+		settings.SlicePosition = tunnel.SlicePosition;
+		settings.SliceField = static_cast<Ignition::FluidField>(glm::clamp(tunnel.SliceField, 0, 2));
+		settings.ColorScale = tunnel.ColorScale;
+		settings.SliceOpacity = tunnel.SliceOpacity;
+		settings.ParticlesEnabled = tunnel.ParticlesEnabled;
+		settings.ParticleCount = tunnel.ParticleCount;
+		settings.SurfacePressureEnabled = tunnel.SurfacePressureEnabled;
+
 		return settings;
 	}
 
@@ -466,6 +476,8 @@ namespace Editor
 				break;
 			}
 		}
+
+		m_TunnelEntity = owner;
 
 		if (!owner.IsValid())
 		{
@@ -652,6 +664,60 @@ namespace Editor
 			{
 				Ignition::UI::PlotLines("##TunnelDrag", m_TunnelDragHistory.data(), static_cast<int>(m_TunnelDragHistory.size()), HistoryMinimum(m_TunnelDragHistory, 0.0f), HistoryMaximum(m_TunnelDragHistory, 1.0f), 60.0f, "Drag (N)");
 				Ignition::UI::PlotLines("##TunnelDownforce", m_TunnelDownforceHistory.data(), static_cast<int>(m_TunnelDownforceHistory.size()), HistoryMinimum(m_TunnelDownforceHistory, -1.0f), HistoryMaximum(m_TunnelDownforceHistory, 1.0f), 60.0f, "Downforce (N)");
+			}
+
+			// Step 3.4 controls: everything writes to the component, so it serializes with the scene and applies live through Configure
+			if (Ignition::WindTunnelComponent* tunnel = m_TunnelEntity.IsValid() ? m_TunnelEntity.GetWindTunnel() : nullptr)
+			{
+				Ignition::UI::SeparatorText("Visualization");
+
+				Ignition::UI::Checkbox("Slice Plane", &tunnel->SliceEnabled);
+
+				static const char* const axes[] = { "X (side view)", "Y (top view)", "Z (front view)" };
+				Ignition::UI::Combo("Axis##Slice", &tunnel->SliceAxis, axes, 3);
+				Ignition::UI::SliderFloat("Position##Slice", &tunnel->SlicePosition, 0.0f, 1.0f);
+
+				static const char* const sliceFields[] = { "Velocity", "Vorticity", "Pressure" };
+				Ignition::UI::Combo("Field##Slice", &tunnel->SliceField, sliceFields, 3);
+
+				Ignition::UI::SliderFloat("Color Scale##Tunnel", &tunnel->ColorScale, 0.1f, 4.0f);
+				Ignition::UI::SliderFloat("Opacity##Slice", &tunnel->SliceOpacity, 0.1f, 1.0f);
+
+				Ignition::UI::Checkbox("Tracer Particles", &tunnel->ParticlesEnabled);
+
+				int particleCount = static_cast<int>(tunnel->ParticleCount);
+
+				if (Ignition::UI::SliderInt("Count##Particles", &particleCount, 1024, 262144))
+				{
+					tunnel->ParticleCount = static_cast<uint32_t>(particleCount);
+				}
+
+				Ignition::UI::Checkbox("Surface Pressure Shell", &tunnel->SurfacePressureEnabled);
+
+				if (tunnel->SliceEnabled && m_Tunnel->GetSliceTextureID() != 0)
+				{
+					// The preview shares the in-scene texture; aspect follows the plane the axis selects
+					const glm::uvec3 resolution = m_Tunnel->GetSettings().Resolution;
+
+					float sliceAspect = 1.0f;
+
+					if (tunnel->SliceAxis == 0)
+					{
+						sliceAspect = static_cast<float>(resolution.y) / static_cast<float>(resolution.z);
+					}
+					else if (tunnel->SliceAxis == 1)
+					{
+						sliceAspect = static_cast<float>(resolution.z) / static_cast<float>(resolution.x);
+					}
+					else
+					{
+						sliceAspect = static_cast<float>(resolution.y) / static_cast<float>(resolution.x);
+					}
+
+					const float previewWidth = Ignition::UI::GetContentRegionAvailable().x;
+
+					Ignition::UI::Image(m_Tunnel->GetSliceTextureID(), previewWidth, previewWidth * sliceAspect);
+				}
 			}
 		}
 

@@ -168,10 +168,31 @@ namespace Ignition
 			failed = !VK_CHECK(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_PipelineTwoSided));
 		}
 
+		if (!failed)
+		{
+			// Transparent overlay variant: cull stays off from the two-sided creation; blending on, depth test kept, depth write dropped
+			colorBlendAttachment.blendEnable = VK_TRUE;
+			colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+			colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+			depthStencilState.depthWriteEnable = VK_FALSE;
+
+			failed = !VK_CHECK(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_PipelineTransparent));
+		}
+
 		vkDestroyShaderModule(m_Device, shaderModule, nullptr);
 
 		if (failed)
 		{
+			if (m_PipelineTwoSided != VK_NULL_HANDLE)
+			{
+				vkDestroyPipeline(m_Device, m_PipelineTwoSided, nullptr);
+				m_PipelineTwoSided = VK_NULL_HANDLE;
+			}
+
 			if (m_Pipeline != VK_NULL_HANDLE)
 			{
 				vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
@@ -190,6 +211,12 @@ namespace Ignition
 	void VulkanPipeline::Shutdown()
 	{
 		IG_CORE_INFO("------- SHUTTING DOWN VULKAN PIPELINE -------");
+
+		if (m_PipelineTransparent != VK_NULL_HANDLE)
+		{
+			vkDestroyPipeline(m_Device, m_PipelineTransparent, nullptr);
+			m_PipelineTransparent = VK_NULL_HANDLE;
+		}
 
 		if (m_PipelineTwoSided != VK_NULL_HANDLE)
 		{
@@ -245,5 +272,10 @@ namespace Ignition
 	void VulkanPipeline::Bind(VkCommandBuffer commandBuffer, bool twoSided) const
 	{
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, twoSided ? m_PipelineTwoSided : m_Pipeline);
+	}
+
+	void VulkanPipeline::BindTransparent(VkCommandBuffer commandBuffer) const
+	{
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineTransparent);
 	}
 }

@@ -39,6 +39,16 @@ struct FluidParameters3D
     float SmagorinskyConstant;
     uint Flags;                 // bit 0: rolling road
     uint Padding;
+
+    // Visualization (Step 3.4)
+    uint SliceAxis;
+    uint SliceField;
+    float SliceFraction;
+    float ColorScale;
+    uint ParticleCount;
+    uint FrameSeed;
+    uint ShellVertexCapacity;
+    float AdvectSteps;          // lattice steps this frame - zero while paused, which freezes the tracers
 };
 
 [[vk::push_constant]]
@@ -52,6 +62,21 @@ FluidParameters3D g_Parameters;
 [[vk::binding(5, 0)]] RWStructuredBuffer<float> g_ForcePartials; // six components: force then torque
 [[vk::binding(6, 0)]] RWStructuredBuffer<float> g_ForceResult;
 [[vk::binding(7, 0)]] RWStructuredBuffer<uint> g_Area;          // inlet-facing solid columns
+
+// Visualization resources (Step 3.4)
+[[vk::binding(8, 0)]] RWStructuredBuffer<float4> g_Particles;        // xyz position (lattice), w remaining life in steps
+[[vk::binding(9, 0)]] RWStructuredBuffer<float> g_ParticleVertices;  // DebugLineVertex layout: 7 floats per vertex, 2 vertices per particle
+[[vk::binding(10, 0)]] RWStructuredBuffer<float> g_ShellVertices;    // same layout, appended by the surface shell
+[[vk::binding(11, 0)]] RWStructuredBuffer<uint> g_ShellIndirect;     // VkDrawIndirectCommand: vertexCount, instanceCount, firstVertex, firstInstance
+
+// An explicit format keeps this off the shaderStorageImageWriteWithoutFormat feature, like the 2D lab's image
+[[vk::binding(12, 0)]]
+[format("rgba8")]
+RWTexture2D<float4> g_Slice;
+
+static const uint ParticleCapacity = 262144; // must match VulkanFluidSolver3D.cpp
+static const uint SliceImageSize = 512;      // must match VulkanFluidSolver3D.cpp
+static const float TrailLength = 6.0;        // lattice cells of streak per unit lattice velocity - keeps direction visible while paused
 
 uint CellCount()
 {
@@ -383,13 +408,344 @@ void reduceForcePartial(uint3 dispatchID : SV_DispatchThreadID, uint3 groupID : 
 
     if (groupIndex == 0)
     {
-        g_ForcePartials[0 * groups + groupID.x] = s_Force[0].x;
-        g_ForcePartials[1 * groups + groupID.x] = s_Force[0].y;
-        g_ForcePartials[2 * groups + groupID.x] = s_Force[0].z;
-        g_ForcePartials[3 * groups + groupID.x] = s_Torque[0].x;
-        g_ForcePartials[4 * groups + groupID.x] = s_Torque[0].y;
-        g_ForcePartials[5 * groups + groupID.x] = s_Torque[0].z;
+        g_ForceResult[0] = s_Force[0].x;
+        g_ForceResult[1] = s_Force[0].y;
+        g_ForceResult[2] = s_Force[0].z;
+        g_ForceResult[3] = s_Torque[0].x;
+        g_ForceResult[4] = s_Torque[0].y;
+        g_ForceResult[5] = s_Torque[0].z;
     }
+}
+
+// ---------------- Step 3.4: visualization ----------------
+// The 2D lab's viz kernel is the template: same color maps, same linear-values-into-an-sRGB-composite convention
+
+float3 Ramp(float value)
+{
+    const float scaled = saturate(value) * 4.0;
+
+    if (scaled < 1.0)
+    {
+        return lerp(float3(0.05, 0.02, 0.20), float3(0.10, 0.35, 0.75), scaled);
+    }
+
+    if (scaled < 2.0)
+    {
+        return lerp(float3(0.10, 0.35, 0.75), float3(0.10, 0.75, 0.60), scaled - 1.0);
+    }
+
+    if (scaled < 3.0)
+    {
+        return lerp(float3(0.10, 0.75, 0.60), float3(0.95, 0.85, 0.20), scaled - 2.0);
+    }
+
+    return lerp(float3(0.95, 0.85, 0.20), float3(0.95, 0.25, 0.10), saturate(scaled - 3.0));
+}
+
+float3 Diverging(float value)
+{
+    const float3 neutral = float3(0.96, 0.96, 0.96);
+
+    return value >= 0.0 ? lerp(neutral, float3(0.85, 0.15, 0.10), saturate(value)) : lerp(neutral, float3(0.10, 0.30, 0.85), saturate(-value));
+}
+
+float3 LinearFromSRGB(float3 color)
+{
+    return pow(max(color, 0.0), 2.2);
+}
+
+uint Hash(uint value)
+{
+    value ^= value >> 16;
+    value *= 0x7feb352du;
+    value ^= value >> 15;
+    value *= 0x846ca68bu;
+    value ^= value >> 16;
+
+    return value;
+}
+
+float HashFloat(uint value)
+{
+    return float(Hash(value) & 0xFFFFFFu) / 16777216.0;
+}
+
+// Trilinear over cell centres; solid cells hold zero velocity, so the interpolation decays naturally at walls
+float3 SampleVelocity(float3 position)
+{
+    const float3 resolution = float3(g_Parameters.Resolution);
+    const float3 gridPosition = clamp(position, float3(0.5, 0.5, 0.5), resolution - 0.5) - 0.5;
+    const uint3 base = min(uint3(gridPosition), g_Parameters.Resolution - 2);
+    const float3 fraction = gridPosition - float3(base);
+
+    float3 velocity = float3(0.0, 0.0, 0.0);
+
+    for (uint corner = 0; corner < 8; ++corner)
+    {
+        const uint3 offset = uint3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
+        const float3 weights = lerp(1.0 - fraction, fraction, float3(offset));
+
+        velocity += weights.x * weights.y * weights.z * g_Fields[CellIndex(base + offset)].yzw;
+    }
+
+    return velocity;
+}
+
+float3 CellVorticity(uint3 cell)
+{
+    const uint3 resolution = g_Parameters.Resolution;
+    const uint3 lower = uint3(max(int3(cell) - 1, int3(0, 0, 0)));
+    const uint3 upper = min(cell + 1, resolution - 1);
+
+    const float3 dx = (g_Fields[CellIndex(uint3(upper.x, cell.y, cell.z))].yzw - g_Fields[CellIndex(uint3(lower.x, cell.y, cell.z))].yzw) * 0.5;
+    const float3 dy = (g_Fields[CellIndex(uint3(cell.x, upper.y, cell.z))].yzw - g_Fields[CellIndex(uint3(cell.x, lower.y, cell.z))].yzw) * 0.5;
+    const float3 dz = (g_Fields[CellIndex(uint3(cell.x, cell.y, upper.z))].yzw - g_Fields[CellIndex(uint3(cell.x, cell.y, lower.z))].yzw) * 0.5;
+
+    return float3(dy.z - dz.y, dz.x - dx.z, dx.y - dy.x);
+}
+
+void StoreParticleVertex(uint vertex, float3 position, float4 color)
+{
+    const uint base = vertex * 7;
+
+    g_ParticleVertices[base + 0] = position.x;
+    g_ParticleVertices[base + 1] = position.y;
+    g_ParticleVertices[base + 2] = position.z;
+    g_ParticleVertices[base + 3] = color.r;
+    g_ParticleVertices[base + 4] = color.g;
+    g_ParticleVertices[base + 5] = color.b;
+    g_ParticleVertices[base + 6] = color.a;
+}
+
+void StoreShellVertex(uint vertex, float3 position, float4 color)
+{
+    const uint base = vertex * 7;
+
+    g_ShellVertices[base + 0] = position.x;
+    g_ShellVertices[base + 1] = position.y;
+    g_ShellVertices[base + 2] = position.z;
+    g_ShellVertices[base + 3] = color.r;
+    g_ShellVertices[base + 4] = color.g;
+    g_ShellVertices[base + 5] = color.b;
+    g_ShellVertices[base + 6] = color.a;
+}
+
+// One pixel of the slice image maps to a continuous position on the plane, so the whole texture is always valid and UV 0-1 on the quad is always exact, whichever axis is chosen
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void sliceVisualize(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= SliceImageSize || id.y >= SliceImageSize)
+    {
+        return;
+    }
+
+    const float3 resolution = float3(g_Parameters.Resolution);
+    const float u = (float(id.x) + 0.5) / float(SliceImageSize);
+    const float v = (float(id.y) + 0.5) / float(SliceImageSize);
+
+    float3 position;
+
+    if (g_Parameters.SliceAxis == 0)
+    {
+        position = float3(g_Parameters.SliceFraction * resolution.x, v * resolution.y, u * resolution.z);
+    }
+    else if (g_Parameters.SliceAxis == 1)
+    {
+        position = float3(u * resolution.x, g_Parameters.SliceFraction * resolution.y, v * resolution.z);
+    }
+    else
+    {
+        position = float3(u * resolution.x, v * resolution.y, g_Parameters.SliceFraction * resolution.z);
+    }
+
+    const uint3 cell = uint3(clamp(position, float3(0.0, 0.0, 0.0), resolution - 1.0));
+    const uint index = CellIndex(cell);
+
+    float3 color;
+
+    if (IsSolid(g_Flags[index]))
+    {
+        // The mask is drawn as part of the field so voxelizer bugs will be visible instead of inferred
+        color = float3(0.12, 0.12, 0.14);
+    }
+    else
+    {
+        const float4 field = g_Fields[index];
+        const float reference = max(g_Parameters.LatticeVelocity * g_Parameters.ColorScale, 1e-6);
+
+        if (g_Parameters.SliceField == 0)
+        {
+            color = Ramp(length(field.yzw) / (1.5 * reference));
+        }
+        else if (g_Parameters.SliceField == 1)
+        {
+            color = Ramp(length(CellVorticity(cell)) / (0.5 * reference));
+        }
+        else
+        {
+            color = Diverging((field.x - 1.0) / max(0.02 * g_Parameters.ColorScale, 1e-6));
+        }
+    }
+
+    // Row 0 holds the top of the plane, so ImGui shows it upright; the scene quad's UVs account for the same flip
+    g_Slice[uint2(id.x, SliceImageSize - 1 - id.y)] = float4(LinearFromSRGB(color), 1.0);
+}
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void initializeParticles(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= ParticleCapacity)
+    {
+        return;
+    }
+
+    const float3 resolution = float3(g_Parameters.Resolution);
+    const uint seed = id.x * 747796405u + 2891336453u;
+
+    // Seeded through the whole volume so the tunnel reads as full of air immediately; anything inside the body respawns on its first advection
+    const float3 position = float3(
+        1.0 + HashFloat(seed) * (resolution.x - 2.0),
+        1.0 + HashFloat(seed + 1u) * (resolution.y - 2.0),
+        1.0 + HashFloat(seed + 2u) * (resolution.z - 2.0));
+
+    g_Particles[id.x] = float4(position, 100.0 + 900.0 * HashFloat(seed + 3u));
+
+    // Degenerate, fully transparent segments: drawing before the first advection is harmless
+    StoreParticleVertex(id.x * 2 + 0, position, float4(0.0, 0.0, 0.0, 0.0));
+    StoreParticleVertex(id.x * 2 + 1, position, float4(0.0, 0.0, 0.0, 0.0));
+}
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void advectParticles(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= g_Parameters.ParticleCount || id.x >= ParticleCapacity)
+    {
+        return;
+    }
+
+    const float3 resolution = float3(g_Parameters.Resolution);
+
+    float4 particle = g_Particles[id.x];
+    float3 position = particle.xyz;
+    float life = particle.w;
+
+    // RK2: sample, step to the midpoint, sample again
+    const float3 k1 = SampleVelocity(position);
+    const float3 k2 = SampleVelocity(position + 0.5 * g_Parameters.AdvectSteps * k1);
+
+    position += g_Parameters.AdvectSteps * k2;
+    life -= g_Parameters.AdvectSteps;
+
+    const bool outside = any(position < float3(1.0, 1.0, 1.0)) || any(position > resolution - 1.0);
+    const bool inSolid = IsSolid(g_Flags[CellIndex(uint3(clamp(position, float3(0.0, 0.0, 0.0), resolution - 1.0)))]);
+
+    if (outside || inSolid || life <= 0.0)
+    {
+        // Respawn in a thin band at the inlet, jittered per particle per frame. Life-based respawn keeps dead zones from hoarding stagnant tracers
+        const uint seed = id.x * 747796405u + g_Parameters.FrameSeed * 2891336453u;
+
+        position = float3(
+            1.0 + HashFloat(seed) * (resolution.x - 2.0),
+            1.0 + HashFloat(seed + 1u) * (resolution.y - 2.0),
+            resolution.z - 2.0 - 2.0 * HashFloat(seed + 2u));
+        life = 300.0 + 900.0 * HashFloat(seed + 3u);
+
+        g_Particles[id.x] = float4(position, life);
+
+        // A degenerate segment instead of a streak across the whole domain
+        StoreParticleVertex(id.x * 2 + 0, position, float4(0.0, 0.0, 0.0, 0.0));
+        StoreParticleVertex(id.x * 2 + 1, position, float4(0.0, 0.0, 0.0, 0.0));
+
+        return;
+    }
+
+    g_Particles[id.x] = float4(position, life);
+
+    const float3 velocity = SampleVelocity(position);
+    const float reference = max(g_Parameters.LatticeVelocity * g_Parameters.ColorScale, 1e-6);
+    const float3 color = LinearFromSRGB(Ramp(length(velocity) / (1.5 * reference)));
+
+    // The tail fades to transparent, so the streak reads as motion even when the sim is paused
+    const float3 tail = position - velocity * TrailLength;
+
+    StoreParticleVertex(id.x * 2 + 0, tail, float4(color, 0.0));
+    StoreParticleVertex(id.x * 2 + 1, position, float4(color, 0.9));
+}
+
+// Surface voxels are solid cells with at least one fluid axis-neighbour; near-wall density is the LBM's pressure
+[shader("compute")]
+[numthreads(8, 8, 4)]
+void surfaceShell(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= g_Parameters.Resolution))
+    {
+        return;
+    }
+
+    const uint cell = CellIndex(id);
+
+    if (!IsSolid(g_Flags[cell]))
+    {
+        return;
+    }
+
+    float density = 0.0;
+    uint fluidNeighbours = 0;
+
+    for (uint direction = 1; direction < 7; ++direction) // Directions[1..6] are the six axis neighbours
+    {
+        const int3 neighbour = int3(id) + Directions[direction];
+
+        if (any(neighbour < int3(0, 0, 0)) || any(neighbour >= int3(g_Parameters.Resolution)))
+        {
+            continue;
+        }
+
+        const uint neighbourCell = CellIndex(uint3(neighbour));
+
+        if (!IsSolid(g_Flags[neighbourCell]))
+        {
+            density += g_Fields[neighbourCell].x;
+            ++fluidNeighbours;
+        }
+    }
+
+    if (fluidNeighbours == 0)
+    {
+        return; // interior solid - the flood fill's territory, nothing to see
+    }
+
+    const float pressure = density / float(fluidNeighbours) - 1.0;
+    const float4 color = float4(LinearFromSRGB(Diverging(pressure / max(0.02 * g_Parameters.ColorScale, 1e-6))), 1.0);
+
+    uint slot;
+    InterlockedAdd(g_ShellIndirect[0], 6, slot);
+
+    if (slot + 6 > g_Parameters.ShellVertexCapacity)
+    {
+        return; // the finalize kernel clamps the count back to what actually fits
+    }
+
+    const float3 center = float3(id) + 0.5;
+    const float halfSize = 0.45;
+
+    StoreShellVertex(slot + 0, center - float3(halfSize, 0.0, 0.0), color);
+    StoreShellVertex(slot + 1, center + float3(halfSize, 0.0, 0.0), color);
+    StoreShellVertex(slot + 2, center - float3(0.0, halfSize, 0.0), color);
+    StoreShellVertex(slot + 3, center + float3(0.0, halfSize, 0.0), color);
+    StoreShellVertex(slot + 4, center - float3(0.0, 0.0, halfSize), color);
+    StoreShellVertex(slot + 5, center + float3(0.0, 0.0, halfSize), color);
+}
+
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void shellFinalize(uint3 id : SV_DispatchThreadID)
+{
+    // Clamp after the append pass so an overflowing frame draws a full buffer instead of reading past it
+    g_ShellIndirect[0] = min(g_ShellIndirect[0], g_Parameters.ShellVertexCapacity);
 }
 
 [shader("compute")]

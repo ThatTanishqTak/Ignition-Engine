@@ -129,6 +129,7 @@ namespace Editor
 		// Wind tunnel - the 3D rung. Created lazily, because the lattice is hundreds of megabytes and most scenes have no tunnel in them
 		std::unique_ptr<Ignition::FluidSolver3D> m_Tunnel;
 		Ignition::FluidSolver3DSettings m_TunnelSettings;
+		Ignition::Entity m_TunnelEntity; // the entity carrying the component, so the Aero panel can edit it
 		bool m_AeroPanelOpen = true;
 		bool m_TunnelRunning = false;
 		bool m_TunnelStepRequested = false;
