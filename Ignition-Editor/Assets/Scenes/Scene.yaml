@@ -1,13 +1,13 @@
 Scene: Untitled
 WindTunnel:
-  Resolution: [128, 64, 256]
-  DomainSize: [4, 2, 8]
+  Resolution: [256, 128, 512]
+  DomainSize: [6.2, 3.65, 7.8]
   ReferencePoint: [0, 0.5, 0]
-  InletSpeed: 40
+  InletSpeed: 57
   AirDensity: 1.225
   KinematicViscosity: 1.48e-05
   SmagorinskyConstant: 0.16
-  LatticeVelocity: 0.06
+  LatticeVelocity: 0.081
   MinimumRelaxationTime: 0.503
   ReferenceLength: 1
   Wheelbase: 1
@@ -19,27 +19,28 @@ WindTunnel:
   ColorScale: 1
   SliceOpacity: 0.85
   ParticlesEnabled: true
-  ParticleCount: 100000
-  SurfacePressureEnabled: false
-  VoxelDebugView: false
+  ParticleCount: 1024
+  SurfacePressureEnabled: true
+  VoxelDebugView: true
   FloodIterations: 8
 Entities:
-  - Name: Test Body
+  - Name: Entity
     Transform:
-      Position: [0, 0.5, 0]
+      Position: [0, 1.1491356, -0.95698106]
       Rotation: [0, 0, 0, 1]
       Scale: [1, 1, 1]
     MeshRenderer:
       Mesh: builtin:cube
       Albedo: ""
-      Tint: [0.7, 0.72, 0.75, 1]
+      Tint: [1, 1, 1, 1]
       TwoSided: false
     RigidBody:
-      Type: 0
+      Type: 2
       Mass: 1
       LinearDamping: 0.01
       AngularDamping: 0.05
-      UseGravity: false
-    BoxCollider:
-      HalfExtents: [0.5, 0.5, 0.5]
-      Offset: [0, 0, 0]
+      UseGravity: true
+    PhysicsMaterial:
+      StaticFriction: 0.6
+      DynamicFriction: 0.6
+      Restitution: 0

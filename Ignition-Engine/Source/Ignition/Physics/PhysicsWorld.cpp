@@ -374,8 +374,14 @@ namespace Ignition
 			const SphereColliderComponent* sphereCollider = registry.try_get<SphereColliderComponent>(handle);
 			const CapsuleColliderComponent* capsuleCollider = registry.try_get<CapsuleColliderComponent>(handle);
 			const MeshColliderComponent* meshCollider = registry.try_get<MeshColliderComponent>(handle);
+			const MeshRendererComponent* meshRenderer = registry.try_get<MeshRendererComponent>(handle);
 
-			if (!boxCollider && !sphereCollider && !capsuleCollider && !meshCollider)
+			const bool hasCollider = boxCollider || sphereCollider || capsuleCollider || meshCollider;
+
+			// Wind-tunnel geometry needs no physics, but a mesh the mouse cannot select is a bug in an editor. The query world falls back to the mesh bounds; the simulating world still ignores it
+			const bool boundsFallback = !hasCollider && m_Settings.QueryOnly && meshRenderer && meshRenderer->Mesh;
+
+			if (!hasCollider && !boundsFallback)
 			{
 				continue;
 			}
@@ -441,6 +447,20 @@ namespace Ignition
 				if (mesh)
 				{
 					colliderShapes.push_back({ mesh, meshCollider->Offset * transform.Scale });
+				}
+			}
+
+			if (boundsFallback)
+			{
+				const MeshBounds bounds = meshRenderer->Mesh->GetBounds();
+
+				const glm::vec3 halfExtents = glm::max(glm::abs((bounds.Maximum - bounds.Minimum) * 0.5f * transform.Scale), glm::vec3(0.001f));
+				const float convexRadius = std::min(JPH::cDefaultConvexRadius, glm::min(glm::min(halfExtents.x, halfExtents.y), halfExtents.z) * 0.5f);
+				const JPH::RefConst<JPH::Shape> box = FinalizeShape(JPH::BoxShapeSettings(ToJolt(halfExtents), convexRadius).Create(), "mesh bounds");
+
+				if (box)
+				{
+					colliderShapes.push_back({ box, (bounds.Maximum + bounds.Minimum) * 0.5f * transform.Scale });
 				}
 			}
 
