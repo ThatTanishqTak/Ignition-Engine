@@ -263,6 +263,7 @@ namespace Ignition
 		}
 
 		VkPhysicalDeviceFeatures physicalDeviceFeatures{};
+		physicalDeviceFeatures.fragmentStoresAndAtomics = VK_TRUE; // the volume ray march reads the lattice from a fragment shader
 		VkPhysicalDeviceVulkan11Features physicalDeviceVulkan11Features{};
 		physicalDeviceVulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
 		physicalDeviceVulkan11Features.shaderDrawParameters = VK_TRUE;

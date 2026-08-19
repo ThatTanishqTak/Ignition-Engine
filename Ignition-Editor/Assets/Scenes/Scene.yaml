@@ -1,14 +1,14 @@
 Scene: Untitled
 WindTunnel:
-  Resolution: [256, 128, 512]
+  Resolution: [64, 32, 128]
   DomainSize: [6.2, 3.65, 7.8]
   ReferencePoint: [0, 0.5, 0]
-  InletSpeed: 57
-  AirDensity: 1.225
+  InletSpeed: 50
+  AirDensity: 1
   KinematicViscosity: 1.48e-05
   SmagorinskyConstant: 0.16
   LatticeVelocity: 0.081
-  MinimumRelaxationTime: 0.503
+  MinimumRelaxationTime: 0.514
   ReferenceLength: 1
   Wheelbase: 1
   RollingRoad: true
@@ -16,7 +16,7 @@ WindTunnel:
   VolumeField: 1
   VolumeDensity: 4
   VolumeThreshold: 0.08
-  VolumeSteps: 256
+  VolumeSteps: 32
   SliceEnabled: false
   SliceAxis: 0
   SlicePosition: 0.5

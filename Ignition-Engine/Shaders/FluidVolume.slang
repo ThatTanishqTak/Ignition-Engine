@@ -28,8 +28,11 @@ struct VolumeParameters
 [[vk::push_constant]]
 VolumeParameters g_Parameters;
 
-[[vk::binding(0, 0)]] RWStructuredBuffer<uint> g_Flags;    // low byte: cell type, high byte: object id
-[[vk::binding(1, 0)]] RWStructuredBuffer<float4> g_Fields; // (density, ux, uy, uz)
+// Read-only, and it has to say so: a fragment shader may only touch a storage buffer it cannot write unless the device
+// enables fragmentStoresAndAtomics. StructuredBuffer emits the NonWritable decoration the spec asks for; the descriptor
+// type is still VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, so nothing on the C++ side changes
+[[vk::binding(0, 0)]] StructuredBuffer<uint> g_Flags;      // low byte: cell type, high byte: object id
+[[vk::binding(1, 0)]] StructuredBuffer<float4> g_Fields;   // (density, ux, uy, uz)
 
 static const uint CellSolid = 1;
 static const float MinimumTransmittance = 0.003; // below this the ray has nothing left to reveal
