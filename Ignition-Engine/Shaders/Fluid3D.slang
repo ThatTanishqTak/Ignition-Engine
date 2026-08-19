@@ -32,8 +32,6 @@ struct FluidParameters3D
 {
     uint3 Resolution;
     uint ReductionGroups;
-    float3 ObstacleCenter;      // lattice cells
-    float ObstacleRadius;       // lattice cells
     float3 ReferencePoint;      // lattice cells, torque is taken about this
     float LatticeVelocity;
     float RelaxationTime;
@@ -77,7 +75,7 @@ FluidParameters3D g_Parameters;
 [[vk::binding(10, 0)]] RWStructuredBuffer<float> g_ShellVertices;    // same layout, appended by the surface shell
 [[vk::binding(11, 0)]] RWStructuredBuffer<uint> g_ShellIndirect;     // VkDrawIndirectCommand: vertexCount, instanceCount, firstVertex, firstInstance
 
-// An explicit format keeps this off the shaderStorageImageWriteWithoutFormat feature, like the 2D lab's image
+// An explicit format keeps this off the optional shaderStorageImageWriteWithoutFormat device feature
 [[vk::binding(12, 0)]]
 [format("rgba8")]
 RWTexture2D<float4> g_Slice;
@@ -146,7 +144,7 @@ void WriteSolid(uint cell, uint count)
 }
 
 // ---------------- Step 3.2: mask construction ----------------
-// Mask first, distributions second. Both the analytic path and the voxelized path finish here, and initialize reads whatever they leave behind
+// Mask first, distributions second - initialize reads whatever the voxelizer leaves behind
 [shader("compute")]
 [numthreads(8, 8, 4)]
 void clearMask(uint3 id : SV_DispatchThreadID)
@@ -167,26 +165,6 @@ void clearMask(uint3 id : SV_DispatchThreadID)
     }
 }
 
-// A sphere has no hollow interior, so this path skips the flood fill entirely
-[shader("compute")]
-[numthreads(8, 8, 4)]
-void markAnalytic(uint3 id : SV_DispatchThreadID)
-{
-    if (any(id >= g_Parameters.Resolution))
-    {
-        return;
-    }
-
-    const float3 position = float3(id) + 0.5;
-
-    if (distance(position, g_Parameters.ObstacleCenter) > g_Parameters.ObstacleRadius)
-    {
-        return;
-    }
-
-    g_Flags[CellIndex(id)] = MakeFlag(CellSolid, 1u);
-}
-
 // A degenerate axis projects everything onto zero and separates nothing, which is the correct answer for it
 bool SeparatedAlong(float3 axis, float3 a, float3 b, float3 c, float3 halfExtent)
 {
@@ -199,8 +177,7 @@ bool SeparatedAlong(float3 axis, float3 a, float3 b, float3 c, float3 halfExtent
     return min(min(pa, pb), pc) > radius || max(max(pa, pb), pc) < -radius;
 }
 
-// Akenine-Moller: 13 separating axes - three box normals, the triangle normal, and nine box-edge x triangle-edge cross products.
-// One projection helper covers all thirteen, which is a great deal harder to get subtly wrong than transcribing the macro form
+// Akenine-Moller: 13 separating axes - three box normals, the triangle normal, and nine box-edge x triangle-edge crosses, all through one projection helper
 bool TriangleBoxOverlap(float3 center, float3 halfExtent, float3 v0, float3 v1, float3 v2)
 {
     const float3 a = v0 - center;
@@ -243,8 +220,7 @@ void voxelize(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    // Positions arrive already in lattice space - model, world and lattice transforms are folded into one CPU pass at upload,
-    // which keeps a matrix out of the push constants. Re-voxelization is debounced, so that pass is not on any hot path
+    // Positions arrive already in lattice space: model, world and lattice fold into one debounced CPU pass at upload, which keeps a matrix out of the push constants
     const uint triangle = g_Parameters.TriangleOffset + id.x;
 
     const float3 v0 = VoxelPosition(g_VoxelIndices[triangle * 3 + 0]);
@@ -263,8 +239,7 @@ void voxelize(uint3 id : SV_DispatchThreadID)
 
     if (span.x * span.y * span.z > g_Parameters.VoxelBudget)
     {
-        // One thread walking a domain-sized triangle serializes the whole dispatch. Counted and reported rather than
-        // silently dropped - a decimated CFD mesh should never produce one, and if it does you want to know
+        // One thread walking a domain-sized triangle serializes the dispatch, so it is counted and reported rather than silently dropped
         InterlockedAdd(g_Counters[2], 1u);
 
         return;
@@ -283,8 +258,7 @@ void voxelize(uint3 id : SV_DispatchThreadID)
 
                 if (TriangleBoxOverlap(center, halfExtent, v0, v1, v2))
                 {
-                    // Max, not Or: every write here carries CellSolid in the low byte, so fluid always loses and
-                    // the highest object id wins deterministically where two bodies share a cell
+                    // Max, not Or: every write carries CellSolid in the low byte, so fluid always loses and the highest object id wins deterministically on a shared cell
                     InterlockedMax(g_Flags[CellIndex(uint3(x, y, z))], packed);
                 }
             }
@@ -292,9 +266,7 @@ void voxelize(uint3 id : SV_DispatchThreadID)
     }
 }
 
-// One thread per line, so exterior status travels the full length of the line in a single pass. A handful of XYZ
-// iterations turns every corner a car-shaped body can present, where a one-cell-per-pass frontier would need hundreds.
-// Threads own disjoint lines within a dispatch, so the flag writes need no atomics
+// One thread per line, so exterior status travels the whole line in one pass and a handful of XYZ iterations turns every corner a frontier would need hundreds for. Disjoint lines, so no atomics
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void floodSweep(uint3 id : SV_DispatchThreadID)
@@ -404,9 +376,7 @@ void floodFinalize(uint3 id : SV_DispatchThreadID)
 
     if (type == CellFluid)
     {
-        // Never reached from the boundary and never touched by a triangle, so it is inside the body. A hollow shell leaks
-        // flow into the car and corrupts every force, which is the whole reason this pass exists.
-        // Object id 0 because a genuine interior cell has no fluid neighbour and so takes part in no boundary condition
+        // Never reached from the boundary and never touched by a triangle, so it is interior - a hollow shell leaks flow into the car and corrupts every force. Id 0: no fluid neighbour, so no boundary condition
         g_Flags[cell] = MakeFlag(CellSolid, 0u);
     }
 
@@ -426,7 +396,7 @@ void initialize(uint3 id : SV_DispatchThreadID)
     const uint count = CellCount();
     const uint cell = CellIndex(id);
 
-    // The mask is final by the time this runs - voxelized from meshes, or stamped analytically
+    // The mask is final by the time this runs
     if (IsSolid(g_Flags[cell]))
     {
         WriteSolid(cell, count);
@@ -683,8 +653,7 @@ void reduceForcePartial(uint3 dispatchID : SV_DispatchThreadID, uint3 groupID : 
 }
 
 // ---------------- Step 3.4: visualization ----------------
-// The 2D lab's viz kernel is the template: same color maps, same linear-values-into-an-sRGB-composite convention
-
+// Linear values into the texture; the composite pass does the sRGB encode, matching VulkanImGui's convention
 float3 Ramp(float value)
 {
     const float scaled = saturate(value) * 4.0;

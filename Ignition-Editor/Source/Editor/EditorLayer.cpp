@@ -24,21 +24,6 @@ namespace Editor
 		// Long enough that an inspector drag settles before the lattice is rebuilt, short enough to feel immediate
 		constexpr float AeroBodyDebounceSeconds = 0.25f;
 
-		struct FluidResolution
-		{
-			const char* Label;
-			uint32_t Width;
-			uint32_t Height;
-		};
-
-		// Wide and short: the channel needs room downstream for the wake to develop
-		constexpr std::array<FluidResolution, 4> FluidResolutions = { {
-			{ "256 x 64", 256, 64 },
-			{ "512 x 128", 512, 128 },
-			{ "1024 x 256", 1024, 256 },
-			{ "2048 x 512", 2048, 512 },
-		} };
-
 		void PushHistory(std::vector<float>& history, float value)
 		{
 			if (history.size() >= FrameHistorySize)
@@ -94,7 +79,6 @@ namespace Editor
 		constexpr glm::vec4 PlayBorderColor{ 1.0f, 0.55f, 0.1f, 1.0f };
 		constexpr glm::vec4 TunnelColor{ 0.35f, 0.65f, 1.0f, 1.0f };
 		constexpr glm::vec4 FlowColor{ 0.95f, 0.85f, 0.2f, 1.0f };
-		constexpr glm::vec4 ObstacleColor{ 1.0f, 0.45f, 0.35f, 1.0f };
 
 		glm::mat4 ColliderTransform(const Ignition::TransformComponent& transform, const glm::vec3& offset)
 		{
@@ -112,8 +96,6 @@ namespace Editor
 	EditorLayer::EditorLayer(EditorContext* context, Ignition::Camera* camera, Ignition::AssetRegistry* assets, Ignition::Renderer* renderer, Ignition::Input* input) : m_Context(context), m_Camera(camera), m_Assets(assets), m_Renderer(renderer), m_Input(input)
 	{
 		m_FrameTimeHistory.reserve(FrameHistorySize);
-		m_DragHistory.reserve(FrameHistorySize);
-		m_LiftHistory.reserve(FrameHistorySize);
 		m_TunnelDragHistory.reserve(FrameHistorySize);
 		m_TunnelDownforceHistory.reserve(FrameHistorySize);
 	}
@@ -127,20 +109,38 @@ namespace Editor
 		m_EditorPhysics = std::make_unique<Ignition::PhysicsWorld>(m_Context->Scene, m_Assets, settings);
 		m_Context->PhysicsSceneDirty = true;
 
-		m_FluidSettings.Width = FluidResolutions[m_FluidResolutionIndex].Width;
-		m_FluidSettings.Height = FluidResolutions[m_FluidResolutionIndex].Height;
+		// The shipped tunnel scene is the starter content; the fallback exists so a clone missing its assets still opens onto something
+		const Ignition::SceneSerializer serializer(m_Context->Scene, m_Assets);
 
-		m_Fluid = std::make_unique<Ignition::FluidSolver2D>(m_Renderer, m_FluidSettings);
-
-		if (m_Fluid->IsValid())
+		if (serializer.Load(DefaultScenePath))
 		{
-			m_Fluid->SetVisualizationField(static_cast<Ignition::FluidField>(m_FluidFieldIndex));
-			m_Fluid->SetColorScale(m_FluidColorScale);
+			m_Context->ScenePath = DefaultScenePath;
 		}
 		else
 		{
-			IG_APP_ERROR("Fluid Lab unavailable: the compute solver could not be created");
+			CreateFallbackScene();
 		}
+	}
+
+	void EditorLayer::CreateFallbackScene()
+	{
+		Ignition::Entity body = m_Context->Scene->CreateEntity("Test Body");
+		body.GetTransform().Position = { 0.0f, 0.5f, 0.0f };
+
+		if (auto mesh = m_Assets->LoadMesh("builtin:cube"))
+		{
+			auto& meshRenderer = body.AddMeshRenderer(mesh);
+			meshRenderer.MeshAsset = "builtin:cube";
+		}
+
+		// Static: a wind tunnel model is mounted, not dropped. Play means the wind starts, not that things fall
+		Ignition::RigidBodyComponent rigidBody;
+		rigidBody.Type = Ignition::RigidBodyType::Static;
+
+		body.AddRigidBody(rigidBody);
+		body.AddBoxCollider();
+
+		m_Context->PhysicsSceneDirty = true;
 	}
 
 	void EditorLayer::OnFixedUpdate(float fixedTimeStep)
@@ -180,7 +180,6 @@ namespace Editor
 			RefreshEditorPhysics();
 		}
 
-		UpdateFluidLab();
 		UpdateWindTunnel(deltaTime);
 
 		if (m_Context->ViewportHovered && !m_Context->GizmoUsing && m_Input->IsMouseButtonPressed(Ignition::MouseCode::LEFT))
@@ -309,11 +308,18 @@ namespace Editor
 		}
 
 		m_RuntimePhysics = std::make_unique<Ignition::PhysicsWorld>(m_Context->Scene, m_Assets);
-		m_RuntimePhysics->SetDebugVisualizationEnabled(m_Context->DrawPhysXVisualization);
+		m_RuntimePhysics->SetDebugVisualizationEnabled(m_Context->DrawPhysicsVisualization);
+
+		// Every run starts from still air, the same way it starts from the snapshot
+		if (m_Tunnel)
+		{
+			m_Tunnel->Reset();
+			ClearAeroHistory();
+		}
 
 		m_Context->Play = PlayState::Playing;
 
-		IG_APP_INFO("Play: {} physics bodies instantiated", m_RuntimePhysics->GetBodyCount());
+		IG_APP_INFO("Play: wind on, {} physics bodies instantiated", m_RuntimePhysics->GetBodyCount());
 	}
 
 	void EditorLayer::OnStop()
@@ -329,6 +335,13 @@ namespace Editor
 		m_Context->Selection = {};
 		m_Context->Play = PlayState::Edit;
 		m_Context->StepRequested = false;
+		m_Context->TunnelStepRequested = false;
+
+		if (m_Tunnel)
+		{
+			m_Tunnel->Reset();
+			ClearAeroHistory();
+		}
 
 		const Ignition::SceneSerializer serializer(m_Context->Scene, m_Assets);
 
@@ -419,85 +432,34 @@ namespace Editor
 		DrawHierarchyPanel();
 		DrawInspectorPanel();
 		DrawStatsPanel();
-		DrawFluidLabPanel();
 		DrawAeroPanel();
-	}
-
-	Ignition::FluidSolver3DSettings EditorLayer::BuildTunnelSettings(const Ignition::TransformComponent& transform, const Ignition::WindTunnelComponent& tunnel) const
-	{
-		Ignition::FluidSolver3DSettings settings{};
-
-		settings.Resolution = tunnel.Resolution;
-		settings.DomainSize = tunnel.DomainSize;
-
-		// The entity sits on the floor at the centre of the tunnel, so placing it on the ground plane puts the rolling road where the road belongs
-		settings.Origin = transform.Position;
-		settings.ReferencePoint = transform.Position + tunnel.ReferencePoint;
-
-		settings.InletSpeed = tunnel.InletSpeed;
-		settings.AirDensity = tunnel.AirDensity;
-		settings.KinematicViscosity = tunnel.KinematicViscosity;
-		settings.SmagorinskyConstant = tunnel.SmagorinskyConstant;
-		settings.LatticeVelocity = tunnel.LatticeVelocity;
-		settings.MinimumRelaxationTime = tunnel.MinimumRelaxationTime;
-
-		settings.ReferenceLength = tunnel.ReferenceLength;
-		settings.Wheelbase = tunnel.Wheelbase;
-
-		settings.ObstacleDiameter = tunnel.ObstacleDiameter;
-		settings.ObstacleCenter = tunnel.ObstacleCenter;
-
-		settings.RollingRoad = tunnel.RollingRoad;
-
-		settings.SliceEnabled = tunnel.SliceEnabled;
-		settings.SliceAxis = static_cast<Ignition::FluidSliceAxis>(glm::clamp(tunnel.SliceAxis, 0, 2));
-		settings.SlicePosition = tunnel.SlicePosition;
-		settings.SliceField = static_cast<Ignition::FluidField>(glm::clamp(tunnel.SliceField, 0, 2));
-		settings.ColorScale = tunnel.ColorScale;
-		settings.SliceOpacity = tunnel.SliceOpacity;
-		settings.ParticlesEnabled = tunnel.ParticlesEnabled;
-		settings.ParticleCount = tunnel.ParticleCount;
-		settings.SurfacePressureEnabled = tunnel.SurfacePressureEnabled;
-		settings.VoxelDebugView = tunnel.VoxelDebugView;
-		settings.FloodIterations = tunnel.FloodIterations;
-
-		return settings;
 	}
 
 	void EditorLayer::GatherAeroBodies()
 	{
 		m_AeroBodies.clear();
 
+		// Every mesh in the scene is in the wind - the tunnel is the scene, so nothing has to opt in
+		uint32_t objectID = 1;
+
 		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
 		{
-			const Ignition::AeroBodyComponent* body = entity.GetAeroBody();
+			const Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer();
 
-			if (!body || !body->Enabled)
+			if (!meshRenderer || !meshRenderer->Mesh || meshRenderer->Mesh->GetGeometry().Indices.size() < 3)
 			{
 				continue;
 			}
 
-			// The CFD mesh when one is set, otherwise the visual mesh. Fine for a sphere or an Ahmed body,
-			// wrong for a car with open bodywork - which is exactly why the component carries its own asset slot
-			const Ignition::Mesh* mesh = body->Mesh.get();
+			Ignition::FluidBody body{};
+			body.Geometry = &meshRenderer->Mesh->GetGeometry();
+			body.Transform = entity.GetTransform().GetMatrix();
+			body.ObjectID = objectID;
 
-			if (!mesh)
-			{
-				const Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer();
-				mesh = meshRenderer ? meshRenderer->Mesh.get() : nullptr;
-			}
+			m_AeroBodies.push_back(body);
 
-			if (!mesh || mesh->GetGeometry().Indices.size() < 3)
-			{
-				continue;
-			}
-
-			Ignition::FluidBody fluidBody{};
-			fluidBody.Geometry = &mesh->GetGeometry();
-			fluidBody.Transform = entity.GetTransform().GetMatrix();
-			fluidBody.ObjectID = glm::clamp(body->ObjectID, 1u, 255u);
-
-			m_AeroBodies.push_back(fluidBody);
+			// The mask has one byte for the id, so bodies past 255 share the last one rather than wrapping onto another body's
+			objectID = glm::min(objectID + 1u, 255u);
 		}
 	}
 
@@ -505,40 +467,12 @@ namespace Editor
 	{
 		IG_PROFILE_FUNCTION();
 
-		Ignition::Entity owner{};
-
-		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
-		{
-			if (entity.GetWindTunnel())
-			{
-				owner = entity;
-
-				break;
-			}
-		}
-
-		m_TunnelEntity = owner;
-
-		if (!owner.IsValid())
-		{
-			// Half a gigabyte of lattice has no business outliving the component that asked for it
-			if (m_Tunnel)
-			{
-				m_Tunnel.reset();
-				ClearAeroHistory();
-			}
-
-			return;
-		}
-
-		const Ignition::FluidSolver3DSettings settings = BuildTunnelSettings(owner.GetTransform(), *owner.GetWindTunnel());
+		const Ignition::FluidSolver3DSettings& settings = m_Context->Scene->GetWindTunnel();
 
 		if (!m_Tunnel)
 		{
 			m_Tunnel = std::make_unique<Ignition::FluidSolver3D>(m_Renderer, settings);
 			m_TunnelSettings = settings;
-
-			ClearAeroHistory();
 
 			if (!m_Tunnel->IsValid())
 			{
@@ -557,8 +491,7 @@ namespace Editor
 			return;
 		}
 
-		// Voxelization rebuilds the mask and resets the flow, so it waits for the edit to settle: never mid-gizmo-drag,
-		// and never until the geometry has held still for a moment. SetBodies is idempotent, so pushing every settled frame is free
+		// Voxelization rebuilds the mask and resets the flow, so it waits for the edit to settle: never mid-gizmo-drag, and never until the geometry has held still for a moment
 		GatherAeroBodies();
 
 		if (m_AeroBodies != m_PendingAeroBodies)
@@ -576,24 +509,28 @@ namespace Editor
 			m_Tunnel->SetBodies(m_PendingAeroBodies);
 		}
 
+		// The wind runs on the editor's transport. The lattice has its own timestep, so it advances per rendered frame rather than per fixed step
 		uint32_t steps = 0;
 
-		if (m_TunnelRunning)
+		if (m_Context->Play == PlayState::Playing)
 		{
 			steps = static_cast<uint32_t>(m_TunnelStepsPerFrame);
 		}
-		else if (m_TunnelStepRequested)
+		else if (m_Context->Play == PlayState::Paused && m_Context->TunnelStepRequested)
 		{
 			steps = 1;
 		}
 
-		m_TunnelStepRequested = false;
+		m_Context->TunnelStepRequested = false;
 
-		if (steps > 0)
+		if (steps == 0)
 		{
-			m_Tunnel->Step(steps);
+			return;
 		}
 
+		m_Tunnel->Step(steps);
+
+		// Only simulated frames are recorded, so a paused tunnel does not flatten its own moving average
 		RecordAeroHistory();
 	}
 
@@ -616,35 +553,23 @@ namespace Editor
 
 	void EditorLayer::SubmitTunnelGizmos()
 	{
-		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		if (!m_Context->DrawTunnelBounds)
 		{
-			const Ignition::WindTunnelComponent* tunnel = entity.GetWindTunnel();
-
-			if (!tunnel || !tunnel->DrawBounds)
-			{
-				continue;
-			}
-
-			const Ignition::FluidSolver3DSettings settings = BuildTunnelSettings(entity.GetTransform(), *tunnel);
-			const Ignition::FluidLatticeScaling scaling = Ignition::FluidSolver3D::ComputeScaling(settings);
-
-			// The lattice is what actually gets simulated, so the lattice is what gets drawn - cubic cells make it a little larger than the requested box
-			const glm::vec3 extent = glm::vec3(settings.Resolution) * scaling.CellSize;
-			const glm::vec3 center = settings.Origin + glm::vec3(0.0f, 0.5f * extent.y, 0.0f);
-			const glm::vec3 minimum = settings.Origin - glm::vec3(0.5f * extent.x, 0.0f, 0.5f * extent.z);
-
-			Ignition::DebugDraw::Box(glm::translate(glm::mat4(1.0f), center), extent * 0.5f, TunnelColor);
-
-			// Air flows in -Z, so the arrow leaves the inlet face pointing at the car's nose
-			const glm::vec3 inlet = center + glm::vec3(0.0f, 0.0f, 0.5f * extent.z);
-			Ignition::DebugDraw::Arrow(inlet, inlet - glm::vec3(0.0f, 0.0f, glm::min(1.0f, 0.25f * extent.z)), FlowColor);
-
-			// The analytic sphere is a stand-in, so it disappears the moment real geometry is bound
-			if (m_AeroBodies.empty())
-			{
-				Ignition::DebugDraw::Sphere(glm::translate(glm::mat4(1.0f), minimum + settings.ObstacleCenter * extent), 0.5f * settings.ObstacleDiameter, ObstacleColor);
-			}
+			return;
 		}
+
+		const Ignition::FluidSolver3DSettings& settings = m_Context->Scene->GetWindTunnel();
+		const Ignition::FluidLatticeScaling scaling = Ignition::FluidSolver3D::ComputeScaling(settings);
+
+		// The lattice is what actually gets simulated, so the lattice is what gets drawn - cubic cells make it a little larger than the requested box
+		const glm::vec3 extent = glm::vec3(settings.Resolution) * scaling.CellSize;
+		const glm::vec3 center(0.0f, 0.5f * extent.y, 0.0f);
+
+		Ignition::DebugDraw::Box(glm::translate(glm::mat4(1.0f), center), extent * 0.5f, TunnelColor);
+
+		// Air flows in -Z, so the arrow leaves the inlet face pointing at the car's nose
+		const glm::vec3 inlet = center + glm::vec3(0.0f, 0.0f, 0.5f * extent.z);
+		Ignition::DebugDraw::Arrow(inlet, inlet - glm::vec3(0.0f, 0.0f, glm::min(1.0f, 0.25f * extent.z)), FlowColor);
 	}
 
 	void EditorLayer::DrawAeroPanel()
@@ -658,37 +583,27 @@ namespace Editor
 		{
 			if (!m_Tunnel || !m_Tunnel->IsValid())
 			{
-				Ignition::UI::TextDisabled("No wind tunnel in the scene - add a Wind Tunnel component to an entity sitting on the ground plane");
+				Ignition::UI::TextDisabled("Wind tunnel unavailable - check that Fluid3D.spv built and the log for pipeline errors");
 
 				Ignition::UI::EndWindow();
 
 				return;
 			}
 
+			Ignition::FluidSolver3DSettings& tunnel = m_Context->Scene->GetWindTunnel();
+
 			const Ignition::FluidLatticeScaling& scaling = m_Tunnel->GetScaling();
 			const Ignition::AeroForces forces = m_Tunnel->GetForces();
 
-			if (Ignition::UI::Button(m_TunnelRunning ? "Pause##Tunnel" : "Run##Tunnel"))
+			// No transport of its own: the toolbar drives the wind, so this only says what the toolbar is doing
+			switch (m_Context->Play)
 			{
-				m_TunnelRunning = !m_TunnelRunning;
+				case PlayState::Playing: Ignition::UI::Text("Wind on - {} lattice steps per frame", m_TunnelStepsPerFrame); break;
+				case PlayState::Paused:  Ignition::UI::Text("Held - Step advances one lattice step"); break;
+				default:                 Ignition::UI::TextDisabled("Still air - press Play to start the wind"); break;
 			}
 
-			Ignition::UI::SameLine();
-
-			if (Ignition::UI::Button("Step##Tunnel"))
-			{
-				m_TunnelStepRequested = true;
-			}
-
-			Ignition::UI::SameLine();
-
-			if (Ignition::UI::Button("Reset##Tunnel"))
-			{
-				m_Tunnel->Reset();
-				ClearAeroHistory();
-			}
-
-			Ignition::UI::SliderInt("Steps / Frame##Tunnel", &m_TunnelStepsPerFrame, 1, 16);
+			Ignition::UI::SliderInt("Steps / Frame", &m_TunnelStepsPerFrame, 1, 16);
 			Ignition::UI::Checkbox("Moving Average", &m_AeroAveraged);
 
 			Ignition::UI::SeparatorText("Geometry");
@@ -701,7 +616,7 @@ namespace Editor
 			}
 			else
 			{
-				Ignition::UI::TextDisabled("Analytic sphere - add an Aero Body component to voxelize a mesh instead");
+				Ignition::UI::TextDisabled("Nothing in the tunnel - every mesh in the scene is voxelized, so add one and the wind will find it");
 			}
 
 			if (voxels.FloodResidual > 0)
@@ -712,24 +627,7 @@ namespace Editor
 
 			if (voxels.RejectedTriangles > 0)
 			{
-				Ignition::UI::TextDisabled("{} triangles spanned too much of the domain and were skipped - the CFD mesh needs decimating, or the tunnel is too small for it", voxels.RejectedTriangles);
-			}
-
-			Ignition::UI::SeparatorText("Lattice Mapping");
-
-			Ignition::UI::Text("Cell {:.4f} m | dt {:.3e} s | {} cells across the reference length", scaling.CellSize, scaling.TimeStep, static_cast<int>(scaling.ObstacleDiameterCells));
-			Ignition::UI::Text("tau {:.5f} | u_lattice {:.3f} | Re {:.3e}", scaling.RelaxationTime, scaling.LatticeVelocity, scaling.ReynoldsNumber);
-			Ignition::UI::Text("nu {:.3e} requested | {:.3e} m2/s resolved", scaling.KinematicViscosity, scaling.EffectiveViscosity);
-			Ignition::UI::Text("Steps {} | simulated {:.4f} s", m_Tunnel->GetStepCount(), m_Tunnel->GetSimulatedTime());
-
-			if (scaling.SubgridLimited)
-			{
-				Ignition::UI::TextDisabled("Air's viscosity is finer than this lattice resolves - the relaxation floor and Smagorinsky are carrying it, which is what a large-eddy simulation does");
-			}
-
-			if (!scaling.Stable)
-			{
-				Ignition::UI::TextDisabled("Unstable mapping: keep the lattice velocity at or below 0.1 and at least 8 cells across the reference length");
+				Ignition::UI::TextDisabled("{} triangles spanned too much of the domain and were skipped - the mesh needs decimating, or the tunnel is too small for it", voxels.RejectedTriangles);
 			}
 
 			Ignition::UI::SeparatorText("Force (Newtons)");
@@ -744,7 +642,7 @@ namespace Editor
 
 			if (forces.ReferenceArea <= 0.0f)
 			{
-				Ignition::UI::TextDisabled("No solid cells in the lattice - the coefficients are undefined until the obstacle lands inside the domain");
+				Ignition::UI::TextDisabled("No solid cells in the lattice - the coefficients are undefined until geometry lands inside the domain");
 			}
 
 			if (!m_TunnelDragHistory.empty())
@@ -753,254 +651,131 @@ namespace Editor
 				Ignition::UI::PlotLines("##TunnelDownforce", m_TunnelDownforceHistory.data(), static_cast<int>(m_TunnelDownforceHistory.size()), HistoryMinimum(m_TunnelDownforceHistory, -1.0f), HistoryMaximum(m_TunnelDownforceHistory, 1.0f), 60.0f, "Downforce (N)");
 			}
 
-			// Step 3.4 controls: everything writes to the component, so it serializes with the scene and applies live through Configure
-			if (Ignition::WindTunnelComponent* tunnel = m_TunnelEntity.IsValid() ? m_TunnelEntity.GetWindTunnel() : nullptr)
-			{
-				Ignition::UI::SeparatorText("Visualization");
-
-				Ignition::UI::Checkbox("Slice Plane", &tunnel->SliceEnabled);
-
-				static const char* const axes[] = { "X (side view)", "Y (top view)", "Z (front view)" };
-				Ignition::UI::Combo("Axis##Slice", &tunnel->SliceAxis, axes, 3);
-				Ignition::UI::SliderFloat("Position##Slice", &tunnel->SlicePosition, 0.0f, 1.0f);
-
-				static const char* const sliceFields[] = { "Velocity", "Vorticity", "Pressure" };
-				Ignition::UI::Combo("Field##Slice", &tunnel->SliceField, sliceFields, 3);
-
-				Ignition::UI::SliderFloat("Color Scale##Tunnel", &tunnel->ColorScale, 0.1f, 4.0f);
-				Ignition::UI::SliderFloat("Opacity##Slice", &tunnel->SliceOpacity, 0.1f, 1.0f);
-
-				Ignition::UI::Checkbox("Tracer Particles", &tunnel->ParticlesEnabled);
-
-				int particleCount = static_cast<int>(tunnel->ParticleCount);
-
-				if (Ignition::UI::SliderInt("Count##Particles", &particleCount, 1024, 262144))
-				{
-					tunnel->ParticleCount = static_cast<uint32_t>(particleCount);
-				}
-
-				Ignition::UI::Checkbox("Surface Shell", &tunnel->SurfacePressureEnabled);
-				Ignition::UI::SameLine();
-				Ignition::UI::Checkbox("Show Voxel Mask", &tunnel->VoxelDebugView);
-
-				if (tunnel->SliceEnabled && m_Tunnel->GetSliceTextureID() != 0)
-				{
-					// The preview shares the in-scene texture; aspect follows the plane the axis selects
-					const glm::uvec3 resolution = m_Tunnel->GetSettings().Resolution;
-
-					float sliceAspect = 1.0f;
-
-					if (tunnel->SliceAxis == 0)
-					{
-						sliceAspect = static_cast<float>(resolution.y) / static_cast<float>(resolution.z);
-					}
-					else if (tunnel->SliceAxis == 1)
-					{
-						sliceAspect = static_cast<float>(resolution.z) / static_cast<float>(resolution.x);
-					}
-					else
-					{
-						sliceAspect = static_cast<float>(resolution.y) / static_cast<float>(resolution.x);
-					}
-
-					const float previewWidth = Ignition::UI::GetContentRegionAvailable().x;
-
-					Ignition::UI::Image(m_Tunnel->GetSliceTextureID(), previewWidth, previewWidth * sliceAspect);
-				}
-			}
-		}
-
-		Ignition::UI::EndWindow();
-	}
-
-	void EditorLayer::UpdateFluidLab()
-	{
-		IG_PROFILE_FUNCTION();
-
-		if (!m_Fluid || !m_Fluid->IsValid())
-		{
-			return;
-		}
-
-		// The lattice has its own timestep, so the solver is driven per rendered frame rather than per fixed step
-		uint32_t steps = 0;
-
-		if (m_FluidRunning)
-		{
-			steps = static_cast<uint32_t>(m_FluidStepsPerFrame);
-		}
-		else if (m_FluidStepRequested)
-		{
-			steps = 1;
-		}
-
-		m_FluidStepRequested = false;
-
-		if (steps > 0)
-		{
-			m_Fluid->Step(steps);
-		}
-
-		RecordFluidHistory();
-	}
-
-	void EditorLayer::RecordFluidHistory()
-	{
-		const Ignition::FluidForces forces = m_Fluid->GetForces();
-		const float simulatedTime = m_Fluid->GetSimulatedTime();
-
-		PushHistory(m_DragHistory, forces.Drag);
-		PushHistory(m_LiftHistory, forces.Lift);
-
-		IG_PROFILE_PLOT("Fluid Drag (N/m)", forces.Drag);
-		IG_PROFILE_PLOT("Fluid Lift (N/m)", forces.Lift);
-
-		// Lift crosses zero twice per shedding cycle; the upward crossings mark one full period
-		if (m_PreviousLift < 0.0f && forces.Lift >= 0.0f)
-		{
-			if (m_PreviousCrossingTime >= 0.0f)
-			{
-				const float period = simulatedTime - m_PreviousCrossingTime;
-
-				if (period > 0.0f)
-				{
-					m_StrouhalNumber = m_Fluid->GetSettings().ObstacleDiameter / (period * m_Fluid->GetSettings().InletSpeed);
-				}
-			}
-
-			m_PreviousCrossingTime = simulatedTime;
-		}
-
-		m_PreviousLift = forces.Lift;
-	}
-
-	void EditorLayer::ClearFluidHistory()
-	{
-		m_DragHistory.clear();
-		m_LiftHistory.clear();
-		m_PreviousLift = 0.0f;
-		m_PreviousCrossingTime = -1.0f;
-		m_StrouhalNumber = 0.0f;
-	}
-
-	void EditorLayer::DrawFluidLabPanel()
-	{
-		if (!m_FluidLabOpen)
-		{
-			return;
-		}
-
-		if (Ignition::UI::BeginWindow("Fluid Lab", &m_FluidLabOpen))
-		{
-			if (!m_Fluid || !m_Fluid->IsValid())
-			{
-				Ignition::UI::TextDisabled("Compute solver unavailable - check that Fluid2D.spv built and the log for pipeline errors");
-
-				Ignition::UI::EndWindow();
-
-				return;
-			}
-
-			const Ignition::FluidLatticeScaling& scaling = m_Fluid->GetScaling();
-			const Ignition::FluidForces forces = m_Fluid->GetForces();
-
-			const float panelWidth = Ignition::UI::GetContentRegionAvailable().x;
-			const float aspect = static_cast<float>(m_Fluid->GetVisualizationHeight()) / static_cast<float>(m_Fluid->GetVisualizationWidth());
-
-			Ignition::UI::Image(m_Fluid->GetVisualizationTextureID(), panelWidth, panelWidth * aspect);
-
-			if (Ignition::UI::Button(m_FluidRunning ? "Pause##Fluid" : "Run##Fluid"))
-			{
-				m_FluidRunning = !m_FluidRunning;
-			}
-
-			Ignition::UI::SameLine();
-
-			if (Ignition::UI::Button("Step##Fluid"))
-			{
-				m_FluidStepRequested = true;
-			}
-
-			Ignition::UI::SameLine();
-
-			if (Ignition::UI::Button("Reset##Fluid"))
-			{
-				m_Fluid->Reset();
-				ClearFluidHistory();
-			}
-
-			Ignition::UI::SliderInt("Steps / Frame", &m_FluidStepsPerFrame, 1, 64);
-
-			static const char* const fields[] = { "Velocity", "Vorticity", "Density" };
-
-			if (Ignition::UI::Combo("Field", &m_FluidFieldIndex, fields, 3))
-			{
-				m_Fluid->SetVisualizationField(static_cast<Ignition::FluidField>(m_FluidFieldIndex));
-			}
-
-			if (Ignition::UI::SliderFloat("Color Scale", &m_FluidColorScale, 0.1f, 4.0f))
-			{
-				m_Fluid->SetColorScale(m_FluidColorScale);
-			}
-
-			bool reconfigured = false;
-
-			Ignition::UI::SeparatorText("Flow");
-
-			reconfigured |= Ignition::UI::SliderFloat("Inlet Speed (m/s)", &m_FluidSettings.InletSpeed, 1.0f, 90.0f);
-			reconfigured |= Ignition::UI::SliderFloat("Reynolds Number", &m_FluidSettings.ReynoldsNumber, 10.0f, 2000.0f);
-			reconfigured |= Ignition::UI::SliderFloat("Lattice Velocity", &m_FluidSettings.LatticeVelocity, 0.01f, 0.15f);
-			reconfigured |= Ignition::UI::SliderFloat("Smagorinsky C", &m_FluidSettings.SmagorinskyConstant, 0.0f, 0.3f);
-
-			Ignition::UI::SeparatorText("Obstacle");
-
-			reconfigured |= Ignition::UI::SliderFloat("Diameter (m)", &m_FluidSettings.ObstacleDiameter, 0.02f, 0.5f);
-			reconfigured |= Ignition::UI::SliderFloat("Center X", &m_FluidSettings.ObstacleCenter.x, 0.05f, 0.95f);
-			reconfigured |= Ignition::UI::SliderFloat("Center Y", &m_FluidSettings.ObstacleCenter.y, 0.05f, 0.95f);
-
-			Ignition::UI::SeparatorText("Domain");
-
-			static const char* const resolutions[] = { FluidResolutions[0].Label, FluidResolutions[1].Label, FluidResolutions[2].Label, FluidResolutions[3].Label };
-
-			if (Ignition::UI::Combo("Resolution", &m_FluidResolutionIndex, resolutions, static_cast<int>(FluidResolutions.size())))
-			{
-				// The only change that reallocates: everything else applies without touching a buffer
-				m_FluidSettings.Width = FluidResolutions[m_FluidResolutionIndex].Width;
-				m_FluidSettings.Height = FluidResolutions[m_FluidResolutionIndex].Height;
-
-				reconfigured = true;
-			}
-
-			reconfigured |= Ignition::UI::SliderFloat("Domain Height (m)", &m_FluidSettings.DomainHeight, 0.1f, 5.0f);
-
-			if (reconfigured)
-			{
-				m_Fluid->Configure(m_FluidSettings);
-				ClearFluidHistory();
-			}
-
 			Ignition::UI::SeparatorText("Lattice Mapping");
 
-			Ignition::UI::Text("Cell {:.4f} m | dt {:.3e} s | {} cells across the cylinder", scaling.CellSize, scaling.TimeStep, static_cast<int>(scaling.ObstacleDiameterCells));
-			Ignition::UI::Text("tau {:.4f} | u_lattice {:.3f} | nu {:.3e} m2/s", scaling.RelaxationTime, scaling.LatticeVelocity, scaling.KinematicViscosity);
-			Ignition::UI::Text("Steps {} | simulated {:.4f} s", m_Fluid->GetStepCount(), m_Fluid->GetSimulatedTime());
+			Ignition::UI::Text("Cell {:.4f} m | dt {:.3e} s | {} cells across the reference length", scaling.CellSize, scaling.TimeStep, static_cast<int>(scaling.ReferenceLengthCells));
+			Ignition::UI::Text("tau {:.5f} | u_lattice {:.3f} | Re {:.3e}", scaling.RelaxationTime, scaling.LatticeVelocity, scaling.ReynoldsNumber);
+			Ignition::UI::Text("nu {:.3e} requested | {:.3e} m2/s resolved", scaling.KinematicViscosity, scaling.EffectiveViscosity);
+			Ignition::UI::Text("Steps {} | simulated {:.4f} s", m_Tunnel->GetStepCount(), m_Tunnel->GetSimulatedTime());
+
+			if (scaling.SubgridLimited)
+			{
+				Ignition::UI::TextDisabled("Air's viscosity is finer than this lattice resolves - the relaxation floor and Smagorinsky are carrying it, which is what a large-eddy simulation does");
+			}
 
 			if (!scaling.Stable)
 			{
-				// Every first-run LBM blow-up lands on one of these three
-				Ignition::UI::TextDisabled("Unstable mapping: keep tau above 0.51, lattice velocity at or below 0.1, and at least 8 cells across the cylinder");
+				Ignition::UI::TextDisabled("Unstable mapping: keep the lattice velocity at or below 0.1 and at least 8 cells across the reference length");
 			}
 
-			Ignition::UI::SeparatorText("Force (per metre of span)");
+			Ignition::UI::SeparatorText("Domain");
 
-			Ignition::UI::Text("Drag {:>9.2f} N/m   Cd {:.3f}", forces.Drag, forces.DragCoefficient);
-			Ignition::UI::Text("Lift {:>9.2f} N/m   Cl {:.3f}", forces.Lift, forces.LiftCoefficient);
-			Ignition::UI::Text("Strouhal {:.3f} (expect 0.16 - 0.20 at Re 100 - 200)", m_StrouhalNumber);
+			int resolutionIndex = 0;
 
-			if (!m_DragHistory.empty())
+			for (size_t preset = 0; preset < TunnelResolutions.size(); ++preset)
 			{
-				Ignition::UI::PlotLines("##Drag", m_DragHistory.data(), static_cast<int>(m_DragHistory.size()), HistoryMinimum(m_DragHistory, 0.0f), HistoryMaximum(m_DragHistory, 1.0f), 60.0f, "Drag (N/m)");
-				Ignition::UI::PlotLines("##Lift", m_LiftHistory.data(), static_cast<int>(m_LiftHistory.size()), HistoryMinimum(m_LiftHistory, -1.0f), HistoryMaximum(m_LiftHistory, 1.0f), 60.0f, "Lift (N/m)");
+				if (tunnel.Resolution.x == TunnelResolutions[preset].X && tunnel.Resolution.y == TunnelResolutions[preset].Y && tunnel.Resolution.z == TunnelResolutions[preset].Z)
+				{
+					resolutionIndex = static_cast<int>(preset);
+
+					break;
+				}
+			}
+
+			static const char* const resolutions[] = { TunnelResolutions[0].Label, TunnelResolutions[1].Label, TunnelResolutions[2].Label, TunnelResolutions[3].Label };
+
+			// The only control that reallocates, and the only one worth checking against the dev GPU's VRAM first
+			if (Ignition::UI::Combo("Resolution", &resolutionIndex, resolutions, static_cast<int>(TunnelResolutions.size())))
+			{
+				tunnel.Resolution = { TunnelResolutions[resolutionIndex].X, TunnelResolutions[resolutionIndex].Y, TunnelResolutions[resolutionIndex].Z };
+			}
+
+			Ignition::UI::Text("Lattice: {:.0f} MB", LatticeMegabytes(tunnel.Resolution));
+			Ignition::UI::DragFloat3("Domain Size (m)", tunnel.DomainSize, 0.05f);
+			Ignition::UI::TextDisabled("Cells are cubic, so the lattice is at least this large and sits floor-down on the world origin");
+
+			Ignition::UI::SeparatorText("Flow");
+
+			Ignition::UI::DragFloat("Inlet Speed (m/s)", &tunnel.InletSpeed, 0.5f, 1.0f, 120.0f);
+			Ignition::UI::DragFloat("Air Density", &tunnel.AirDensity, 0.001f, 0.1f, 5.0f);
+			Ignition::UI::DragFloat("Kinematic Viscosity", &tunnel.KinematicViscosity, 1e-7f, 1e-7f, 1e-3f);
+			Ignition::UI::SliderFloat("Lattice Velocity", &tunnel.LatticeVelocity, 0.01f, 0.15f);
+			Ignition::UI::SliderFloat("Smagorinsky C", &tunnel.SmagorinskyConstant, 0.0f, 0.3f);
+			Ignition::UI::SliderFloat("Minimum tau", &tunnel.MinimumRelaxationTime, 0.5005f, 0.55f);
+
+			Ignition::UI::Checkbox("Rolling Road", &tunnel.RollingRoad);
+			Ignition::UI::TextDisabled("A static floor grows a false boundary layer that corrupts underbody flow - not optional for automotive work");
+
+			Ignition::UI::SeparatorText("Reference");
+
+			Ignition::UI::DragFloat("Reference Length (m)", &tunnel.ReferenceLength, 0.01f, 0.01f, 20.0f);
+			Ignition::UI::DragFloat("Wheelbase (m)", &tunnel.Wheelbase, 0.01f, 0.1f, 20.0f);
+			Ignition::UI::DragFloat3("Reference Point", tunnel.ReferencePoint, 0.01f);
+
+			int floodIterations = static_cast<int>(tunnel.FloodIterations);
+
+			if (Ignition::UI::SliderInt("Flood Iterations", &floodIterations, 1, 32))
+			{
+				tunnel.FloodIterations = static_cast<uint32_t>(floodIterations);
+			}
+
+			Ignition::UI::SeparatorText("Visualization");
+
+			Ignition::UI::Checkbox("Slice Plane", &tunnel.SliceEnabled);
+
+			static const char* const axes[] = { "X (side view)", "Y (top view)", "Z (front view)" };
+			int sliceAxis = static_cast<int>(tunnel.SliceAxis);
+
+			if (Ignition::UI::Combo("Axis##Slice", &sliceAxis, axes, 3))
+			{
+				tunnel.SliceAxis = static_cast<Ignition::FluidSliceAxis>(sliceAxis);
+			}
+
+			Ignition::UI::SliderFloat("Position##Slice", &tunnel.SlicePosition, 0.0f, 1.0f);
+
+			static const char* const sliceFields[] = { "Velocity", "Vorticity", "Pressure" };
+			int sliceField = static_cast<int>(tunnel.SliceField);
+
+			if (Ignition::UI::Combo("Field##Slice", &sliceField, sliceFields, 3))
+			{
+				tunnel.SliceField = static_cast<Ignition::FluidField>(sliceField);
+			}
+
+			Ignition::UI::SliderFloat("Color Scale##Tunnel", &tunnel.ColorScale, 0.1f, 4.0f);
+			Ignition::UI::SliderFloat("Opacity##Slice", &tunnel.SliceOpacity, 0.1f, 1.0f);
+
+			Ignition::UI::Checkbox("Tracer Particles", &tunnel.ParticlesEnabled);
+
+			int particleCount = static_cast<int>(tunnel.ParticleCount);
+
+			if (Ignition::UI::SliderInt("Count##Particles", &particleCount, 1024, 262144))
+			{
+				tunnel.ParticleCount = static_cast<uint32_t>(particleCount);
+			}
+
+			Ignition::UI::Checkbox("Surface Shell", &tunnel.SurfacePressureEnabled);
+			Ignition::UI::SameLine();
+			Ignition::UI::Checkbox("Show Voxel Mask", &tunnel.VoxelDebugView);
+
+			if (tunnel.SliceEnabled && m_Tunnel->GetSliceTextureID() != 0)
+			{
+				// The preview shares the in-scene texture; aspect follows the plane the axis selects
+				const glm::uvec3 resolution = m_Tunnel->GetSettings().Resolution;
+
+				float sliceAspect = static_cast<float>(resolution.y) / static_cast<float>(resolution.x);
+
+				if (tunnel.SliceAxis == Ignition::FluidSliceAxis::X)
+				{
+					sliceAspect = static_cast<float>(resolution.y) / static_cast<float>(resolution.z);
+				}
+				else if (tunnel.SliceAxis == Ignition::FluidSliceAxis::Y)
+				{
+					sliceAspect = static_cast<float>(resolution.z) / static_cast<float>(resolution.x);
+				}
+
+				const float previewWidth = Ignition::UI::GetContentRegionAvailable().x;
+
+				Ignition::UI::Image(m_Tunnel->GetSliceTextureID(), previewWidth, previewWidth * sliceAspect);
 			}
 		}
 
@@ -1043,6 +818,7 @@ namespace Editor
 			if (Ignition::UI::Button("Step"))
 			{
 				m_Context->StepRequested = true;
+				m_Context->TunnelStepRequested = true;
 			}
 
 			Ignition::UI::EndDisabled();
@@ -1062,12 +838,14 @@ namespace Editor
 
 			Ignition::UI::Checkbox("Colliders", &m_Context->DrawColliders);
 			Ignition::UI::SameLine();
+			Ignition::UI::Checkbox("Tunnel Bounds", &m_Context->DrawTunnelBounds);
+			Ignition::UI::SameLine();
 
-			if (Ignition::UI::Checkbox("PhysX Visualization", &m_Context->DrawPhysXVisualization))
+			if (Ignition::UI::Checkbox("Physics Visualization", &m_Context->DrawPhysicsVisualization))
 			{
 				if (Ignition::PhysicsWorld* physics = GetActivePhysicsWorld())
 				{
-					physics->SetDebugVisualizationEnabled(m_Context->DrawPhysXVisualization);
+					physics->SetDebugVisualizationEnabled(m_Context->DrawPhysicsVisualization);
 				}
 			}
 		}
@@ -1109,11 +887,6 @@ namespace Editor
 
 		if (Ignition::UI::BeginMenu("View"))
 		{
-			if (Ignition::UI::MenuItem("Fluid Lab"))
-			{
-				m_FluidLabOpen = true;
-			}
-
 			if (Ignition::UI::MenuItem("Aero"))
 			{
 				m_AeroPanelOpen = true;
@@ -1431,107 +1204,6 @@ namespace Editor
 				}
 			}
 
-			if (Ignition::AeroBodyComponent* aeroBody = entity.GetAeroBody())
-			{
-				if (Ignition::UI::CollapsingHeader("Aero Body"))
-				{
-					Ignition::UI::LabelText("CFD Mesh", aeroBody->MeshAsset.empty() ? "<visual mesh>" : aeroBody->MeshAsset.c_str());
-					Ignition::UI::TextDisabled("Decimated and sealed: open bodywork leaks the interior flood fill and corrupts every force");
-
-					std::array<char, 260> meshBuffer{};
-					std::memcpy(meshBuffer.data(), aeroBody->MeshAsset.c_str(), std::min(aeroBody->MeshAsset.size(), meshBuffer.size() - 1));
-
-					if (Ignition::UI::InputText("Mesh##AeroBody", meshBuffer.data(), meshBuffer.size()))
-					{
-						aeroBody->MeshAsset = meshBuffer.data();
-						aeroBody->Mesh = m_Assets->LoadMesh(aeroBody->MeshAsset);
-					}
-
-					int objectID = static_cast<int>(aeroBody->ObjectID);
-
-					if (Ignition::UI::SliderInt("Object ID", &objectID, 1, 255))
-					{
-						aeroBody->ObjectID = static_cast<uint32_t>(objectID);
-					}
-
-					Ignition::UI::TextDisabled("Tags this body's surface cells - Phase 4 spins the wheels off this without re-voxelizing");
-					Ignition::UI::Checkbox("Enabled##AeroBody", &aeroBody->Enabled);
-
-					if (Ignition::UI::SmallButton("Remove##AeroBody"))
-					{
-						entity.RemoveAeroBody();
-					}
-				}
-			}
-
-			if (Ignition::WindTunnelComponent* tunnel = entity.GetWindTunnel())
-			{
-				if (Ignition::UI::CollapsingHeader("Wind Tunnel"))
-				{
-					int resolutionIndex = 0;
-
-					for (size_t preset = 0; preset < TunnelResolutions.size(); ++preset)
-					{
-						if (tunnel->Resolution.x == TunnelResolutions[preset].X && tunnel->Resolution.y == TunnelResolutions[preset].Y && tunnel->Resolution.z == TunnelResolutions[preset].Z)
-						{
-							resolutionIndex = static_cast<int>(preset);
-
-							break;
-						}
-					}
-
-					static const char* const resolutions[] = { TunnelResolutions[0].Label, TunnelResolutions[1].Label, TunnelResolutions[2].Label, TunnelResolutions[3].Label };
-
-					// The only control that reallocates, and the only one worth checking against the dev GPU's VRAM first
-					if (Ignition::UI::Combo("Resolution", &resolutionIndex, resolutions, static_cast<int>(TunnelResolutions.size())))
-					{
-						tunnel->Resolution = { TunnelResolutions[resolutionIndex].X, TunnelResolutions[resolutionIndex].Y, TunnelResolutions[resolutionIndex].Z };
-					}
-
-					Ignition::UI::Text("Lattice: {:.0f} MB", LatticeMegabytes(tunnel->Resolution));
-
-					Ignition::UI::DragFloat3("Domain Size (m)", tunnel->DomainSize, 0.05f);
-
-					Ignition::UI::SeparatorText("Flow");
-
-					Ignition::UI::DragFloat("Inlet Speed (m/s)", &tunnel->InletSpeed, 0.5f, 1.0f, 120.0f);
-					Ignition::UI::DragFloat("Air Density", &tunnel->AirDensity, 0.001f, 0.1f, 5.0f);
-					Ignition::UI::DragFloat("Kinematic Viscosity", &tunnel->KinematicViscosity, 1e-7f, 1e-7f, 1e-3f);
-					Ignition::UI::SliderFloat("Lattice Velocity", &tunnel->LatticeVelocity, 0.01f, 0.15f);
-					Ignition::UI::SliderFloat("Smagorinsky C", &tunnel->SmagorinskyConstant, 0.0f, 0.3f);
-					Ignition::UI::SliderFloat("Minimum tau", &tunnel->MinimumRelaxationTime, 0.5005f, 0.55f);
-
-					Ignition::UI::Checkbox("Rolling Road", &tunnel->RollingRoad);
-					Ignition::UI::TextDisabled("A static floor grows a false boundary layer that corrupts underbody flow - not optional for automotive work");
-
-					Ignition::UI::SeparatorText("Reference");
-
-					Ignition::UI::DragFloat("Reference Length (m)", &tunnel->ReferenceLength, 0.01f, 0.01f, 20.0f);
-					Ignition::UI::DragFloat("Wheelbase (m)", &tunnel->Wheelbase, 0.01f, 0.1f, 20.0f);
-					Ignition::UI::DragFloat3("Reference Point", tunnel->ReferencePoint, 0.01f);
-
-					Ignition::UI::SeparatorText("Obstacle");
-
-					Ignition::UI::TextDisabled("The analytic sphere stands in only while no Aero Body is present - the sphere rung needs no mesh, and it keeps solver bugs separable from voxelizer bugs");
-					Ignition::UI::DragFloat("Diameter (m)", &tunnel->ObstacleDiameter, 0.01f, 0.01f, 20.0f);
-					Ignition::UI::DragFloat3("Center (fraction)", tunnel->ObstacleCenter, 0.005f);
-
-					int floodIterations = static_cast<int>(tunnel->FloodIterations);
-
-					if (Ignition::UI::SliderInt("Flood Iterations", &floodIterations, 1, 32))
-					{
-						tunnel->FloodIterations = static_cast<uint32_t>(floodIterations);
-					}
-
-					Ignition::UI::Checkbox("Draw Bounds", &tunnel->DrawBounds);
-
-					if (Ignition::UI::SmallButton("Remove##WindTunnel"))
-					{
-						entity.RemoveWindTunnel();
-					}
-				}
-			}
-
 			Ignition::UI::Separator();
 
 			if (Ignition::UI::Button("Add Component"))
@@ -1597,24 +1269,6 @@ namespace Editor
 				{
 					entity.AddPhysicsMaterial();
 					m_Context->PhysicsSceneDirty = true;
-				}
-
-				if (!entity.GetWindTunnel() && Ignition::UI::MenuItem("Wind Tunnel"))
-				{
-					entity.AddWindTunnel();
-				}
-
-				if (!entity.GetAeroBody() && Ignition::UI::MenuItem("Aero Body"))
-				{
-					Ignition::AeroBodyComponent aeroBody;
-
-					if (const Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer())
-					{
-						aeroBody.MeshAsset = meshRenderer->MeshAsset;
-						aeroBody.Mesh = meshRenderer->Mesh;
-					}
-
-					entity.AddAeroBody(aeroBody);
 				}
 
 				Ignition::UI::EndPopup();
@@ -1742,6 +1396,8 @@ namespace Editor
 			m_Context->Scene->DestroyEntity(entity);
 		}
 
+		// An empty scene is still a tunnel, just an empty one - the settings go back to defaults with it
+		m_Context->Scene->GetWindTunnel() = {};
 		m_Context->ScenePath.clear();
 		m_Context->PhysicsSceneDirty = true;
 	}

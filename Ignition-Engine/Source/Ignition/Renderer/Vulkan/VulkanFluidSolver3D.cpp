@@ -33,8 +33,7 @@ namespace Ignition
 		constexpr uint32_t CounterCount = 4;
 		constexpr VkDeviceSize ReadbackSize = ResultFloats * sizeof(float) + CounterCount * sizeof(uint32_t) + 2 * sizeof(uint32_t);
 
-		// Voxelizer (Step 3.2). Fixed capacities so a mesh change never rewrites a descriptor while frames are in flight;
-		// 12 MB total, which is nothing beside the lattice and generous for the decimated CFD mesh this consumes
+		// Voxelizer (Step 3.2). Fixed 12 MB capacities so a mesh change never rewrites a descriptor while frames are in flight - nothing beside the lattice
 		constexpr uint32_t VoxelVertexCapacity = 1u << 19;      // 524288 vertices
 		constexpr uint32_t VoxelIndexCapacity = 1536u * 1024u;  // 524288 triangles
 		constexpr uint32_t VoxelTriangleBudget = 1u << 16;      // cells one triangle may span before it is rejected
@@ -229,7 +228,6 @@ namespace Ignition
 		constexpr uint32_t pushConstantSize = static_cast<uint32_t>(sizeof(FluidPushConstants3D));
 
 		m_ClearMaskPipeline.Initialize(m_Device, shaderModule, "clearMask", m_SetLayout, pushConstantSize);
-		m_MarkAnalyticPipeline.Initialize(m_Device, shaderModule, "markAnalytic", m_SetLayout, pushConstantSize);
 		m_VoxelizePipeline.Initialize(m_Device, shaderModule, "voxelize", m_SetLayout, pushConstantSize);
 		m_FloodSweepPipeline.Initialize(m_Device, shaderModule, "floodSweep", m_SetLayout, pushConstantSize);
 		m_FloodFinalizePipeline.Initialize(m_Device, shaderModule, "floodFinalize", m_SetLayout, pushConstantSize);
@@ -251,7 +249,7 @@ namespace Ignition
 
 	bool VulkanFluidSolver3D::IsValid() const
 	{
-		return m_ClearMaskPipeline.IsValid() && m_MarkAnalyticPipeline.IsValid() && m_VoxelizePipeline.IsValid() && m_FloodSweepPipeline.IsValid() && m_FloodFinalizePipeline.IsValid() && m_InitializePipeline.IsValid() && m_ProjectedAreaPipeline.IsValid() && m_StreamCollidePipeline.IsValid() && m_ReducePartialPipeline.IsValid() && m_ReduceFinalPipeline.IsValid() && m_SlicePipeline.IsValid() && m_InitializeParticlesPipeline.IsValid() && m_AdvectParticlesPipeline.IsValid() && m_ShellPipeline.IsValid() && m_ShellFinalizePipeline.IsValid();
+		return m_ClearMaskPipeline.IsValid() && m_VoxelizePipeline.IsValid() && m_FloodSweepPipeline.IsValid() && m_FloodFinalizePipeline.IsValid() && m_InitializePipeline.IsValid() && m_ProjectedAreaPipeline.IsValid() && m_StreamCollidePipeline.IsValid() && m_ReducePartialPipeline.IsValid() && m_ReduceFinalPipeline.IsValid() && m_SlicePipeline.IsValid() && m_InitializeParticlesPipeline.IsValid() && m_AdvectParticlesPipeline.IsValid() && m_ShellPipeline.IsValid() && m_ShellFinalizePipeline.IsValid();
 	}
 
 	void VulkanFluidSolver3D::Shutdown()
@@ -282,7 +280,6 @@ namespace Ignition
 		m_FloodFinalizePipeline.Shutdown();
 		m_FloodSweepPipeline.Shutdown();
 		m_VoxelizePipeline.Shutdown();
-		m_MarkAnalyticPipeline.Shutdown();
 		m_ClearMaskPipeline.Shutdown();
 
 		if (m_DescriptorAllocator)
@@ -350,10 +347,8 @@ namespace Ignition
 
 	void VulkanFluidSolver3D::Configure(const FluidSolver3DSettings& settings)
 	{
-		// Only the mask-shaping inputs force a reset; the reference point, wind speed and rolling road all ride in on push constants.
-		// Origin moves the lattice under the bodies, so a voxelized tunnel has to re-bake as well
-		const bool geometryChanged = settings.ObstacleDiameter != m_Settings.ObstacleDiameter || settings.ObstacleCenter != m_Settings.ObstacleCenter || settings.DomainSize != m_Settings.DomainSize
-			|| (!m_Bodies.empty() && settings.Origin != m_Settings.Origin);
+		// Only the mask-shaping inputs force a reset; the reference point, wind speed and rolling road all ride in on push constants
+		const bool geometryChanged = settings.DomainSize != m_Settings.DomainSize || settings.Resolution != m_Settings.Resolution;
 
 		m_Settings = settings;
 		m_Scaling = FluidSolver3D::ComputeScaling(settings);
@@ -401,8 +396,7 @@ namespace Ignition
 		m_TriangleCount = 0;
 
 		const float cellSize = std::max(m_Scaling.CellSize, 1e-6f);
-		const glm::vec3 extent = glm::vec3(m_Settings.Resolution) * cellSize;
-		const glm::vec3 minimum = m_Settings.Origin - glm::vec3(0.5f * extent.x, 0.0f, 0.5f * extent.z);
+		const glm::vec3 minimum = LatticeMinimum();
 
 		for (const FluidBody& body : m_Bodies)
 		{
@@ -421,8 +415,7 @@ namespace Ignition
 				continue;
 			}
 
-			// model -> world -> lattice folded into one pass. Re-voxelization is debounced, so this never lands on a hot path,
-			// and it keeps a 64-byte matrix out of a push constant block that has no room for one
+			// model -> world -> lattice folded into one debounced pass, which keeps a 64-byte matrix out of a push constant block with no room for one
 			for (const glm::vec3& position : body.Geometry->Positions)
 			{
 				const glm::vec3 world = glm::vec3(body.Transform * glm::vec4(position, 1.0f));
@@ -449,13 +442,12 @@ namespace Ignition
 
 		if (m_TriangleCount == 0)
 		{
-			IG_CORE_INFO("Voxelizer: no geometry bound, the analytic sphere stands in");
+			IG_CORE_INFO("Voxelizer: the tunnel is empty, the flow runs undisturbed");
 
 			return;
 		}
 
-		// UploadViaStaging submits and waits on the graphics queue, which is the only queue this engine records on -
-		// so everything still reading these buffers has drained by the time the copy lands
+		// UploadViaStaging submits and waits on the graphics queue - the only queue this engine records on - so every reader of these buffers has drained by the time the copy lands
 		Utilities::VulkanUtilities::UploadViaStaging(m_Device, m_GraphicsQueue, m_GraphicsQueueFamily, m_Allocator, m_VoxelPositionData.data(), m_VoxelPositionData.size() * sizeof(float),
 			[&](VkCommandBuffer commandBuffer, const VulkanBuffer& staging)
 		{
@@ -486,14 +478,7 @@ namespace Ignition
 
 		const float cellSize = std::max(m_Scaling.CellSize, 1e-6f);
 
-		parameters.ObstacleCenter = m_Settings.ObstacleCenter * glm::vec3(m_Settings.Resolution);
-		parameters.ObstacleRadius = 0.5f * m_Settings.ObstacleDiameter / cellSize;
-
-		// The lattice, not the requested box, is the domain: cubic cells mean the covered volume is Resolution * dx, and the floor sits on the origin
-		const glm::vec3 extent = glm::vec3(m_Settings.Resolution) * cellSize;
-		const glm::vec3 minimum = m_Settings.Origin - glm::vec3(0.5f * extent.x, 0.0f, 0.5f * extent.z);
-
-		parameters.ReferencePoint = (m_Settings.ReferencePoint - minimum) / cellSize;
+		parameters.ReferencePoint = (m_Settings.ReferencePoint - LatticeMinimum()) / cellSize;
 
 		parameters.LatticeVelocity = m_Scaling.LatticeVelocity;
 		parameters.RelaxationTime = m_Scaling.RelaxationTime;
@@ -527,11 +512,9 @@ namespace Ignition
 		Dispatch(commandBuffer, m_ClearMaskPipeline, m_DescriptorSets[0], parameters, gridX, gridY, gridZ);
 		Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
 
+		// An empty tunnel is all fluid: nothing to rasterize, and a flood fill over a domain with no seed geometry has nothing to find
 		if (m_TriangleCount == 0)
 		{
-			Dispatch(commandBuffer, m_MarkAnalyticPipeline, m_DescriptorSets[0], parameters, gridX, gridY, gridZ);
-			Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
-
 			return;
 		}
 
@@ -606,13 +589,21 @@ namespace Ignition
 		m_SliceInitialized = true;
 	}
 
+	glm::vec3 VulkanFluidSolver3D::LatticeExtent() const
+	{
+		return glm::vec3(m_Settings.Resolution) * std::max(m_Scaling.CellSize, 1e-6f);
+	}
+
+	glm::vec3 VulkanFluidSolver3D::LatticeMinimum() const
+	{
+		const glm::vec3 extent = LatticeExtent();
+
+		return { -0.5f * extent.x, 0.0f, -0.5f * extent.z };
+	}
+
 	glm::mat4 VulkanFluidSolver3D::LatticeToWorld() const
 	{
-		const float cellSize = std::max(m_Scaling.CellSize, 1e-6f);
-		const glm::vec3 extent = glm::vec3(m_Settings.Resolution) * cellSize;
-		const glm::vec3 minimum = m_Settings.Origin - glm::vec3(0.5f * extent.x, 0.0f, 0.5f * extent.z);
-
-		return glm::translate(glm::mat4(1.0f), minimum) * glm::scale(glm::mat4(1.0f), glm::vec3(cellSize));
+		return glm::translate(glm::mat4(1.0f), LatticeMinimum()) * glm::scale(glm::mat4(1.0f), glm::vec3(std::max(m_Scaling.CellSize, 1e-6f)));
 	}
 
 	void VulkanFluidSolver3D::CopyResults(VkCommandBuffer commandBuffer, uint32_t frameIndex)
@@ -706,7 +697,7 @@ namespace Ignition
 
 			Utilities::VulkanUtilities::MemoryBarrier(commandBuffer, VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
 
-			// The mask is built first and in full - voxelized or analytic - because initialize now reads it rather than writing it
+			// The mask is built first and in full, because initialize reads it rather than writing it
 			RecordMask(commandBuffer, parameters);
 
 			// Both distribution buffers are filled so the first step reads a consistent state whichever set it binds
@@ -748,7 +739,7 @@ namespace Ignition
 
 		if (steps > 0)
 		{
-			// Momentum exchange is summed once per frame: the reported force is the last simulated step's, as in 2D
+			// Momentum exchange is summed once per frame: the reported force is the last simulated step's
 			Dispatch(commandBuffer, m_ReducePartialPipeline, m_DescriptorSets[m_CurrentSet], parameters, ReductionGroups);
 			Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
 			Dispatch(commandBuffer, m_ReduceFinalPipeline, m_DescriptorSets[m_CurrentSet], parameters, 1);
@@ -826,9 +817,8 @@ namespace Ignition
 			return false;
 		}
 
-		const float cellSize = std::max(m_Scaling.CellSize, 1e-6f);
-		const glm::vec3 extent = glm::vec3(m_Settings.Resolution) * cellSize;
-		const glm::vec3 minimum = m_Settings.Origin - glm::vec3(0.5f * extent.x, 0.0f, 0.5f * extent.z);
+		const glm::vec3 extent = LatticeExtent();
+		const glm::vec3 minimum = LatticeMinimum();
 		const float fraction = std::clamp(m_Settings.SlicePosition, 0.0f, 1.0f);
 
 		// The quad is a unit XY square; each case rotates its local x/y onto the slice kernel's u/v axes
@@ -837,13 +827,13 @@ namespace Ignition
 		switch (m_Settings.SliceAxis)
 		{
 			case FluidSliceAxis::X: // u -> Z, v -> Y
-				transform = glm::translate(glm::mat4(1.0f), glm::vec3(minimum.x + fraction * extent.x, minimum.y + 0.5f * extent.y, m_Settings.Origin.z)) * glm::rotate(glm::mat4(1.0f), -glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(extent.z, extent.y, 1.0f));
+				transform = glm::translate(glm::mat4(1.0f), glm::vec3(minimum.x + fraction * extent.x, 0.5f * extent.y, 0.0f)) * glm::rotate(glm::mat4(1.0f), -glm::half_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(extent.z, extent.y, 1.0f));
 				break;
 			case FluidSliceAxis::Y: // u -> X, v -> Z
-				transform = glm::translate(glm::mat4(1.0f), glm::vec3(m_Settings.Origin.x, minimum.y + fraction * extent.y, m_Settings.Origin.z)) * glm::rotate(glm::mat4(1.0f), glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(extent.x, extent.z, 1.0f));
+				transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, fraction * extent.y, 0.0f)) * glm::rotate(glm::mat4(1.0f), glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(extent.x, extent.z, 1.0f));
 				break;
 			case FluidSliceAxis::Z: // u -> X, v -> Y
-				transform = glm::translate(glm::mat4(1.0f), glm::vec3(m_Settings.Origin.x, minimum.y + 0.5f * extent.y, minimum.z + fraction * extent.z)) * glm::scale(glm::mat4(1.0f), glm::vec3(extent.x, extent.y, 1.0f));
+				transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f * extent.y, minimum.z + fraction * extent.z)) * glm::scale(glm::mat4(1.0f), glm::vec3(extent.x, extent.y, 1.0f));
 				break;
 		}
 

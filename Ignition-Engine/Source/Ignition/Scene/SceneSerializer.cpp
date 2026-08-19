@@ -186,8 +186,37 @@ namespace Ignition
 	{
 		YAML::Emitter out;
 
+		const FluidSolver3DSettings& tunnel = m_Scene->GetWindTunnel();
+
 		out << YAML::BeginMap;
 		out << YAML::Key << "Scene" << YAML::Value << "Untitled";
+
+		out << YAML::Key << "WindTunnel" << YAML::Value << YAML::BeginMap;
+		out << YAML::Key << "Resolution" << YAML::Value << tunnel.Resolution;
+		out << YAML::Key << "DomainSize" << YAML::Value << tunnel.DomainSize;
+		out << YAML::Key << "ReferencePoint" << YAML::Value << tunnel.ReferencePoint;
+		out << YAML::Key << "InletSpeed" << YAML::Value << tunnel.InletSpeed;
+		out << YAML::Key << "AirDensity" << YAML::Value << tunnel.AirDensity;
+		out << YAML::Key << "KinematicViscosity" << YAML::Value << tunnel.KinematicViscosity;
+		out << YAML::Key << "SmagorinskyConstant" << YAML::Value << tunnel.SmagorinskyConstant;
+		out << YAML::Key << "LatticeVelocity" << YAML::Value << tunnel.LatticeVelocity;
+		out << YAML::Key << "MinimumRelaxationTime" << YAML::Value << tunnel.MinimumRelaxationTime;
+		out << YAML::Key << "ReferenceLength" << YAML::Value << tunnel.ReferenceLength;
+		out << YAML::Key << "Wheelbase" << YAML::Value << tunnel.Wheelbase;
+		out << YAML::Key << "RollingRoad" << YAML::Value << tunnel.RollingRoad;
+		out << YAML::Key << "SliceEnabled" << YAML::Value << tunnel.SliceEnabled;
+		out << YAML::Key << "SliceAxis" << YAML::Value << static_cast<int>(tunnel.SliceAxis);
+		out << YAML::Key << "SlicePosition" << YAML::Value << tunnel.SlicePosition;
+		out << YAML::Key << "SliceField" << YAML::Value << static_cast<int>(tunnel.SliceField);
+		out << YAML::Key << "ColorScale" << YAML::Value << tunnel.ColorScale;
+		out << YAML::Key << "SliceOpacity" << YAML::Value << tunnel.SliceOpacity;
+		out << YAML::Key << "ParticlesEnabled" << YAML::Value << tunnel.ParticlesEnabled;
+		out << YAML::Key << "ParticleCount" << YAML::Value << tunnel.ParticleCount;
+		out << YAML::Key << "SurfacePressureEnabled" << YAML::Value << tunnel.SurfacePressureEnabled;
+		out << YAML::Key << "VoxelDebugView" << YAML::Value << tunnel.VoxelDebugView;
+		out << YAML::Key << "FloodIterations" << YAML::Value << tunnel.FloodIterations;
+		out << YAML::EndMap;
+
 		out << YAML::Key << "Entities" << YAML::Value << YAML::BeginSeq;
 
 		for (Entity entity : m_Scene->GetEntities())
@@ -267,47 +296,6 @@ namespace Ignition
 				out << YAML::EndMap;
 			}
 
-			if (const WindTunnelComponent* tunnel = entity.GetWindTunnel())
-			{
-				out << YAML::Key << "WindTunnel" << YAML::Value << YAML::BeginMap;
-				out << YAML::Key << "Resolution" << YAML::Value << tunnel->Resolution;
-				out << YAML::Key << "DomainSize" << YAML::Value << tunnel->DomainSize;
-				out << YAML::Key << "InletSpeed" << YAML::Value << tunnel->InletSpeed;
-				out << YAML::Key << "AirDensity" << YAML::Value << tunnel->AirDensity;
-				out << YAML::Key << "KinematicViscosity" << YAML::Value << tunnel->KinematicViscosity;
-				out << YAML::Key << "SmagorinskyConstant" << YAML::Value << tunnel->SmagorinskyConstant;
-				out << YAML::Key << "LatticeVelocity" << YAML::Value << tunnel->LatticeVelocity;
-				out << YAML::Key << "MinimumRelaxationTime" << YAML::Value << tunnel->MinimumRelaxationTime;
-				out << YAML::Key << "ReferenceLength" << YAML::Value << tunnel->ReferenceLength;
-				out << YAML::Key << "Wheelbase" << YAML::Value << tunnel->Wheelbase;
-				out << YAML::Key << "ReferencePoint" << YAML::Value << tunnel->ReferencePoint;
-				out << YAML::Key << "ObstacleDiameter" << YAML::Value << tunnel->ObstacleDiameter;
-				out << YAML::Key << "ObstacleCenter" << YAML::Value << tunnel->ObstacleCenter;
-				out << YAML::Key << "RollingRoad" << YAML::Value << tunnel->RollingRoad;
-				out << YAML::Key << "DrawBounds" << YAML::Value << tunnel->DrawBounds;
-				out << YAML::Key << "SliceEnabled" << YAML::Value << tunnel->SliceEnabled;
-				out << YAML::Key << "SliceAxis" << YAML::Value << tunnel->SliceAxis;
-				out << YAML::Key << "SlicePosition" << YAML::Value << tunnel->SlicePosition;
-				out << YAML::Key << "SliceField" << YAML::Value << tunnel->SliceField;
-				out << YAML::Key << "ColorScale" << YAML::Value << tunnel->ColorScale;
-				out << YAML::Key << "SliceOpacity" << YAML::Value << tunnel->SliceOpacity;
-				out << YAML::Key << "ParticlesEnabled" << YAML::Value << tunnel->ParticlesEnabled;
-				out << YAML::Key << "ParticleCount" << YAML::Value << tunnel->ParticleCount;
-				out << YAML::Key << "SurfacePressureEnabled" << YAML::Value << tunnel->SurfacePressureEnabled;
-				out << YAML::Key << "VoxelDebugView" << YAML::Value << tunnel->VoxelDebugView;
-				out << YAML::Key << "FloodIterations" << YAML::Value << tunnel->FloodIterations;
-				out << YAML::EndMap;
-			}
-
-			if (const AeroBodyComponent* aeroBody = entity.GetAeroBody())
-			{
-				out << YAML::Key << "AeroBody" << YAML::Value << YAML::BeginMap;
-				out << YAML::Key << "Mesh" << YAML::Value << aeroBody->MeshAsset;
-				out << YAML::Key << "ObjectID" << YAML::Value << aeroBody->ObjectID;
-				out << YAML::Key << "Enabled" << YAML::Value << aeroBody->Enabled;
-				out << YAML::EndMap;
-			}
-
 			out << YAML::EndMap;
 		}
 
@@ -349,6 +337,37 @@ namespace Ignition
 		if (!root["Entities"])
 		{
 			return false;
+		}
+
+		// Absent in a pre-Phase-3 scene file, which is exactly what the defaults are for
+		if (const YAML::Node tunnelNode = root["WindTunnel"])
+		{
+			FluidSolver3DSettings tunnel;
+			tunnel.Resolution = tunnelNode["Resolution"].as<glm::uvec3>(glm::uvec3(128, 64, 256));
+			tunnel.DomainSize = tunnelNode["DomainSize"].as<glm::vec3>(glm::vec3(4.0f, 2.0f, 8.0f));
+			tunnel.ReferencePoint = tunnelNode["ReferencePoint"].as<glm::vec3>(glm::vec3(0.0f));
+			tunnel.InletSpeed = tunnelNode["InletSpeed"].as<float>(40.0f);
+			tunnel.AirDensity = tunnelNode["AirDensity"].as<float>(1.225f);
+			tunnel.KinematicViscosity = tunnelNode["KinematicViscosity"].as<float>(1.48e-5f);
+			tunnel.SmagorinskyConstant = tunnelNode["SmagorinskyConstant"].as<float>(0.16f);
+			tunnel.LatticeVelocity = tunnelNode["LatticeVelocity"].as<float>(0.06f);
+			tunnel.MinimumRelaxationTime = tunnelNode["MinimumRelaxationTime"].as<float>(0.503f);
+			tunnel.ReferenceLength = tunnelNode["ReferenceLength"].as<float>(1.0f);
+			tunnel.Wheelbase = tunnelNode["Wheelbase"].as<float>(3.6f);
+			tunnel.RollingRoad = tunnelNode["RollingRoad"].as<bool>(true);
+			tunnel.SliceEnabled = tunnelNode["SliceEnabled"].as<bool>(true);
+			tunnel.SliceAxis = static_cast<FluidSliceAxis>(std::clamp(tunnelNode["SliceAxis"].as<int>(0), 0, 2));
+			tunnel.SlicePosition = tunnelNode["SlicePosition"].as<float>(0.5f);
+			tunnel.SliceField = static_cast<FluidField>(std::clamp(tunnelNode["SliceField"].as<int>(0), 0, 2));
+			tunnel.ColorScale = tunnelNode["ColorScale"].as<float>(1.0f);
+			tunnel.SliceOpacity = tunnelNode["SliceOpacity"].as<float>(0.85f);
+			tunnel.ParticlesEnabled = tunnelNode["ParticlesEnabled"].as<bool>(true);
+			tunnel.ParticleCount = tunnelNode["ParticleCount"].as<uint32_t>(100000);
+			tunnel.SurfacePressureEnabled = tunnelNode["SurfacePressureEnabled"].as<bool>(false);
+			tunnel.VoxelDebugView = tunnelNode["VoxelDebugView"].as<bool>(false);
+			tunnel.FloodIterations = tunnelNode["FloodIterations"].as<uint32_t>(8);
+
+			m_Scene->GetWindTunnel() = tunnel;
 		}
 
 		// Replace the current scene contents wholesale
@@ -442,50 +461,6 @@ namespace Ignition
 				collider.Offset = colliderNode["Offset"].as<glm::vec3>(glm::vec3(0.0f));
 
 				entity.AddMeshCollider(collider);
-			}
-
-			if (const YAML::Node tunnelNode = entityNode["WindTunnel"])
-			{
-				WindTunnelComponent tunnel;
-				tunnel.Resolution = tunnelNode["Resolution"].as<glm::uvec3>(glm::uvec3(128, 64, 256));
-				tunnel.DomainSize = tunnelNode["DomainSize"].as<glm::vec3>(glm::vec3(4.0f, 2.0f, 8.0f));
-				tunnel.InletSpeed = tunnelNode["InletSpeed"].as<float>(40.0f);
-				tunnel.AirDensity = tunnelNode["AirDensity"].as<float>(1.225f);
-				tunnel.KinematicViscosity = tunnelNode["KinematicViscosity"].as<float>(1.48e-5f);
-				tunnel.SmagorinskyConstant = tunnelNode["SmagorinskyConstant"].as<float>(0.16f);
-				tunnel.LatticeVelocity = tunnelNode["LatticeVelocity"].as<float>(0.06f);
-				tunnel.MinimumRelaxationTime = tunnelNode["MinimumRelaxationTime"].as<float>(0.503f);
-				tunnel.ReferenceLength = tunnelNode["ReferenceLength"].as<float>(1.0f);
-				tunnel.Wheelbase = tunnelNode["Wheelbase"].as<float>(3.6f);
-				tunnel.ReferencePoint = tunnelNode["ReferencePoint"].as<glm::vec3>(glm::vec3(0.0f));
-				tunnel.ObstacleDiameter = tunnelNode["ObstacleDiameter"].as<float>(1.0f);
-				tunnel.ObstacleCenter = tunnelNode["ObstacleCenter"].as<glm::vec3>(glm::vec3(0.5f, 0.5f, 0.7f));
-				tunnel.RollingRoad = tunnelNode["RollingRoad"].as<bool>(true);
-				tunnel.DrawBounds = tunnelNode["DrawBounds"].as<bool>(true);
-				tunnel.SliceEnabled = tunnelNode["SliceEnabled"].as<bool>(true);
-				tunnel.SliceAxis = tunnelNode["SliceAxis"].as<int>(0);
-				tunnel.SlicePosition = tunnelNode["SlicePosition"].as<float>(0.5f);
-				tunnel.SliceField = tunnelNode["SliceField"].as<int>(0);
-				tunnel.ColorScale = tunnelNode["ColorScale"].as<float>(1.0f);
-				tunnel.SliceOpacity = tunnelNode["SliceOpacity"].as<float>(0.85f);
-				tunnel.ParticlesEnabled = tunnelNode["ParticlesEnabled"].as<bool>(true);
-				tunnel.ParticleCount = tunnelNode["ParticleCount"].as<uint32_t>(100000);
-				tunnel.SurfacePressureEnabled = tunnelNode["SurfacePressureEnabled"].as<bool>(false);
-				tunnel.VoxelDebugView = tunnelNode["VoxelDebugView"].as<bool>(false);
-				tunnel.FloodIterations = tunnelNode["FloodIterations"].as<uint32_t>(8);
-
-				entity.AddWindTunnel(tunnel);
-			}
-
-			if (const YAML::Node aeroBodyNode = entityNode["AeroBody"])
-			{
-				AeroBodyComponent aeroBody;
-				aeroBody.MeshAsset = aeroBodyNode["Mesh"].as<std::string>("");
-				aeroBody.ObjectID = aeroBodyNode["ObjectID"].as<uint32_t>(1);
-				aeroBody.Enabled = aeroBodyNode["Enabled"].as<bool>(true);
-				aeroBody.Mesh = m_Assets->LoadMesh(aeroBody.MeshAsset);
-
-				entity.AddAeroBody(aeroBody);
 			}
 		}
 

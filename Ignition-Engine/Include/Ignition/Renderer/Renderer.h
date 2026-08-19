@@ -61,7 +61,6 @@ namespace Ignition
 
 	private:
 		friend class Engine;
-		friend class FluidSolver2D;
 		friend class FluidSolver3D;
 
 		Renderer();

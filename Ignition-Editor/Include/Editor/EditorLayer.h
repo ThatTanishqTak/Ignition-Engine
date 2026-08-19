@@ -13,7 +13,6 @@
 #include <vector>
 #include <array>
 
-#include "Ignition/Fluid/FluidSolver2D.h"
 #include "Ignition/Fluid/FluidSolver3D.h"
 
 namespace Ignition
@@ -23,8 +22,6 @@ namespace Ignition
 	class Input;
 	class PhysicsWorld;
 	class Renderer;
-	struct TransformComponent;
-	struct WindTunnelComponent;
 }
 
 namespace Editor
@@ -56,23 +53,18 @@ namespace Editor
 		void DrawHierarchyPanel();
 		void DrawInspectorPanel();
 		void DrawStatsPanel();
-		void DrawFluidLabPanel();
 		void DrawAeroPanel();
 		void DrawPathPrompt();
 		void PromptForPath(PathPrompt prompt);
-
-		void UpdateFluidLab();
-		void RecordFluidHistory();
-		void ClearFluidHistory();
 
 		void UpdateWindTunnel(float deltaTime);
 		void GatherAeroBodies();
 		void SubmitTunnelGizmos();
 		void RecordAeroHistory();
 		void ClearAeroHistory();
-		Ignition::FluidSolver3DSettings BuildTunnelSettings(const Ignition::TransformComponent& transform, const Ignition::WindTunnelComponent& tunnel) const;
 
 		void NewScene();
+		void CreateFallbackScene();
 		void OpenScene(const std::string& filepath);
 		void SaveScene(const std::string& filepath);
 
@@ -110,35 +102,15 @@ namespace Editor
 
 		std::vector<float> m_FrameTimeHistory;
 
-		// Fluid Lab - the 2D rung of the validation ladder
-		std::unique_ptr<Ignition::FluidSolver2D> m_Fluid;
-		Ignition::FluidSolver2DSettings m_FluidSettings;
-		bool m_FluidLabOpen = true;
-		bool m_FluidRunning = false;
-		bool m_FluidStepRequested = false;
-		int m_FluidStepsPerFrame = 8;
-		int m_FluidFieldIndex = 1;
-		int m_FluidResolutionIndex = 1;
-		float m_FluidColorScale = 1.0f;
-
-		std::vector<float> m_DragHistory;
-		std::vector<float> m_LiftHistory;
-		float m_PreviousLift = 0.0f;
-		float m_PreviousCrossingTime = -1.0f;
-		float m_StrouhalNumber = 0.0f;
-
-		// Wind tunnel - the 3D rung. Created lazily, because the lattice is hundreds of megabytes and most scenes have no tunnel in them
+		// The tunnel is the scene, so it is created once and lives as long as the session does
 		std::unique_ptr<Ignition::FluidSolver3D> m_Tunnel;
 		Ignition::FluidSolver3DSettings m_TunnelSettings;
-		Ignition::Entity m_TunnelEntity; // the entity carrying the component, so the Aero panel can edit it
 
 		// Voxelizer input, debounced: re-voxelization is heavy, so a gizmo drag re-voxelizes on release rather than every frame
 		std::vector<Ignition::FluidBody> m_AeroBodies;
 		std::vector<Ignition::FluidBody> m_PendingAeroBodies;
 		float m_AeroBodyDebounce = 0.0f;
 		bool m_AeroPanelOpen = true;
-		bool m_TunnelRunning = false;
-		bool m_TunnelStepRequested = false;
 		bool m_AeroAveraged = true;
 		int m_TunnelStepsPerFrame = 2;
 

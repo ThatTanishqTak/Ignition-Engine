@@ -11,7 +11,6 @@
 #include "Ignition/Renderer/Vulkan/VulkanImGui.h"
 #include "Ignition/Renderer/Vulkan/VulkanLineRenderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanDescriptorAllocator.h"
-#include "Ignition/Renderer/Vulkan/VulkanFluidSolver2D.h"
 #include "Ignition/Renderer/Vulkan/VulkanFluidSolver3D.h"
 #include "Ignition/Renderer/Vulkan/VulkanGPUTimer.h"
 #include "Ignition/Renderer/DebugDrawBuffer.h"
@@ -1013,31 +1012,6 @@ namespace Ignition
 		return m_VulkanGPUTimer ? m_VulkanGPUTimer->GetResults() : empty;
 	}
 
-	std::unique_ptr<VulkanFluidSolver2D> VulkanRenderer::CreateFluidSolver2D(const FluidSolver2DSettings& settings)
-	{
-		if (!IsValid() || !m_VulkanAllocator || !m_VulkanDescriptorAllocator)
-		{
-			return nullptr;
-		}
-
-		const char* basePath = SDL_GetBasePath();
-		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Fluid2D.spv";
-
-		auto solver = std::make_unique<VulkanFluidSolver2D>();
-		solver->Initialize(*this, m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
-
-		if (!solver->IsValid())
-		{
-			solver->Shutdown();
-
-			return nullptr;
-		}
-
-		m_ComputePasses.push_back(solver.get());
-
-		return solver;
-	}
-
 	std::unique_ptr<VulkanFluidSolver3D> VulkanRenderer::CreateFluidSolver3D(const FluidSolver3DSettings& settings)
 	{
 		if (!IsValid() || !m_VulkanAllocator || !m_VulkanDescriptorAllocator)
@@ -1061,18 +1035,6 @@ namespace Ignition
 		m_ComputePasses.push_back(solver.get());
 
 		return solver;
-	}
-
-	void VulkanRenderer::Retire(std::unique_ptr<VulkanFluidSolver2D> solver)
-	{
-		if (!solver)
-		{
-			return;
-		}
-
-		std::erase(m_ComputePasses, static_cast<VulkanComputePass*>(solver.get()));
-
-		RetireResource(std::move(solver));
 	}
 
 	void VulkanRenderer::Retire(std::unique_ptr<VulkanFluidSolver3D> solver)

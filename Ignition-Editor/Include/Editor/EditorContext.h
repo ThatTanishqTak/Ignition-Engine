@@ -33,10 +33,14 @@ namespace Editor
 		glm::vec2 ViewportSize{ 0.0f };
 
 		PlayState Play = PlayState::Edit;
+
+		// One button, two consumers on different clocks: physics steps on the fixed accumulator, the lattice on the rendered frame
 		bool StepRequested = false;
+		bool TunnelStepRequested = false;
 
 		bool DrawColliders = true;
-		bool DrawPhysXVisualization = false;
+		bool DrawPhysicsVisualization = false;
+		bool DrawTunnelBounds = true;
 
 		// Set whenever colliders or transforms change so the edit-mode query scene can be rebuilt
 		bool PhysicsSceneDirty = true;

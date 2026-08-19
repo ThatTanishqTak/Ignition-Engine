@@ -31,7 +31,7 @@ namespace Ignition
 		scaling.LatticeVelocity = std::clamp(settings.LatticeVelocity, 0.001f, 0.2f);
 		scaling.TimeStep = scaling.LatticeVelocity * scaling.CellSize / inletSpeed;
 
-		scaling.ObstacleDiameterCells = referenceLength / scaling.CellSize;
+		scaling.ReferenceLengthCells = referenceLength / scaling.CellSize;
 
 		// The physical viscosity returns here, as the Conventions table promised: nu_lattice = nu * dt / dx^2
 		scaling.LatticeViscosity = settings.KinematicViscosity * scaling.TimeStep / std::max(scaling.CellSize * scaling.CellSize, 1e-12f);
@@ -39,8 +39,7 @@ namespace Ignition
 		const float requestedTau = 3.0f * scaling.LatticeViscosity + 0.5f;
 		const float relaxationFloor = std::max(settings.MinimumRelaxationTime, 0.5001f);
 
-		// At Re ~ 1e7 the molecular viscosity is orders of magnitude below what a few hundred cells can resolve, so tau lands on 0.5 and the scheme goes inviscid.
-		// Clamping it and letting Smagorinsky supply the rest is what a wall-modelled LES does; hiding the clamp is what makes a wrong answer look right
+		// Air's viscosity is far below what a few hundred cells resolve, so tau lands on 0.5 and the scheme goes inviscid - clamping it and letting Smagorinsky supply the rest is what a wall-modelled LES does
 		scaling.SubgridLimited = requestedTau < relaxationFloor;
 		scaling.RelaxationTime = std::max(requestedTau, relaxationFloor);
 
@@ -49,12 +48,12 @@ namespace Ignition
 
 		scaling.ReynoldsNumber = inletSpeed * referenceLength / std::max(settings.KinematicViscosity, 1e-12f);
 
-		// Lattice force -> Newtons: density * length^4 / time^2. The 2D lab's scale carries one power of length less because it reports per metre of span
+		// Lattice force -> Newtons: density * length^4 / time^2
 		const float cellSize = scaling.CellSize;
 		scaling.ForceScale = settings.AirDensity * cellSize * cellSize * cellSize * cellSize / std::max(scaling.TimeStep * scaling.TimeStep, 1e-24f);
 
 		// The relaxation floor makes the first condition true by construction; the other two are the ones that still fail
-		scaling.Stable = scaling.RelaxationTime > 0.5005f && scaling.LatticeVelocity <= 0.1f && scaling.ObstacleDiameterCells >= 8.0f;
+		scaling.Stable = scaling.RelaxationTime > 0.5005f && scaling.LatticeVelocity <= 0.1f && scaling.ReferenceLengthCells >= 8.0f;
 
 		return scaling;
 	}
@@ -157,7 +156,7 @@ namespace Ignition
 		// Torque is a force times a lattice length, so it takes one more factor of dx than the force does
 		forces.Torque = m_Implementation->Handle->GetLatticeTorque() * m_Scaling.ForceScale * m_Scaling.CellSize;
 
-		// Frontal area counted from the mask rather than assumed, so it stays right once the voxelizer replaces the sphere
+		// Frontal area counted from the mask rather than assumed, so it follows whatever geometry is in the tunnel
 		forces.ReferenceArea = static_cast<float>(m_Implementation->Handle->GetProjectedCellCount()) * m_Scaling.CellSize * m_Scaling.CellSize;
 
 		// Air flows in -Z: drag is the push downstream, downforce is the push into the road

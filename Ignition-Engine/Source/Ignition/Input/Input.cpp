@@ -261,9 +261,7 @@ namespace Ignition
 
 	void InputImplementation::ClearHeldState()
 	{
-		// Keyboard and mouse only: the OS delivers their releases to whichever window
-		// gains focus, so held state would otherwise stick. Gamepads are not focus
-		// scoped and keep streaming events, so their state stays live.
+		// Keyboard and mouse only: the OS delivers their releases to whichever window gains focus, so held state would stick. Gamepads are not focus scoped and stay live
 		KeysDown.fill(false);
 		KeyCodesDown.clear();
 		MouseDown.fill(false);

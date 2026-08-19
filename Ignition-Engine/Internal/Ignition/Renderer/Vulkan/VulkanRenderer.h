@@ -3,7 +3,6 @@
 #include <vulkan/vulkan.h>
 
 #include "Ignition/Core/ProfilerVulkan.h"
-#include "Ignition/Fluid/FluidSolver2D.h"
 #include "Ignition/Fluid/FluidSolver3D.h"
 #include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanComputePass.h"
@@ -37,7 +36,6 @@ namespace Ignition
 	class VulkanTexture;
 	class VulkanImage;
 	class VulkanGPUTimer;
-	class VulkanFluidSolver2D;
 	class VulkanFluidSolver3D;
 
 	class VulkanRenderer
@@ -68,13 +66,11 @@ namespace Ignition
 		std::unique_ptr<VulkanMesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 		std::unique_ptr<VulkanTexture> CreateTexture(const std::string& filepath);
 		std::unique_ptr<VulkanTexture> CreateTextureFromMemory(const void* data, size_t size);
-		std::unique_ptr<VulkanFluidSolver2D> CreateFluidSolver2D(const FluidSolver2DSettings& settings);
 		std::unique_ptr<VulkanFluidSolver3D> CreateFluidSolver3D(const FluidSolver3DSettings& settings);
 
 		void Retire(std::unique_ptr<VulkanMesh> mesh);
 		void Retire(std::unique_ptr<VulkanTexture> texture);
 		void Retire(std::unique_ptr<VulkanImage> image);
-		void Retire(std::unique_ptr<VulkanFluidSolver2D> solver);
 		void Retire(std::unique_ptr<VulkanFluidSolver3D> solver);
 
 		// Publishes a renderer-owned image view to ImGui with the shared linear sampler

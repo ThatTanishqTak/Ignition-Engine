@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Ignition/Core/Export.h"
+#include "Ignition/Fluid/FluidTypes.h"
 #include "Ignition/Scene/Entity.h"
 
 #include <memory>
@@ -32,11 +33,16 @@ namespace Ignition
 
 		IGNITION_API void OnRender(Renderer& renderer, const Camera& camera);
 
+		// The whole scene sits in the tunnel, so the tunnel is scene state rather than something an entity carries
+		IGNITION_API FluidSolver3DSettings& GetWindTunnel() { return m_WindTunnel; }
+		IGNITION_API const FluidSolver3DSettings& GetWindTunnel() const { return m_WindTunnel; }
+
 	private:
 		friend class Entity;
 		friend class PhysicsWorld;
 		friend class SceneSerializer;
 
 		std::unique_ptr<SceneRegistry> m_Registry;
+		FluidSolver3DSettings m_WindTunnel;
 	};
 }

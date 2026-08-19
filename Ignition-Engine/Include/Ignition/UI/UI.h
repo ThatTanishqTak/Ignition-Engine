@@ -45,8 +45,7 @@ namespace Ignition
 
 		// Docking
 		IGNITION_API unsigned int DockSpaceOverMainViewport();
-		// Builds a default 4-panel layout (left / right / bottom / center) the first time;
-		// returns false without touching anything when the user already has a saved layout.
+		// Builds a default 4-panel layout (left / right / bottom / center) the first time, returning false untouched when a saved layout already exists
 		IGNITION_API bool BuildDefaultDockLayout(unsigned int dockspaceID, const char* leftPanel, const char* rightPanel, const char* bottomPanel, const char* centerPanel);
 
 		// Menus

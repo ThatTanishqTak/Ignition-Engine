@@ -72,6 +72,10 @@ namespace Ignition
 		void UploadBodies();
 		void RecordMask(VkCommandBuffer commandBuffer, const FluidPushConstants3D& parameters);
 
+		// The lattice, not the requested box, is the domain: cubic cells mean the covered volume is Resolution * dx, floor on the world origin
+		glm::vec3 LatticeExtent() const;
+		glm::vec3 LatticeMinimum() const;
+
 		void Dispatch(VkCommandBuffer commandBuffer, const VulkanComputePipeline& pipeline, VkDescriptorSet descriptorSet, const FluidPushConstants3D& parameters, uint32_t groupsX, uint32_t groupsY = 1, uint32_t groupsZ = 1) const;
 		void RecordVisualization(VkCommandBuffer commandBuffer, const FluidPushConstants3D& parameters, uint32_t steps, VulkanGPUTimer* timer);
 		void TransitionSlice(VkCommandBuffer commandBuffer, bool toStorage);
@@ -137,7 +141,6 @@ namespace Ignition
 		std::array<VkDescriptorSet, 2> m_DescriptorSets{};
 
 		VulkanComputePipeline m_ClearMaskPipeline;
-		VulkanComputePipeline m_MarkAnalyticPipeline;
 		VulkanComputePipeline m_VoxelizePipeline;
 		VulkanComputePipeline m_FloodSweepPipeline;
 		VulkanComputePipeline m_FloodFinalizePipeline;
