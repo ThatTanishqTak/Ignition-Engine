@@ -294,6 +294,17 @@ namespace Ignition
 				out << YAML::Key << "ParticlesEnabled" << YAML::Value << tunnel->ParticlesEnabled;
 				out << YAML::Key << "ParticleCount" << YAML::Value << tunnel->ParticleCount;
 				out << YAML::Key << "SurfacePressureEnabled" << YAML::Value << tunnel->SurfacePressureEnabled;
+				out << YAML::Key << "VoxelDebugView" << YAML::Value << tunnel->VoxelDebugView;
+				out << YAML::Key << "FloodIterations" << YAML::Value << tunnel->FloodIterations;
+				out << YAML::EndMap;
+			}
+
+			if (const AeroBodyComponent* aeroBody = entity.GetAeroBody())
+			{
+				out << YAML::Key << "AeroBody" << YAML::Value << YAML::BeginMap;
+				out << YAML::Key << "Mesh" << YAML::Value << aeroBody->MeshAsset;
+				out << YAML::Key << "ObjectID" << YAML::Value << aeroBody->ObjectID;
+				out << YAML::Key << "Enabled" << YAML::Value << aeroBody->Enabled;
 				out << YAML::EndMap;
 			}
 
@@ -460,8 +471,21 @@ namespace Ignition
 				tunnel.ParticlesEnabled = tunnelNode["ParticlesEnabled"].as<bool>(true);
 				tunnel.ParticleCount = tunnelNode["ParticleCount"].as<uint32_t>(100000);
 				tunnel.SurfacePressureEnabled = tunnelNode["SurfacePressureEnabled"].as<bool>(false);
+				tunnel.VoxelDebugView = tunnelNode["VoxelDebugView"].as<bool>(false);
+				tunnel.FloodIterations = tunnelNode["FloodIterations"].as<uint32_t>(8);
 
 				entity.AddWindTunnel(tunnel);
+			}
+
+			if (const YAML::Node aeroBodyNode = entityNode["AeroBody"])
+			{
+				AeroBodyComponent aeroBody;
+				aeroBody.MeshAsset = aeroBodyNode["Mesh"].as<std::string>("");
+				aeroBody.ObjectID = aeroBodyNode["ObjectID"].as<uint32_t>(1);
+				aeroBody.Enabled = aeroBodyNode["Enabled"].as<bool>(true);
+				aeroBody.Mesh = m_Assets->LoadMesh(aeroBody.MeshAsset);
+
+				entity.AddAeroBody(aeroBody);
 			}
 		}
 

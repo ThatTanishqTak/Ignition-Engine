@@ -87,5 +87,20 @@ namespace Ignition
 		bool ParticlesEnabled = true;
 		uint32_t ParticleCount = 100000;
 		bool SurfacePressureEnabled = false;
+		bool VoxelDebugView = false;
+
+		// Voxelizer (Step 3.2)
+		uint32_t FloodIterations = 8;
+	};
+
+	// The mesh the wind actually sees. Rarely the mesh you draw: the CFD mesh is decimated and sealed, because
+	// open bodywork leaks the interior flood fill and sub-centimetre greebles alias into noise at any usable voxel size
+	struct AeroBodyComponent
+	{
+		std::shared_ptr<Ignition::Mesh> Mesh;   // resolved from MeshAsset; the visual mesh stands in when it is empty
+		std::string MeshAsset;
+
+		uint32_t ObjectID = 1;                  // 1-255, stamped into the voxel mask so Phase 4 can spin wheels without re-voxelizing
+		bool Enabled = true;
 	};
 }

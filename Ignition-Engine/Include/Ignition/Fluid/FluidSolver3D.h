@@ -2,16 +2,40 @@
 
 #include "Ignition/Core/Export.h"
 #include "Ignition/Fluid/FluidTypes.h"
+#include "Ignition/Renderer/Mesh.h"
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace Ignition
 {
 	class Renderer;
 	struct FluidSolver3DImplementation;
+
+	// One body the wind sees. Geometry is Mesh::GetGeometry() - the CPU-side copy Phase 1 added for collider cooking, second consumer exactly as planned
+	struct FluidBody
+	{
+		const MeshGeometry* Geometry = nullptr;
+		glm::mat4 Transform{ 1.0f };  // model -> world
+		uint32_t ObjectID = 1;        // 1-255, stamped into the mask so Phase 4 can spin wheels without re-voxelizing
+
+		bool operator==(const FluidBody&) const = default;
+	};
+
+	// What the voxelizer actually produced. Check the silhouette against this before believing any force number
+	struct FluidVoxelStatus
+	{
+		uint32_t BodyCount = 0;
+		uint32_t TriangleCount = 0;
+		uint32_t SolidCells = 0;
+		uint32_t FloodResidual = 0;        // cells the final flood iteration was still changing; nonzero means it did not converge
+		uint32_t RejectedTriangles = 0;    // spanned more cells than one thread should walk
+		bool Voxelized = false;            // false when no body is bound and the analytic sphere is standing in
+	};
 
 	// The tunnel's authored state in absolute units. Air flows in -Z, so the inlet is the +Z face and the car faces the wind
 	struct FluidSolver3DSettings
@@ -52,6 +76,10 @@ namespace Ignition
 		uint32_t ParticleCount = 100000;              // clamped to the solver's capacity
 
 		bool SurfacePressureEnabled = false;
+		bool VoxelDebugView = false;   // the shell colours by object id instead of pressure - check the silhouette before trusting a force
+
+		// Voxelizer (Step 3.2). Line sweeps travel a full axis per pass, so a handful of iterations turns every corner a car presents
+		uint32_t FloodIterations = 8;
 
 		bool operator==(const FluidSolver3DSettings&) const = default;
 	};
@@ -92,6 +120,10 @@ namespace Ignition
 
 		IGNITION_API void Reset();
 		IGNITION_API void Step(uint32_t steps = 1);
+
+		// Idempotent: an unchanged list costs a comparison. Any real change re-voxelizes, which resets the flow
+		IGNITION_API void SetBodies(const std::vector<FluidBody>& bodies);
+		IGNITION_API FluidVoxelStatus GetVoxelStatus() const;
 
 		IGNITION_API uint64_t GetStepCount() const;
 		IGNITION_API float GetSimulatedTime() const;

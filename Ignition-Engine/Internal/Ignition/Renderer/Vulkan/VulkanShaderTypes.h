@@ -45,8 +45,8 @@ namespace Ignition
 		float LatticeVelocity = 0.0f;
 		float RelaxationTime = 0.0f;
 		float SmagorinskyConstant = 0.0f;
-		uint32_t Flags = 0;                        // bit 0: rolling road
-		uint32_t Padding = 0;
+		uint32_t Flags = 0;                        // bit 0: rolling road, bit 1: the shell colours by object id instead of pressure
+		uint32_t FloodAxis = 0;                    // 0 = X, 1 = Y, 2 = Z
 
 		// Visualization (Step 3.4)
 		uint32_t SliceAxis = 0;
@@ -57,7 +57,13 @@ namespace Ignition
 		uint32_t FrameSeed = 0;
 		uint32_t ShellVertexCapacity = 0;
 		float AdvectSteps = 0.0f;                  // lattice steps this frame - zero while paused, which freezes the tracers
+
+		// Voxelizer (Step 3.2)
+		uint32_t TriangleOffset = 0;
+		uint32_t TriangleCount = 0;
+		uint32_t VoxelObjectID = 1;
+		uint32_t VoxelBudget = 0;
 	};
 
-	static_assert(sizeof(FluidPushConstants3D) == 96, "Wind tunnel push constant block must stay 96 bytes to match Fluid3D.slang");
+	static_assert(sizeof(FluidPushConstants3D) == 112, "Wind tunnel push constant block must stay 112 bytes to match Fluid3D.slang");
 }

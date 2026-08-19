@@ -65,7 +65,8 @@ namespace Editor
 		void RecordFluidHistory();
 		void ClearFluidHistory();
 
-		void UpdateWindTunnel();
+		void UpdateWindTunnel(float deltaTime);
+		void GatherAeroBodies();
 		void SubmitTunnelGizmos();
 		void RecordAeroHistory();
 		void ClearAeroHistory();
@@ -130,6 +131,11 @@ namespace Editor
 		std::unique_ptr<Ignition::FluidSolver3D> m_Tunnel;
 		Ignition::FluidSolver3DSettings m_TunnelSettings;
 		Ignition::Entity m_TunnelEntity; // the entity carrying the component, so the Aero panel can edit it
+
+		// Voxelizer input, debounced: re-voxelization is heavy, so a gizmo drag re-voxelizes on release rather than every frame
+		std::vector<Ignition::FluidBody> m_AeroBodies;
+		std::vector<Ignition::FluidBody> m_PendingAeroBodies;
+		float m_AeroBodyDebounce = 0.0f;
 		bool m_AeroPanelOpen = true;
 		bool m_TunnelRunning = false;
 		bool m_TunnelStepRequested = false;

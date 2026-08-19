@@ -1049,7 +1049,7 @@ namespace Ignition
 		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Fluid3D.spv";
 
 		auto solver = std::make_unique<VulkanFluidSolver3D>();
-		solver->Initialize(*this, m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
+		solver->Initialize(*this, m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
 
 		if (!solver->IsValid())
 		{

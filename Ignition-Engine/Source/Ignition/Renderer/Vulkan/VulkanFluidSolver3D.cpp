@@ -27,10 +27,18 @@ namespace Ignition
 		constexpr uint32_t WorkgroupSizeZ = 4;
 		constexpr uint32_t ReductionWorkgroupSize = 256;
 
-		// Six floats of force and torque, then the projected column count as a uint
+		// Six floats of force and torque, then the four counters
 		constexpr VkDeviceSize ResultFloats = 6;
 		constexpr VkDeviceSize ResultSize = 8 * sizeof(float);
-		constexpr VkDeviceSize ReadbackSize = ResultFloats * sizeof(float) + sizeof(uint32_t) + sizeof(uint32_t);
+		constexpr uint32_t CounterCount = 4;
+		constexpr VkDeviceSize ReadbackSize = ResultFloats * sizeof(float) + CounterCount * sizeof(uint32_t) + 2 * sizeof(uint32_t);
+
+		// Voxelizer (Step 3.2). Fixed capacities so a mesh change never rewrites a descriptor while frames are in flight;
+		// 12 MB total, which is nothing beside the lattice and generous for the decimated CFD mesh this consumes
+		constexpr uint32_t VoxelVertexCapacity = 1u << 19;      // 524288 vertices
+		constexpr uint32_t VoxelIndexCapacity = 1536u * 1024u;  // 524288 triangles
+		constexpr uint32_t VoxelTriangleBudget = 1u << 16;      // cells one triangle may span before it is rejected
+		constexpr uint32_t VoxelWorkgroupSize = 64;
 
 		// Visualization (Step 3.4) - the capacities must match Fluid3D.slang
 		constexpr uint32_t ParticleCapacity = 262144;
@@ -48,11 +56,13 @@ namespace Ignition
 	VulkanFluidSolver3D::VulkanFluidSolver3D() = default;
 	VulkanFluidSolver3D::~VulkanFluidSolver3D() = default;
 
-	void VulkanFluidSolver3D::Initialize(VulkanRenderer& renderer, VkDevice device, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const FluidSolver3DSettings& settings)
+	void VulkanFluidSolver3D::Initialize(VulkanRenderer& renderer, VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const FluidSolver3DSettings& settings)
 	{
 		IG_CORE_INFO("------- INITIALIZING WIND TUNNEL ({}x{}x{}) -------", settings.Resolution.x, settings.Resolution.y, settings.Resolution.z);
 
 		m_Device = device;
+		m_GraphicsQueue = graphicsQueue;
+		m_GraphicsQueueFamily = graphicsQueueFamily;
 		m_Allocator = allocator;
 		m_DescriptorAllocator = &descriptorAllocator;
 		m_Renderer = renderer.GetSelfReference();
@@ -98,7 +108,7 @@ namespace Ignition
 
 		// Cleared with vkCmdFillBuffer on reset, so a frame that only refreshes the area never reports a stale force
 		m_ForceResult.Initialize(m_Allocator, ResultSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-		m_Area.Initialize(m_Allocator, sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		m_Counters.Initialize(m_Allocator, CounterCount * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 
 		for (VulkanBuffer& readback : m_Readback)
 		{
@@ -114,7 +124,10 @@ namespace Ignition
 		m_Slice = std::make_unique<VulkanImage>();
 		m_Slice->Initialize(m_Device, m_Allocator, SliceImageSize, SliceImageSize, SliceFormat, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
-		const bool valid = m_Distributions[0].IsValid() && m_Distributions[1].IsValid() && m_Flags.IsValid() && m_Fields.IsValid() && m_CellForces.IsValid() && m_ForcePartials.IsValid() && m_ForceResult.IsValid() && m_Area.IsValid() && m_Particles.IsValid() && m_ParticleVertices.IsValid() && m_ShellVertices.IsValid() && m_ShellIndirect.IsValid() && m_Slice->IsValid();
+		m_VoxelPositions.Initialize(m_Allocator, static_cast<VkDeviceSize>(VoxelVertexCapacity) * 3 * sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		m_VoxelIndices.Initialize(m_Allocator, static_cast<VkDeviceSize>(VoxelIndexCapacity) * sizeof(uint32_t), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+		const bool valid = m_Distributions[0].IsValid() && m_Distributions[1].IsValid() && m_Flags.IsValid() && m_Fields.IsValid() && m_CellForces.IsValid() && m_ForcePartials.IsValid() && m_ForceResult.IsValid() && m_Counters.IsValid() && m_Particles.IsValid() && m_ParticleVertices.IsValid() && m_ShellVertices.IsValid() && m_ShellIndirect.IsValid() && m_Slice->IsValid() && m_VoxelPositions.IsValid() && m_VoxelIndices.IsValid();
 
 		if (!valid)
 		{
@@ -126,7 +139,7 @@ namespace Ignition
 
 	bool VulkanFluidSolver3D::CreateDescriptors()
 	{
-		std::vector<VkDescriptorSetLayoutBinding> bindings(13);
+		std::vector<VkDescriptorSetLayoutBinding> bindings(15);
 
 		for (uint32_t binding = 0; binding < bindings.size(); ++binding)
 		{
@@ -165,12 +178,14 @@ namespace Ignition
 			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 4, m_CellForces.GetBuffer(), m_CellForces.GetSize());
 			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 5, m_ForcePartials.GetBuffer(), m_ForcePartials.GetSize());
 			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 6, m_ForceResult.GetBuffer(), m_ForceResult.GetSize());
-			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 7, m_Area.GetBuffer(), m_Area.GetSize());
+			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 7, m_Counters.GetBuffer(), m_Counters.GetSize());
 			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 8, m_Particles.GetBuffer(), m_Particles.GetSize());
 			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 9, m_ParticleVertices.GetBuffer(), m_ParticleVertices.GetSize());
 			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 10, m_ShellVertices.GetBuffer(), m_ShellVertices.GetSize());
 			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 11, m_ShellIndirect.GetBuffer(), m_ShellIndirect.GetSize());
 			VulkanDescriptorAllocator::WriteStorageImage(m_Device, m_DescriptorSets[set], 12, m_Slice->GetImageView());
+			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 13, m_VoxelPositions.GetBuffer(), m_VoxelPositions.GetSize());
+			VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_DescriptorSets[set], 14, m_VoxelIndices.GetBuffer(), m_VoxelIndices.GetSize());
 		}
 
 		// The scene quad samples the slice through the mesh pipeline's texture layout, with the solver's own sampler
@@ -213,6 +228,11 @@ namespace Ignition
 
 		constexpr uint32_t pushConstantSize = static_cast<uint32_t>(sizeof(FluidPushConstants3D));
 
+		m_ClearMaskPipeline.Initialize(m_Device, shaderModule, "clearMask", m_SetLayout, pushConstantSize);
+		m_MarkAnalyticPipeline.Initialize(m_Device, shaderModule, "markAnalytic", m_SetLayout, pushConstantSize);
+		m_VoxelizePipeline.Initialize(m_Device, shaderModule, "voxelize", m_SetLayout, pushConstantSize);
+		m_FloodSweepPipeline.Initialize(m_Device, shaderModule, "floodSweep", m_SetLayout, pushConstantSize);
+		m_FloodFinalizePipeline.Initialize(m_Device, shaderModule, "floodFinalize", m_SetLayout, pushConstantSize);
 		m_InitializePipeline.Initialize(m_Device, shaderModule, "initialize", m_SetLayout, pushConstantSize);
 		m_ProjectedAreaPipeline.Initialize(m_Device, shaderModule, "projectedArea", m_SetLayout, pushConstantSize);
 		m_StreamCollidePipeline.Initialize(m_Device, shaderModule, "streamCollide", m_SetLayout, pushConstantSize);
@@ -231,8 +251,7 @@ namespace Ignition
 
 	bool VulkanFluidSolver3D::IsValid() const
 	{
-		return m_InitializePipeline.IsValid() && m_ProjectedAreaPipeline.IsValid() && m_StreamCollidePipeline.IsValid() && m_ReducePartialPipeline.IsValid() && m_ReduceFinalPipeline.IsValid()
-			&& m_SlicePipeline.IsValid() && m_InitializeParticlesPipeline.IsValid() && m_AdvectParticlesPipeline.IsValid() && m_ShellPipeline.IsValid() && m_ShellFinalizePipeline.IsValid();
+		return m_ClearMaskPipeline.IsValid() && m_MarkAnalyticPipeline.IsValid() && m_VoxelizePipeline.IsValid() && m_FloodSweepPipeline.IsValid() && m_FloodFinalizePipeline.IsValid() && m_InitializePipeline.IsValid() && m_ProjectedAreaPipeline.IsValid() && m_StreamCollidePipeline.IsValid() && m_ReducePartialPipeline.IsValid() && m_ReduceFinalPipeline.IsValid() && m_SlicePipeline.IsValid() && m_InitializeParticlesPipeline.IsValid() && m_AdvectParticlesPipeline.IsValid() && m_ShellPipeline.IsValid() && m_ShellFinalizePipeline.IsValid();
 	}
 
 	void VulkanFluidSolver3D::Shutdown()
@@ -260,6 +279,11 @@ namespace Ignition
 		m_StreamCollidePipeline.Shutdown();
 		m_ProjectedAreaPipeline.Shutdown();
 		m_InitializePipeline.Shutdown();
+		m_FloodFinalizePipeline.Shutdown();
+		m_FloodSweepPipeline.Shutdown();
+		m_VoxelizePipeline.Shutdown();
+		m_MarkAnalyticPipeline.Shutdown();
+		m_ClearMaskPipeline.Shutdown();
 
 		if (m_DescriptorAllocator)
 		{
@@ -294,6 +318,8 @@ namespace Ignition
 			m_Slice.reset();
 		}
 
+		m_VoxelIndices.Shutdown();
+		m_VoxelPositions.Shutdown();
 		m_ShellIndirect.Shutdown();
 		m_ShellVertices.Shutdown();
 		m_ParticleVertices.Shutdown();
@@ -304,7 +330,7 @@ namespace Ignition
 			readback.Shutdown();
 		}
 
-		m_Area.Shutdown();
+		m_Counters.Shutdown();
 		m_ForceResult.Shutdown();
 		m_ForcePartials.Shutdown();
 		m_CellForces.Shutdown();
@@ -317,14 +343,17 @@ namespace Ignition
 		}
 
 		m_Device = VK_NULL_HANDLE;
+		m_GraphicsQueue = VK_NULL_HANDLE;
 		m_Allocator = VK_NULL_HANDLE;
 		m_DescriptorAllocator = nullptr;
 	}
 
 	void VulkanFluidSolver3D::Configure(const FluidSolver3DSettings& settings)
 	{
-		// Only the mask-shaping inputs force a reset; the reference point, wind speed and rolling road all ride in on push constants
-		const bool geometryChanged = settings.ObstacleDiameter != m_Settings.ObstacleDiameter || settings.ObstacleCenter != m_Settings.ObstacleCenter || settings.DomainSize != m_Settings.DomainSize;
+		// Only the mask-shaping inputs force a reset; the reference point, wind speed and rolling road all ride in on push constants.
+		// Origin moves the lattice under the bodies, so a voxelized tunnel has to re-bake as well
+		const bool geometryChanged = settings.ObstacleDiameter != m_Settings.ObstacleDiameter || settings.ObstacleCenter != m_Settings.ObstacleCenter || settings.DomainSize != m_Settings.DomainSize
+			|| (!m_Bodies.empty() && settings.Origin != m_Settings.Origin);
 
 		m_Settings = settings;
 		m_Scaling = FluidSolver3D::ComputeScaling(settings);
@@ -332,7 +361,120 @@ namespace Ignition
 		if (geometryChanged)
 		{
 			m_ResetRequested = true;
+			m_BodiesDirty = m_BodiesDirty || !m_Bodies.empty();
 		}
+	}
+
+	void VulkanFluidSolver3D::SetBodies(const std::vector<FluidBody>& bodies)
+	{
+		if (bodies == m_Bodies)
+		{
+			return;
+		}
+
+		m_Bodies = bodies;
+		m_BodiesDirty = true;
+		m_ResetRequested = true;
+	}
+
+	FluidVoxelStatus VulkanFluidSolver3D::GetVoxelStatus() const
+	{
+		FluidVoxelStatus status{};
+
+		status.BodyCount = static_cast<uint32_t>(m_Bodies.size());
+		status.TriangleCount = m_TriangleCount;
+		status.SolidCells = m_SolidCells;
+		status.FloodResidual = m_FloodResidual;
+		status.RejectedTriangles = m_RejectedTriangles;
+		status.Voxelized = m_TriangleCount > 0;
+
+		return status;
+	}
+
+	void VulkanFluidSolver3D::UploadBodies()
+	{
+		m_BodiesDirty = false;
+
+		m_VoxelPositionData.clear();
+		m_VoxelIndexData.clear();
+		m_VoxelBatches.clear();
+		m_TriangleCount = 0;
+
+		const float cellSize = std::max(m_Scaling.CellSize, 1e-6f);
+		const glm::vec3 extent = glm::vec3(m_Settings.Resolution) * cellSize;
+		const glm::vec3 minimum = m_Settings.Origin - glm::vec3(0.5f * extent.x, 0.0f, 0.5f * extent.z);
+
+		for (const FluidBody& body : m_Bodies)
+		{
+			if (!body.Geometry || body.Geometry->Positions.empty() || body.Geometry->Indices.size() < 3)
+			{
+				continue;
+			}
+
+			const uint32_t baseVertex = static_cast<uint32_t>(m_VoxelPositionData.size() / 3);
+			const uint32_t triangles = static_cast<uint32_t>(body.Geometry->Indices.size() / 3);
+
+			if (baseVertex + body.Geometry->Positions.size() > VoxelVertexCapacity || m_VoxelIndexData.size() + triangles * 3 > VoxelIndexCapacity)
+			{
+				IG_CORE_ERROR("Voxelizer: body {} dropped, the triangle buffers are full ({} vertices / {} indices)", body.ObjectID, VoxelVertexCapacity, VoxelIndexCapacity);
+
+				continue;
+			}
+
+			// model -> world -> lattice folded into one pass. Re-voxelization is debounced, so this never lands on a hot path,
+			// and it keeps a 64-byte matrix out of a push constant block that has no room for one
+			for (const glm::vec3& position : body.Geometry->Positions)
+			{
+				const glm::vec3 world = glm::vec3(body.Transform * glm::vec4(position, 1.0f));
+				const glm::vec3 lattice = (world - minimum) / cellSize;
+
+				m_VoxelPositionData.push_back(lattice.x);
+				m_VoxelPositionData.push_back(lattice.y);
+				m_VoxelPositionData.push_back(lattice.z);
+			}
+
+			VoxelBatch batch{};
+			batch.ObjectID = std::clamp(body.ObjectID, 1u, 255u);
+			batch.FirstTriangle = m_TriangleCount;
+			batch.TriangleCount = triangles;
+
+			for (uint32_t index = 0; index < triangles * 3; ++index)
+			{
+				m_VoxelIndexData.push_back(baseVertex + body.Geometry->Indices[index]);
+			}
+
+			m_VoxelBatches.push_back(batch);
+			m_TriangleCount += triangles;
+		}
+
+		if (m_TriangleCount == 0)
+		{
+			IG_CORE_INFO("Voxelizer: no geometry bound, the analytic sphere stands in");
+
+			return;
+		}
+
+		// UploadViaStaging submits and waits on the graphics queue, which is the only queue this engine records on -
+		// so everything still reading these buffers has drained by the time the copy lands
+		Utilities::VulkanUtilities::UploadViaStaging(m_Device, m_GraphicsQueue, m_GraphicsQueueFamily, m_Allocator, m_VoxelPositionData.data(), m_VoxelPositionData.size() * sizeof(float),
+			[&](VkCommandBuffer commandBuffer, const VulkanBuffer& staging)
+		{
+			VkBufferCopy copyRegion{};
+			copyRegion.size = m_VoxelPositionData.size() * sizeof(float);
+
+			vkCmdCopyBuffer(commandBuffer, staging.GetBuffer(), m_VoxelPositions.GetBuffer(), 1, &copyRegion);
+		});
+
+		Utilities::VulkanUtilities::UploadViaStaging(m_Device, m_GraphicsQueue, m_GraphicsQueueFamily, m_Allocator, m_VoxelIndexData.data(), m_VoxelIndexData.size() * sizeof(uint32_t),
+			[&](VkCommandBuffer commandBuffer, const VulkanBuffer& staging)
+		{
+			VkBufferCopy copyRegion{};
+			copyRegion.size = m_VoxelIndexData.size() * sizeof(uint32_t);
+
+			vkCmdCopyBuffer(commandBuffer, staging.GetBuffer(), m_VoxelIndices.GetBuffer(), 1, &copyRegion);
+		});
+
+		IG_CORE_INFO("Voxelizer: {} bodies, {} triangles uploaded", m_VoxelBatches.size(), m_TriangleCount);
 	}
 
 	FluidPushConstants3D VulkanFluidSolver3D::BuildParameters() const
@@ -364,8 +506,77 @@ namespace Ignition
 		parameters.ColorScale = m_Settings.ColorScale;
 		parameters.ParticleCount = std::min(m_Settings.ParticleCount, ParticleCapacity);
 		parameters.ShellVertexCapacity = ShellVertexCapacity;
+		parameters.VoxelBudget = VoxelTriangleBudget;
+
+		if (m_Settings.VoxelDebugView)
+		{
+			parameters.Flags |= 2u;
+		}
 
 		return parameters;
+	}
+
+	void VulkanFluidSolver3D::RecordMask(VkCommandBuffer commandBuffer, const FluidPushConstants3D& parameters)
+	{
+		const glm::uvec3 resolution = m_Settings.Resolution;
+
+		const uint32_t gridX = GroupCount(resolution.x, WorkgroupSizeXY);
+		const uint32_t gridY = GroupCount(resolution.y, WorkgroupSizeXY);
+		const uint32_t gridZ = GroupCount(resolution.z, WorkgroupSizeZ);
+
+		Dispatch(commandBuffer, m_ClearMaskPipeline, m_DescriptorSets[0], parameters, gridX, gridY, gridZ);
+		Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
+
+		if (m_TriangleCount == 0)
+		{
+			Dispatch(commandBuffer, m_MarkAnalyticPipeline, m_DescriptorSets[0], parameters, gridX, gridY, gridZ);
+			Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
+
+			return;
+		}
+
+		// One dispatch per body, so each stamps its own object id without a per-triangle id buffer
+		for (const VoxelBatch& batch : m_VoxelBatches)
+		{
+			FluidPushConstants3D batchParameters = parameters;
+			batchParameters.TriangleOffset = batch.FirstTriangle;
+			batchParameters.TriangleCount = batch.TriangleCount;
+			batchParameters.VoxelObjectID = batch.ObjectID;
+
+			Dispatch(commandBuffer, m_VoxelizePipeline, m_DescriptorSets[0], batchParameters, GroupCount(batch.TriangleCount, VoxelWorkgroupSize));
+		}
+
+		Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
+
+		const uint32_t iterations = std::clamp(m_Settings.FloodIterations, 1u, 64u);
+
+		for (uint32_t iteration = 0; iteration < iterations; ++iteration)
+		{
+			if (iteration + 1 == iterations)
+			{
+				// Only the final iteration's activity is diagnostic: if it still changed cells, the fill had not converged
+				vkCmdFillBuffer(commandBuffer, m_Counters.GetBuffer(), sizeof(uint32_t), sizeof(uint32_t), 0);
+
+				Utilities::VulkanUtilities::BufferBarrier(commandBuffer, m_Counters.GetBuffer(), 0, VK_WHOLE_SIZE,
+					VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+			}
+
+			for (uint32_t axis = 0; axis < 3; ++axis)
+			{
+				FluidPushConstants3D sweepParameters = parameters;
+				sweepParameters.FloodAxis = axis;
+
+				// One thread per line, so the dispatch is sized by the two axes the sweep does not travel along
+				const uint32_t lanesX = axis == 0 ? resolution.y : resolution.x;
+				const uint32_t lanesY = axis == 2 ? resolution.y : resolution.z;
+
+				Dispatch(commandBuffer, m_FloodSweepPipeline, m_DescriptorSets[0], sweepParameters, GroupCount(lanesX, WorkgroupSizeXY), GroupCount(lanesY, WorkgroupSizeXY));
+				Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
+			}
+		}
+
+		Dispatch(commandBuffer, m_FloodFinalizePipeline, m_DescriptorSets[0], parameters, gridX, gridY, gridZ);
+		Utilities::VulkanUtilities::ComputeToComputeBarrier(commandBuffer);
 	}
 
 	void VulkanFluidSolver3D::Dispatch(VkCommandBuffer commandBuffer, const VulkanComputePipeline& pipeline, VkDescriptorSet descriptorSet, const FluidPushConstants3D& parameters, uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ) const
@@ -411,12 +622,12 @@ namespace Ignition
 		VkBufferCopy forceRegion{};
 		forceRegion.size = ResultFloats * sizeof(float);
 
-		VkBufferCopy areaRegion{};
-		areaRegion.dstOffset = ResultFloats * sizeof(float);
-		areaRegion.size = sizeof(uint32_t);
+		VkBufferCopy counterRegion{};
+		counterRegion.dstOffset = ResultFloats * sizeof(float);
+		counterRegion.size = CounterCount * sizeof(uint32_t);
 
 		vkCmdCopyBuffer(commandBuffer, m_ForceResult.GetBuffer(), m_Readback[frameIndex].GetBuffer(), 1, &forceRegion);
-		vkCmdCopyBuffer(commandBuffer, m_Area.GetBuffer(), m_Readback[frameIndex].GetBuffer(), 1, &areaRegion);
+		vkCmdCopyBuffer(commandBuffer, m_Counters.GetBuffer(), m_Readback[frameIndex].GetBuffer(), 1, &counterRegion);
 
 		m_ReadbackPending[frameIndex] = true;
 	}
@@ -435,14 +646,18 @@ namespace Ignition
 		if (void* mapped = readback.Map())
 		{
 			std::array<float, ResultFloats> values{};
-			uint32_t projected = 0;
+			std::array<uint32_t, CounterCount> counters{};
 
 			std::memcpy(values.data(), mapped, sizeof(values));
-			std::memcpy(&projected, static_cast<const std::byte*>(mapped) + sizeof(values), sizeof(projected));
+			std::memcpy(counters.data(), static_cast<const std::byte*>(mapped) + sizeof(values), sizeof(counters));
 
 			m_LatticeForce = { values[0], values[1], values[2] };
 			m_LatticeTorque = { values[3], values[4], values[5] };
-			m_ProjectedCells = projected;
+
+			m_ProjectedCells = counters[0];
+			m_FloodResidual = counters[1];
+			m_RejectedTriangles = counters[2];
+			m_SolidCells = counters[3];
 
 			readback.Unmap();
 		}
@@ -467,6 +682,12 @@ namespace Ignition
 			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
 			VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT);
 
+		if (m_BodiesDirty)
+		{
+			// Blocking, and deliberately so: this runs once per settled edit, never per frame
+			UploadBodies();
+		}
+
 		const FluidPushConstants3D parameters = BuildParameters();
 
 		const uint32_t simulationPass = timer ? timer->BeginPass(commandBuffer, "Tunnel Sim") : UINT32_MAX;
@@ -481,9 +702,12 @@ namespace Ignition
 		{
 			// Zeroed here rather than left stale, so the frame that publishes a fresh reference area does not also publish an old force
 			vkCmdFillBuffer(commandBuffer, m_ForceResult.GetBuffer(), 0, VK_WHOLE_SIZE, 0);
+			vkCmdFillBuffer(commandBuffer, m_Counters.GetBuffer(), 0, VK_WHOLE_SIZE, 0);
 
-			Utilities::VulkanUtilities::BufferBarrier(commandBuffer, m_ForceResult.GetBuffer(), 0, VK_WHOLE_SIZE,
-				VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+			Utilities::VulkanUtilities::MemoryBarrier(commandBuffer, VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+
+			// The mask is built first and in full - voxelized or analytic - because initialize now reads it rather than writing it
+			RecordMask(commandBuffer, parameters);
 
 			// Both distribution buffers are filled so the first step reads a consistent state whichever set it binds
 			Dispatch(commandBuffer, m_InitializePipeline, m_DescriptorSets[0], parameters, gridX, gridY, gridZ);

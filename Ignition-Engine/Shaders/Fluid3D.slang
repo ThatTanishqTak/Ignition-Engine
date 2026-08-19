@@ -26,6 +26,7 @@ static const uint MirrorY[19]  = { 0, 1, 2, 4, 3, 5, 6, 9, 10, 7, 8, 11, 12, 13,
 
 static const uint CellFluid = 0;
 static const uint CellSolid = 1;
+static const uint CellExterior = 2; // flood-fill working state only; floodFinalize converts it back to fluid
 
 struct FluidParameters3D
 {
@@ -37,8 +38,8 @@ struct FluidParameters3D
     float LatticeVelocity;
     float RelaxationTime;
     float SmagorinskyConstant;
-    uint Flags;                 // bit 0: rolling road
-    uint Padding;
+    uint Flags;                 // bit 0: rolling road, bit 1: the shell colours by object id instead of pressure
+    uint FloodAxis;             // 0 = X, 1 = Y, 2 = Z
 
     // Visualization (Step 3.4)
     uint SliceAxis;
@@ -49,6 +50,12 @@ struct FluidParameters3D
     uint FrameSeed;
     uint ShellVertexCapacity;
     float AdvectSteps;          // lattice steps this frame - zero while paused, which freezes the tracers
+
+    // Voxelizer (Step 3.2)
+    uint TriangleOffset;        // one dispatch per body, so each carries its own id
+    uint TriangleCount;
+    uint VoxelObjectID;
+    uint VoxelBudget;           // cells one triangle may span before it is rejected instead of serializing the dispatch
 };
 
 [[vk::push_constant]]
@@ -61,7 +68,8 @@ FluidParameters3D g_Parameters;
 [[vk::binding(4, 0)]] RWStructuredBuffer<float> g_CellForces;   // momentum exchange, SoA: component * cellCount + cell
 [[vk::binding(5, 0)]] RWStructuredBuffer<float> g_ForcePartials; // six components: force then torque
 [[vk::binding(6, 0)]] RWStructuredBuffer<float> g_ForceResult;
-[[vk::binding(7, 0)]] RWStructuredBuffer<uint> g_Area;          // inlet-facing solid columns
+// [0] inlet-facing solid columns, [1] flood-fill changes, [2] rejected triangles, [3] solid cells
+[[vk::binding(7, 0)]] RWStructuredBuffer<uint> g_Counters;
 
 // Visualization resources (Step 3.4)
 [[vk::binding(8, 0)]] RWStructuredBuffer<float4> g_Particles;        // xyz position (lattice), w remaining life in steps
@@ -73,6 +81,10 @@ FluidParameters3D g_Parameters;
 [[vk::binding(12, 0)]]
 [format("rgba8")]
 RWTexture2D<float4> g_Slice;
+
+// Voxelizer input: positions arrive already in lattice space, three floats per vertex to keep the stride unambiguous
+[[vk::binding(13, 0)]] RWStructuredBuffer<float> g_VoxelPositions;
+[[vk::binding(14, 0)]] RWStructuredBuffer<uint> g_VoxelIndices;
 
 static const uint ParticleCapacity = 262144; // must match VulkanFluidSolver3D.cpp
 static const uint SliceImageSize = 512;      // must match VulkanFluidSolver3D.cpp
@@ -133,6 +145,275 @@ void WriteSolid(uint cell, uint count)
     g_Fields[cell] = float4(1.0, 0.0, 0.0, 0.0);
 }
 
+// ---------------- Step 3.2: mask construction ----------------
+// Mask first, distributions second. Both the analytic path and the voxelized path finish here, and initialize reads whatever they leave behind
+[shader("compute")]
+[numthreads(8, 8, 4)]
+void clearMask(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= g_Parameters.Resolution))
+    {
+        return;
+    }
+
+    const uint count = CellCount();
+    const uint cell = CellIndex(id);
+
+    g_Flags[cell] = MakeFlag(CellFluid, 0u);
+
+    for (uint axis = 0; axis < 3; ++axis)
+    {
+        g_CellForces[axis * count + cell] = 0.0;
+    }
+}
+
+// A sphere has no hollow interior, so this path skips the flood fill entirely
+[shader("compute")]
+[numthreads(8, 8, 4)]
+void markAnalytic(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= g_Parameters.Resolution))
+    {
+        return;
+    }
+
+    const float3 position = float3(id) + 0.5;
+
+    if (distance(position, g_Parameters.ObstacleCenter) > g_Parameters.ObstacleRadius)
+    {
+        return;
+    }
+
+    g_Flags[CellIndex(id)] = MakeFlag(CellSolid, 1u);
+}
+
+// A degenerate axis projects everything onto zero and separates nothing, which is the correct answer for it
+bool SeparatedAlong(float3 axis, float3 a, float3 b, float3 c, float3 halfExtent)
+{
+    const float pa = dot(axis, a);
+    const float pb = dot(axis, b);
+    const float pc = dot(axis, c);
+
+    const float radius = halfExtent.x * abs(axis.x) + halfExtent.y * abs(axis.y) + halfExtent.z * abs(axis.z);
+
+    return min(min(pa, pb), pc) > radius || max(max(pa, pb), pc) < -radius;
+}
+
+// Akenine-Moller: 13 separating axes - three box normals, the triangle normal, and nine box-edge x triangle-edge cross products.
+// One projection helper covers all thirteen, which is a great deal harder to get subtly wrong than transcribing the macro form
+bool TriangleBoxOverlap(float3 center, float3 halfExtent, float3 v0, float3 v1, float3 v2)
+{
+    const float3 a = v0 - center;
+    const float3 b = v1 - center;
+    const float3 c = v2 - center;
+
+    const float3 edge0 = b - a;
+    const float3 edge1 = c - b;
+    const float3 edge2 = a - c;
+
+    const float3 edges[3] = { edge0, edge1, edge2 };
+
+    for (uint index = 0; index < 3; ++index)
+    {
+        const float3 edge = edges[index];
+
+        if (SeparatedAlong(float3(0.0, -edge.z, edge.y), a, b, c, halfExtent)) { return false; }
+        if (SeparatedAlong(float3(edge.z, 0.0, -edge.x), a, b, c, halfExtent)) { return false; }
+        if (SeparatedAlong(float3(-edge.y, edge.x, 0.0), a, b, c, halfExtent)) { return false; }
+    }
+
+    if (SeparatedAlong(float3(1.0, 0.0, 0.0), a, b, c, halfExtent)) { return false; }
+    if (SeparatedAlong(float3(0.0, 1.0, 0.0), a, b, c, halfExtent)) { return false; }
+    if (SeparatedAlong(float3(0.0, 0.0, 1.0), a, b, c, halfExtent)) { return false; }
+
+    return !SeparatedAlong(cross(edge0, edge1), a, b, c, halfExtent);
+}
+
+float3 VoxelPosition(uint vertex)
+{
+    return float3(g_VoxelPositions[vertex * 3 + 0], g_VoxelPositions[vertex * 3 + 1], g_VoxelPositions[vertex * 3 + 2]);
+}
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void voxelize(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= g_Parameters.TriangleCount)
+    {
+        return;
+    }
+
+    // Positions arrive already in lattice space - model, world and lattice transforms are folded into one CPU pass at upload,
+    // which keeps a matrix out of the push constants. Re-voxelization is debounced, so that pass is not on any hot path
+    const uint triangle = g_Parameters.TriangleOffset + id.x;
+
+    const float3 v0 = VoxelPosition(g_VoxelIndices[triangle * 3 + 0]);
+    const float3 v1 = VoxelPosition(g_VoxelIndices[triangle * 3 + 1]);
+    const float3 v2 = VoxelPosition(g_VoxelIndices[triangle * 3 + 2]);
+
+    const int3 resolution = int3(g_Parameters.Resolution);
+    const int3 first = int3(floor(min(min(v0, v1), v2)));
+    const int3 last = int3(floor(max(max(v0, v1), v2)));
+
+    // Clamping both ends keeps begin <= end even for a triangle entirely outside the domain, so the span never underflows
+    const uint3 begin = uint3(clamp(first, int3(0, 0, 0), resolution - 1));
+    const uint3 end = uint3(clamp(last, int3(0, 0, 0), resolution - 1));
+
+    const uint3 span = end - begin + 1;
+
+    if (span.x * span.y * span.z > g_Parameters.VoxelBudget)
+    {
+        // One thread walking a domain-sized triangle serializes the whole dispatch. Counted and reported rather than
+        // silently dropped - a decimated CFD mesh should never produce one, and if it does you want to know
+        InterlockedAdd(g_Counters[2], 1u);
+
+        return;
+    }
+
+    const uint packed = MakeFlag(CellSolid, g_Parameters.VoxelObjectID);
+    const float3 halfExtent = float3(0.5, 0.5, 0.5);
+
+    for (uint z = begin.z; z <= end.z; ++z)
+    {
+        for (uint y = begin.y; y <= end.y; ++y)
+        {
+            for (uint x = begin.x; x <= end.x; ++x)
+            {
+                const float3 center = float3(float(x) + 0.5, float(y) + 0.5, float(z) + 0.5);
+
+                if (TriangleBoxOverlap(center, halfExtent, v0, v1, v2))
+                {
+                    // Max, not Or: every write here carries CellSolid in the low byte, so fluid always loses and
+                    // the highest object id wins deterministically where two bodies share a cell
+                    InterlockedMax(g_Flags[CellIndex(uint3(x, y, z))], packed);
+                }
+            }
+        }
+    }
+}
+
+// One thread per line, so exterior status travels the full length of the line in a single pass. A handful of XYZ
+// iterations turns every corner a car-shaped body can present, where a one-cell-per-pass frontier would need hundreds.
+// Threads own disjoint lines within a dispatch, so the flag writes need no atomics
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void floodSweep(uint3 id : SV_DispatchThreadID)
+{
+    const uint3 resolution = g_Parameters.Resolution;
+    const uint axis = g_Parameters.FloodAxis;
+
+    uint length;
+    uint2 limits;
+
+    if (axis == 0)
+    {
+        length = resolution.x;
+        limits = uint2(resolution.y, resolution.z);
+    }
+    else if (axis == 1)
+    {
+        length = resolution.y;
+        limits = uint2(resolution.x, resolution.z);
+    }
+    else
+    {
+        length = resolution.z;
+        limits = uint2(resolution.x, resolution.y);
+    }
+
+    if (id.x >= limits.x || id.y >= limits.y)
+    {
+        return;
+    }
+
+    uint changes = 0;
+
+    // Both directions: outside the domain is open air, so each end of the line seeds itself and no separate seeding pass is needed
+    for (uint direction = 0; direction < 2; ++direction)
+    {
+        bool exterior = true;
+
+        for (uint step = 0; step < length; ++step)
+        {
+            const uint along = direction == 0 ? step : length - 1 - step;
+
+            uint3 coordinate;
+
+            if (axis == 0)
+            {
+                coordinate = uint3(along, id.x, id.y);
+            }
+            else if (axis == 1)
+            {
+                coordinate = uint3(id.x, along, id.y);
+            }
+            else
+            {
+                coordinate = uint3(id.x, id.y, along);
+            }
+
+            const uint cell = CellIndex(coordinate);
+            const uint type = g_Flags[cell] & 0xFFu;
+
+            if (type == CellSolid)
+            {
+                exterior = false; // the body blocks the line; whatever lies behind it may be interior
+
+                continue;
+            }
+
+            if (type == CellExterior)
+            {
+                exterior = true;
+
+                continue;
+            }
+
+            if (exterior)
+            {
+                g_Flags[cell] = MakeFlag(CellExterior, 0u);
+                ++changes;
+            }
+        }
+    }
+
+    if (changes > 0)
+    {
+        InterlockedAdd(g_Counters[1], changes);
+    }
+}
+
+[shader("compute")]
+[numthreads(8, 8, 4)]
+void floodFinalize(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= g_Parameters.Resolution))
+    {
+        return;
+    }
+
+    const uint cell = CellIndex(id);
+    const uint type = g_Flags[cell] & 0xFFu;
+
+    if (type == CellExterior)
+    {
+        g_Flags[cell] = MakeFlag(CellFluid, 0u);
+
+        return;
+    }
+
+    if (type == CellFluid)
+    {
+        // Never reached from the boundary and never touched by a triangle, so it is inside the body. A hollow shell leaks
+        // flow into the car and corrupts every force, which is the whole reason this pass exists.
+        // Object id 0 because a genuine interior cell has no fluid neighbour and so takes part in no boundary condition
+        g_Flags[cell] = MakeFlag(CellSolid, 0u);
+    }
+
+    // Everything still here is solid either way
+    InterlockedAdd(g_Counters[3], 1u);
+}
+
 [shader("compute")]
 [numthreads(8, 8, 4)]
 void initialize(uint3 id : SV_DispatchThreadID)
@@ -145,24 +426,8 @@ void initialize(uint3 id : SV_DispatchThreadID)
     const uint count = CellCount();
     const uint cell = CellIndex(id);
 
-    if (cell == 0)
-    {
-        // Cleared here rather than in its own dispatch; projectedArea runs after a barrier and is the only other writer
-        g_Area[0] = 0;
-    }
-
-    // Analytic sphere until the voxelizer writes this same mask from a mesh - the format is what the two share, not the code
-    const float3 position = float3(id) + 0.5;
-    const bool solid = distance(position, g_Parameters.ObstacleCenter) <= g_Parameters.ObstacleRadius;
-
-    g_Flags[cell] = solid ? MakeFlag(CellSolid, 1u) : MakeFlag(CellFluid, 0u);
-
-    for (uint axis = 0; axis < 3; ++axis)
-    {
-        g_CellForces[axis * count + cell] = 0.0;
-    }
-
-    if (solid)
+    // The mask is final by the time this runs - voxelized from meshes, or stamped analytically
+    if (IsSolid(g_Flags[cell]))
     {
         WriteSolid(cell, count);
 
@@ -186,7 +451,7 @@ void projectedArea(uint3 id : SV_DispatchThreadID)
     {
         if (IsSolid(g_Flags[CellIndex(uint3(id.x, id.y, z))]))
         {
-            InterlockedAdd(g_Area[0], 1u);
+            InterlockedAdd(g_Counters[0], 1u);
 
             return;
         }
@@ -718,8 +983,22 @@ void surfaceShell(uint3 id : SV_DispatchThreadID)
         return; // interior solid - the flood fill's territory, nothing to see
     }
 
-    const float pressure = density / float(fluidNeighbours) - 1.0;
-    const float4 color = float4(LinearFromSRGB(Diverging(pressure / max(0.02 * g_Parameters.ColorScale, 1e-6))), 1.0);
+    float4 color;
+
+    if ((g_Parameters.Flags & 2u) != 0u)
+    {
+        // Voxel debug view: colour by object id, so the car's silhouette and its wheel tagging are both checkable before any force number is trusted
+        const uint objectID = (g_Flags[cell] >> 8) & 0xFFu;
+        const float3 tint = objectID == 0 ? float3(0.55, 0.55, 0.60) : Ramp(frac(float(objectID) * 0.618034));
+
+        color = float4(LinearFromSRGB(tint), 1.0);
+    }
+    else
+    {
+        const float pressure = density / float(fluidNeighbours) - 1.0;
+
+        color = float4(LinearFromSRGB(Diverging(pressure / max(0.02 * g_Parameters.ColorScale, 1e-6))), 1.0);
+    }
 
     uint slot;
     InterlockedAdd(g_ShellIndirect[0], 6, slot);

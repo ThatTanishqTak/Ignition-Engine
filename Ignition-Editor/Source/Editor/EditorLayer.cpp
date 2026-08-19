@@ -21,6 +21,9 @@ namespace Editor
 		constexpr size_t FrameHistorySize = 240;
 		constexpr const char* DefaultScenePath = "Assets/Scenes/Scene.yaml";
 
+		// Long enough that an inspector drag settles before the lattice is rebuilt, short enough to feel immediate
+		constexpr float AeroBodyDebounceSeconds = 0.25f;
+
 		struct FluidResolution
 		{
 			const char* Label;
@@ -160,8 +163,6 @@ namespace Editor
 
 	void EditorLayer::OnUpdate(float deltaTime)
 	{
-		(void)deltaTime;
-
 		if (m_FrameTimeHistory.size() >= FrameHistorySize)
 		{
 			m_FrameTimeHistory.erase(m_FrameTimeHistory.begin());
@@ -180,7 +181,7 @@ namespace Editor
 		}
 
 		UpdateFluidLab();
-		UpdateWindTunnel();
+		UpdateWindTunnel(deltaTime);
 
 		if (m_Context->ViewportHovered && !m_Context->GizmoUsing && m_Input->IsMouseButtonPressed(Ignition::MouseCode::LEFT))
 		{
@@ -457,11 +458,50 @@ namespace Editor
 		settings.ParticlesEnabled = tunnel.ParticlesEnabled;
 		settings.ParticleCount = tunnel.ParticleCount;
 		settings.SurfacePressureEnabled = tunnel.SurfacePressureEnabled;
+		settings.VoxelDebugView = tunnel.VoxelDebugView;
+		settings.FloodIterations = tunnel.FloodIterations;
 
 		return settings;
 	}
 
-	void EditorLayer::UpdateWindTunnel()
+	void EditorLayer::GatherAeroBodies()
+	{
+		m_AeroBodies.clear();
+
+		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		{
+			const Ignition::AeroBodyComponent* body = entity.GetAeroBody();
+
+			if (!body || !body->Enabled)
+			{
+				continue;
+			}
+
+			// The CFD mesh when one is set, otherwise the visual mesh. Fine for a sphere or an Ahmed body,
+			// wrong for a car with open bodywork - which is exactly why the component carries its own asset slot
+			const Ignition::Mesh* mesh = body->Mesh.get();
+
+			if (!mesh)
+			{
+				const Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer();
+				mesh = meshRenderer ? meshRenderer->Mesh.get() : nullptr;
+			}
+
+			if (!mesh || mesh->GetGeometry().Indices.size() < 3)
+			{
+				continue;
+			}
+
+			Ignition::FluidBody fluidBody{};
+			fluidBody.Geometry = &mesh->GetGeometry();
+			fluidBody.Transform = entity.GetTransform().GetMatrix();
+			fluidBody.ObjectID = glm::clamp(body->ObjectID, 1u, 255u);
+
+			m_AeroBodies.push_back(fluidBody);
+		}
+	}
+
+	void EditorLayer::UpdateWindTunnel(float deltaTime)
 	{
 		IG_PROFILE_FUNCTION();
 
@@ -515,6 +555,25 @@ namespace Editor
 		if (!m_Tunnel->IsValid())
 		{
 			return;
+		}
+
+		// Voxelization rebuilds the mask and resets the flow, so it waits for the edit to settle: never mid-gizmo-drag,
+		// and never until the geometry has held still for a moment. SetBodies is idempotent, so pushing every settled frame is free
+		GatherAeroBodies();
+
+		if (m_AeroBodies != m_PendingAeroBodies)
+		{
+			m_PendingAeroBodies = m_AeroBodies;
+			m_AeroBodyDebounce = AeroBodyDebounceSeconds;
+		}
+		else if (m_AeroBodyDebounce > 0.0f)
+		{
+			m_AeroBodyDebounce -= deltaTime;
+		}
+
+		if (m_AeroBodyDebounce <= 0.0f && !Ignition::UI::IsGizmoInUse())
+		{
+			m_Tunnel->SetBodies(m_PendingAeroBodies);
 		}
 
 		uint32_t steps = 0;
@@ -580,7 +639,11 @@ namespace Editor
 			const glm::vec3 inlet = center + glm::vec3(0.0f, 0.0f, 0.5f * extent.z);
 			Ignition::DebugDraw::Arrow(inlet, inlet - glm::vec3(0.0f, 0.0f, glm::min(1.0f, 0.25f * extent.z)), FlowColor);
 
-			Ignition::DebugDraw::Sphere(glm::translate(glm::mat4(1.0f), minimum + settings.ObstacleCenter * extent), 0.5f * settings.ObstacleDiameter, ObstacleColor);
+			// The analytic sphere is a stand-in, so it disappears the moment real geometry is bound
+			if (m_AeroBodies.empty())
+			{
+				Ignition::DebugDraw::Sphere(glm::translate(glm::mat4(1.0f), minimum + settings.ObstacleCenter * extent), 0.5f * settings.ObstacleDiameter, ObstacleColor);
+			}
 		}
 	}
 
@@ -627,6 +690,30 @@ namespace Editor
 
 			Ignition::UI::SliderInt("Steps / Frame##Tunnel", &m_TunnelStepsPerFrame, 1, 16);
 			Ignition::UI::Checkbox("Moving Average", &m_AeroAveraged);
+
+			Ignition::UI::SeparatorText("Geometry");
+
+			const Ignition::FluidVoxelStatus voxels = m_Tunnel->GetVoxelStatus();
+
+			if (voxels.Voxelized)
+			{
+				Ignition::UI::Text("{} bodies | {} triangles | {} solid cells", voxels.BodyCount, voxels.TriangleCount, voxels.SolidCells);
+			}
+			else
+			{
+				Ignition::UI::TextDisabled("Analytic sphere - add an Aero Body component to voxelize a mesh instead");
+			}
+
+			if (voxels.FloodResidual > 0)
+			{
+				// The interior fill silently turns unreached pockets into solid, so non-convergence has to be said out loud
+				Ignition::UI::TextDisabled("Flood fill did not converge ({} cells still moving) - raise Flood Iterations, or the interior fill has sealed off open air", voxels.FloodResidual);
+			}
+
+			if (voxels.RejectedTriangles > 0)
+			{
+				Ignition::UI::TextDisabled("{} triangles spanned too much of the domain and were skipped - the CFD mesh needs decimating, or the tunnel is too small for it", voxels.RejectedTriangles);
+			}
 
 			Ignition::UI::SeparatorText("Lattice Mapping");
 
@@ -692,7 +779,9 @@ namespace Editor
 					tunnel->ParticleCount = static_cast<uint32_t>(particleCount);
 				}
 
-				Ignition::UI::Checkbox("Surface Pressure Shell", &tunnel->SurfacePressureEnabled);
+				Ignition::UI::Checkbox("Surface Shell", &tunnel->SurfacePressureEnabled);
+				Ignition::UI::SameLine();
+				Ignition::UI::Checkbox("Show Voxel Mask", &tunnel->VoxelDebugView);
 
 				if (tunnel->SliceEnabled && m_Tunnel->GetSliceTextureID() != 0)
 				{
@@ -1342,6 +1431,39 @@ namespace Editor
 				}
 			}
 
+			if (Ignition::AeroBodyComponent* aeroBody = entity.GetAeroBody())
+			{
+				if (Ignition::UI::CollapsingHeader("Aero Body"))
+				{
+					Ignition::UI::LabelText("CFD Mesh", aeroBody->MeshAsset.empty() ? "<visual mesh>" : aeroBody->MeshAsset.c_str());
+					Ignition::UI::TextDisabled("Decimated and sealed: open bodywork leaks the interior flood fill and corrupts every force");
+
+					std::array<char, 260> meshBuffer{};
+					std::memcpy(meshBuffer.data(), aeroBody->MeshAsset.c_str(), std::min(aeroBody->MeshAsset.size(), meshBuffer.size() - 1));
+
+					if (Ignition::UI::InputText("Mesh##AeroBody", meshBuffer.data(), meshBuffer.size()))
+					{
+						aeroBody->MeshAsset = meshBuffer.data();
+						aeroBody->Mesh = m_Assets->LoadMesh(aeroBody->MeshAsset);
+					}
+
+					int objectID = static_cast<int>(aeroBody->ObjectID);
+
+					if (Ignition::UI::SliderInt("Object ID", &objectID, 1, 255))
+					{
+						aeroBody->ObjectID = static_cast<uint32_t>(objectID);
+					}
+
+					Ignition::UI::TextDisabled("Tags this body's surface cells - Phase 4 spins the wheels off this without re-voxelizing");
+					Ignition::UI::Checkbox("Enabled##AeroBody", &aeroBody->Enabled);
+
+					if (Ignition::UI::SmallButton("Remove##AeroBody"))
+					{
+						entity.RemoveAeroBody();
+					}
+				}
+			}
+
 			if (Ignition::WindTunnelComponent* tunnel = entity.GetWindTunnel())
 			{
 				if (Ignition::UI::CollapsingHeader("Wind Tunnel"))
@@ -1390,9 +1512,16 @@ namespace Editor
 
 					Ignition::UI::SeparatorText("Obstacle");
 
-					Ignition::UI::TextDisabled("Analytic sphere until the voxelizer lands - the sphere rung needs no mesh, and it keeps solver bugs separable from voxelizer bugs");
+					Ignition::UI::TextDisabled("The analytic sphere stands in only while no Aero Body is present - the sphere rung needs no mesh, and it keeps solver bugs separable from voxelizer bugs");
 					Ignition::UI::DragFloat("Diameter (m)", &tunnel->ObstacleDiameter, 0.01f, 0.01f, 20.0f);
 					Ignition::UI::DragFloat3("Center (fraction)", tunnel->ObstacleCenter, 0.005f);
+
+					int floodIterations = static_cast<int>(tunnel->FloodIterations);
+
+					if (Ignition::UI::SliderInt("Flood Iterations", &floodIterations, 1, 32))
+					{
+						tunnel->FloodIterations = static_cast<uint32_t>(floodIterations);
+					}
 
 					Ignition::UI::Checkbox("Draw Bounds", &tunnel->DrawBounds);
 
@@ -1473,6 +1602,19 @@ namespace Editor
 				if (!entity.GetWindTunnel() && Ignition::UI::MenuItem("Wind Tunnel"))
 				{
 					entity.AddWindTunnel();
+				}
+
+				if (!entity.GetAeroBody() && Ignition::UI::MenuItem("Aero Body"))
+				{
+					Ignition::AeroBodyComponent aeroBody;
+
+					if (const Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer())
+					{
+						aeroBody.MeshAsset = meshRenderer->MeshAsset;
+						aeroBody.Mesh = meshRenderer->Mesh;
+					}
+
+					entity.AddAeroBody(aeroBody);
 				}
 
 				Ignition::UI::EndPopup();

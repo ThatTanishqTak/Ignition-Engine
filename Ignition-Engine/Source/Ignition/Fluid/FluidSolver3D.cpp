@@ -115,6 +115,19 @@ namespace Ignition
 		}
 	}
 
+	void FluidSolver3D::SetBodies(const std::vector<FluidBody>& bodies)
+	{
+		if (m_Implementation->Handle)
+		{
+			m_Implementation->Handle->SetBodies(bodies);
+		}
+	}
+
+	FluidVoxelStatus FluidSolver3D::GetVoxelStatus() const
+	{
+		return m_Implementation->Handle ? m_Implementation->Handle->GetVoxelStatus() : FluidVoxelStatus{};
+	}
+
 	uint64_t FluidSolver3D::GetStepCount() const
 	{
 		return m_Implementation->Handle ? m_Implementation->Handle->GetStepCount() : 0;
