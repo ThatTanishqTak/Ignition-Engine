@@ -175,10 +175,9 @@ namespace Editor
 			// 120 Hz physics rendered smoothly at whatever the display rate happens to be
 			m_RuntimePhysics->SyncTransforms(m_Context->Play == PlayState::Playing ? Ignition::Time::GetFixedAlpha() : 1.0f);
 		}
-		else
-		{
-			RefreshEditorPhysics();
-		}
+
+		// Runs in play too: the query world carries the meshes the simulation has no body for, and those stay clickable in both modes
+		RefreshEditorPhysics();
 
 		UpdateWindTunnel(deltaTime);
 
@@ -240,11 +239,27 @@ namespace Editor
 		m_Context->PhysicsSceneDirty = false;
 	}
 
+	Ignition::Entity EditorLayer::FindEntity(uint32_t entityID) const
+	{
+		if (entityID == 0xFFFFFFFF)
+		{
+			return {};
+		}
+
+		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		{
+			if (entity.GetID() == entityID)
+			{
+				return entity;
+			}
+		}
+
+		return {};
+	}
+
 	void EditorLayer::PickEntityUnderCursor()
 	{
-		Ignition::PhysicsWorld* physics = GetActivePhysicsWorld();
-
-		if (!physics || !physics->IsValid() || m_Context->ViewportSize.x <= 0.0f || m_Context->ViewportSize.y <= 0.0f)
+		if (m_Context->ViewportSize.x <= 0.0f || m_Context->ViewportSize.y <= 0.0f)
 		{
 			return;
 		}
@@ -269,24 +284,31 @@ namespace Editor
 		const glm::vec3 origin = glm::vec3(nearPoint) / nearPoint.w;
 		const glm::vec3 direction = glm::normalize((glm::vec3(farPoint) / farPoint.w) - origin);
 
-		const Ignition::RaycastHit hit = physics->Raycast(origin, direction);
+		// The simulating world first - while playing it is the only one holding live poses
+		Ignition::RaycastHit best{};
 
-		if (!hit.Hit)
+		if (m_RuntimePhysics && m_RuntimePhysics->IsValid())
 		{
-			m_Context->Selection = {};
-
-			return;
+			best = m_RuntimePhysics->Raycast(origin, direction);
 		}
 
-		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+		if (m_EditorPhysics && m_EditorPhysics->IsValid())
 		{
-			if (entity.GetID() == hit.EntityID)
-			{
-				m_Context->Selection = entity;
+			const Ignition::RaycastHit hit = m_EditorPhysics->Raycast(origin, direction);
+			const Ignition::Entity entity = hit.Hit ? FindEntity(hit.EntityID) : Ignition::Entity{};
 
-				break;
+			// Every simulated body is mirrored in here as well, frozen at its pre-play transform. Those mirrors are ghosts and must never win a pick;
+			// what is left is exactly the geometry the simulation has no body for, which nothing moves, so its mirror is never stale
+			const bool ghost = m_RuntimePhysics && m_RuntimePhysics->HasBody(entity);
+
+			if (hit.Hit && !ghost && (!best.Hit || hit.Distance < best.Distance))
+			{
+				best = hit;
+				best.EntityID = entity.GetID();
 			}
 		}
+
+		m_Context->Selection = best.Hit ? FindEntity(best.EntityID) : Ignition::Entity{};
 	}
 
 	void EditorLayer::OnPlay()
@@ -352,16 +374,7 @@ namespace Editor
 
 		m_Snapshot.clear();
 		m_Context->PhysicsSceneDirty = true;
-
-		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
-		{
-			if (entity.GetID() == selectionID)
-			{
-				m_Context->Selection = entity;
-
-				break;
-			}
-		}
+		m_Context->Selection = FindEntity(selectionID);
 	}
 
 	void EditorLayer::SubmitColliderGizmos()
@@ -962,7 +975,8 @@ namespace Editor
 			return;
 		}
 
-		if (m_RuntimePhysics)
+		// A body the simulation owns gets pushed; anything else lives only in the query world, which has to rebuild to follow it
+		if (m_RuntimePhysics && m_RuntimePhysics->HasBody(m_Context->Selection))
 		{
 			m_RuntimePhysics->PushTransform(m_Context->Selection);
 		}
@@ -1077,7 +1091,7 @@ namespace Editor
 
 				if (transformEdited)
 				{
-					if (m_RuntimePhysics)
+					if (m_RuntimePhysics && m_RuntimePhysics->HasBody(entity))
 					{
 						m_RuntimePhysics->PushTransform(entity);
 					}

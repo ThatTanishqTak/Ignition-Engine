@@ -42,7 +42,7 @@ namespace Ignition
 
 		IGNITION_API bool IsValid() const;
 
-		// Instantiates PhysX actors from the scene's physics components; safe to call repeatedly
+		// Instantiates Jolt bodies from the scene's physics components; safe to call repeatedly
 		IGNITION_API void Rebuild();
 
 		IGNITION_API void Step(float fixedTimeStep);
@@ -50,8 +50,11 @@ namespace Ignition
 		// Writes interpolated actor poses back onto TransformComponent (alpha = Time::GetFixedAlpha())
 		IGNITION_API void SyncTransforms(float alpha);
 
-		// TransformComponent -> actor, for gizmo/inspector edits made while playing
+		// TransformComponent -> body, for gizmo/inspector edits made while playing
 		IGNITION_API void PushTransform(Entity entity);
+
+		// Whether this world owns a body for the entity - tells a live body from another world's stale mirror of the same entity
+		IGNITION_API bool HasBody(Entity entity) const;
 
 		IGNITION_API RaycastHit Raycast(const glm::vec3& origin, const glm::vec3& direction, float maximumDistance = 1000.0f) const;
 

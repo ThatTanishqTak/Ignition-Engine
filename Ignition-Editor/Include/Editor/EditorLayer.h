@@ -74,6 +74,7 @@ namespace Editor
 		void SubmitColliderGizmos();
 		void RefreshEditorPhysics();
 		void PickEntityUnderCursor();
+		Ignition::Entity FindEntity(uint32_t entityID) const;
 
 		Ignition::PhysicsWorld* GetActivePhysicsWorld() const;
 

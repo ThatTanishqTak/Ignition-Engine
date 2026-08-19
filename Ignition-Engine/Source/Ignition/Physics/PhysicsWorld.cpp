@@ -600,6 +600,18 @@ namespace Ignition
 		}
 	}
 
+	bool PhysicsWorld::HasBody(Entity entity) const
+	{
+		if (!IsValid() || !entity.IsValid())
+		{
+			return false;
+		}
+
+		const auto it = m_Implementation->Bodies.find(entity.GetID());
+
+		return it != m_Implementation->Bodies.end() && !it->second.ID.IsInvalid();
+	}
+
 	void PhysicsWorld::PushTransform(Entity entity)
 	{
 		if (!IsValid() || !entity.IsValid())
