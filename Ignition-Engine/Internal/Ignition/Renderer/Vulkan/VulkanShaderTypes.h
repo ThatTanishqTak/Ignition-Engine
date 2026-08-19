@@ -46,4 +46,28 @@ namespace Ignition
 	};
 
 	static_assert(sizeof(FluidPushConstants3D) == 96, "Wind tunnel push constant block must stay 96 bytes to match Fluid3D.slang");
+
+	// Mirrors VolumeParameters in FluidVolume.slang. 128 bytes is the guaranteed push-constant minimum, and this fills it exactly
+	struct FluidVolumePushConstants
+	{
+		glm::mat4 InverseViewProjection{ 1.0f };
+
+		glm::vec3 LatticeMinimum{ 0.0f };
+		float CellSize = 0.0f;
+
+		glm::uvec3 Resolution{ 0, 0, 0 };
+		uint32_t Field = 0;
+
+		float LatticeVelocity = 0.0f;
+		float ColorScale = 1.0f;
+		float Density = 0.0f;                      // extinction per metre at full departure from freestream
+		float Threshold = 0.0f;                    // departure below this is perfectly clear air
+
+		uint32_t StepCount = 0;
+		uint32_t Flags = 0;                        // bit 0: solid cells shade as the voxel mask
+		uint32_t Padding0 = 0;
+		uint32_t Padding1 = 0;
+	};
+
+	static_assert(sizeof(FluidVolumePushConstants) == 128, "Volume push constant block must stay 128 bytes to match FluidVolume.slang");
 }

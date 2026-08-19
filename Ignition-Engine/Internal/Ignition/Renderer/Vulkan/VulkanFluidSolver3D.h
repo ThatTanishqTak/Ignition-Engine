@@ -35,7 +35,7 @@ namespace Ignition
 		VulkanFluidSolver3D(const VulkanFluidSolver3D&) = delete;
 		VulkanFluidSolver3D& operator=(const VulkanFluidSolver3D&) = delete;
 
-		void Initialize(VulkanRenderer& renderer, VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const FluidSolver3DSettings& settings);
+		void Initialize(VulkanRenderer& renderer, VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const std::string& volumeSpirvPath, VkFormat colorFormat, VkFormat depthFormat, const FluidSolver3DSettings& settings);
 		void Shutdown();
 
 		bool IsValid() const;
@@ -51,7 +51,8 @@ namespace Ignition
 
 		void RecordCompute(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanGPUTimer* timer) override;
 
-		// Scene-pass hooks: the slice plane as a translucent quad, tracers and the pressure shell as GPU-resident lines
+		// Scene-pass hooks: the lattice ray-marched in full, the slice plane as a translucent quad, tracers and the pressure shell as GPU-resident lines
+		void RecordSceneVolume(VkCommandBuffer commandBuffer, const glm::mat4& viewProjection) override;
 		bool GetSceneQuad(VulkanSceneQuad& quad) override;
 		void RecordSceneLines(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanLineRenderer& lines, const glm::mat4& viewProjection) override;
 
@@ -66,6 +67,9 @@ namespace Ignition
 		bool CreateBuffers();
 		bool CreateDescriptors();
 		bool CreatePipelines(const std::string& spirvPath);
+
+		// Not load-bearing: a tunnel whose volume pipeline failed still simulates, slices and traces
+		bool CreateVolumePipeline(const std::string& spirvPath, VkFormat colorFormat, VkFormat depthFormat);
 
 		FluidPushConstants3D BuildParameters() const;
 
@@ -154,6 +158,12 @@ namespace Ignition
 		VulkanComputePipeline m_AdvectParticlesPipeline;
 		VulkanComputePipeline m_ShellPipeline;
 		VulkanComputePipeline m_ShellFinalizePipeline;
+
+		// Volume ray march: a graphics pipeline of its own, reading the lattice straight out of the fragment shader
+		VkDescriptorSetLayout m_VolumeSetLayout = VK_NULL_HANDLE;
+		VkDescriptorSet m_VolumeDescriptorSet = VK_NULL_HANDLE; // neither the flags nor the fields ping-pong, so one set serves every frame
+		VkPipelineLayout m_VolumePipelineLayout = VK_NULL_HANDLE;
+		VkPipeline m_VolumePipeline = VK_NULL_HANDLE;
 
 		uint32_t m_CurrentSet = 0;
 		uint32_t m_PendingSteps = 0;

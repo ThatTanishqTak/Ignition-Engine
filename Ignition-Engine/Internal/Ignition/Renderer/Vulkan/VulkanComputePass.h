@@ -28,5 +28,8 @@ namespace Ignition
 		virtual void RecordCompute(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanGPUTimer* timer) = 0;
 		virtual bool GetSceneQuad(VulkanSceneQuad& quad) { (void)quad; return false; }
 		virtual void RecordSceneLines(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanLineRenderer& lines, const glm::mat4& viewProjection) { (void)commandBuffer; (void)frameIndex; (void)lines; (void)viewProjection; }
+
+		// A full-screen ray march of whatever the pass holds in 3D. Recorded first in the scene pass, so quads and lines land on top of it
+		virtual void RecordSceneVolume(VkCommandBuffer commandBuffer, const glm::mat4& viewProjection) { (void)commandBuffer; (void)viewProjection; }
 	};
 }

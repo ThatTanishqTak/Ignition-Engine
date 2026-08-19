@@ -734,7 +734,29 @@ namespace Editor
 
 			Ignition::UI::SeparatorText("Visualization");
 
-			Ignition::UI::Checkbox("Slice Plane", &tunnel.SliceEnabled);
+			Ignition::UI::Checkbox("Volume View", &tunnel.VolumeEnabled);
+			Ignition::UI::TextDisabled("Ray-marches the whole lattice in the viewport - the slice plane below is a diagnostic laid over it");
+
+			static const char* const volumeFields[] = { "Velocity", "Vorticity", "Pressure" };
+			int volumeField = static_cast<int>(tunnel.VolumeField);
+
+			if (Ignition::UI::Combo("Field##Volume", &volumeField, volumeFields, 3))
+			{
+				tunnel.VolumeField = static_cast<Ignition::FluidField>(volumeField);
+			}
+
+			Ignition::UI::SliderFloat("Density##Volume", &tunnel.VolumeDensity, 0.1f, 20.0f);
+			Ignition::UI::SliderFloat("Threshold##Volume", &tunnel.VolumeThreshold, 0.0f, 0.95f);
+			Ignition::UI::TextDisabled("Colour is the field, opacity is the departure from freestream - undisturbed air reads zero and stays invisible");
+
+			int volumeSteps = static_cast<int>(tunnel.VolumeSteps);
+
+			if (Ignition::UI::SliderInt("Steps##Volume", &volumeSteps, 32, 512))
+			{
+				tunnel.VolumeSteps = static_cast<uint32_t>(volumeSteps);
+			}
+
+			Ignition::UI::Checkbox("Slice Plane (in scene)", &tunnel.SliceEnabled);
 
 			static const char* const axes[] = { "X (side view)", "Y (top view)", "Z (front view)" };
 			int sliceAxis = static_cast<int>(tunnel.SliceAxis);
@@ -770,9 +792,9 @@ namespace Editor
 			Ignition::UI::SameLine();
 			Ignition::UI::Checkbox("Show Voxel Mask", &tunnel.VoxelDebugView);
 
-			if (tunnel.SliceEnabled && m_Tunnel->GetSliceTextureID() != 0)
+			if (m_Tunnel->GetSliceTextureID() != 0)
 			{
-				// The preview shares the in-scene texture; aspect follows the plane the axis selects
+				// The slice kernel runs every frame whether or not the plane is drawn in the scene, so the panel preview is always live
 				const glm::uvec3 resolution = m_Tunnel->GetSettings().Resolution;
 
 				float sliceAspect = static_cast<float>(resolution.y) / static_cast<float>(resolution.x);

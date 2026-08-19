@@ -11,6 +11,7 @@
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/matrix.hpp>
 
 #include <algorithm>
 #include <array>
@@ -55,7 +56,7 @@ namespace Ignition
 	VulkanFluidSolver3D::VulkanFluidSolver3D() = default;
 	VulkanFluidSolver3D::~VulkanFluidSolver3D() = default;
 
-	void VulkanFluidSolver3D::Initialize(VulkanRenderer& renderer, VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const FluidSolver3DSettings& settings)
+	void VulkanFluidSolver3D::Initialize(VulkanRenderer& renderer, VkDevice device, VkQueue graphicsQueue, uint32_t graphicsQueueFamily, VmaAllocator allocator, VulkanDescriptorAllocator& descriptorAllocator, const std::string& spirvPath, const std::string& volumeSpirvPath, VkFormat colorFormat, VkFormat depthFormat, const FluidSolver3DSettings& settings)
 	{
 		IG_CORE_INFO("------- INITIALIZING WIND TUNNEL ({}x{}x{}) -------", settings.Resolution.x, settings.Resolution.y, settings.Resolution.z);
 
@@ -80,6 +81,12 @@ namespace Ignition
 			Shutdown();
 
 			return;
+		}
+
+		// The viewport's 3D view, and the only part of the tunnel that is optional: losing it costs a picture, not a number
+		if (!CreateVolumePipeline(volumeSpirvPath, colorFormat, depthFormat))
+		{
+			IG_CORE_ERROR("Wind tunnel: the volume view is unavailable, the viewport falls back to the slice plane and tracers");
 		}
 
 		m_SliceImGuiTexture = reinterpret_cast<VkDescriptorSet>(renderer.AddImGuiTexture(m_Slice->GetImageView()));
@@ -247,6 +254,162 @@ namespace Ignition
 		return IsValid();
 	}
 
+	bool VulkanFluidSolver3D::CreateVolumePipeline(const std::string& spirvPath, VkFormat colorFormat, VkFormat depthFormat)
+	{
+		// Both stages are declared on every binding and on the push range: the vertex shader touches neither, and over-declaring costs nothing
+		constexpr VkShaderStageFlags stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		std::vector<VkDescriptorSetLayoutBinding> bindings(2);
+
+		for (uint32_t binding = 0; binding < bindings.size(); ++binding)
+		{
+			bindings[binding].binding = binding;
+			bindings[binding].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			bindings[binding].descriptorCount = 1;
+			bindings[binding].stageFlags = stages;
+		}
+
+		m_VolumeSetLayout = m_DescriptorAllocator->CreateSetLayout(bindings);
+
+		if (m_VolumeSetLayout == VK_NULL_HANDLE)
+		{
+			return false;
+		}
+
+		m_VolumeDescriptorSet = m_DescriptorAllocator->Allocate(m_VolumeSetLayout);
+
+		if (m_VolumeDescriptorSet == VK_NULL_HANDLE)
+		{
+			return false;
+		}
+
+		VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_VolumeDescriptorSet, 0, m_Flags.GetBuffer(), m_Flags.GetSize());
+		VulkanDescriptorAllocator::WriteStorageBuffer(m_Device, m_VolumeDescriptorSet, 1, m_Fields.GetBuffer(), m_Fields.GetSize());
+
+		const VkShaderModule shaderModule = Utilities::VulkanUtilities::CreateShaderModule(m_Device, spirvPath);
+
+		if (shaderModule == VK_NULL_HANDLE)
+		{
+			IG_CORE_ERROR("Wind tunnel volume: could not load '{}'", spirvPath);
+
+			return false;
+		}
+
+		std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages{};
+
+		shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+		shaderStages[0].module = shaderModule;
+		shaderStages[0].pName = "vertexMain";
+
+		shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		shaderStages[1].module = shaderModule;
+		shaderStages[1].pName = "fragmentMain";
+
+		// No vertex buffer at all: the triangle comes out of SV_VertexID
+		VkPipelineVertexInputStateCreateInfo vertexInputState{};
+		vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+		VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
+		inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+		inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+		VkPipelineViewportStateCreateInfo viewportState{};
+		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewportState.viewportCount = 1;
+		viewportState.scissorCount = 1;
+
+		// The scene viewport is flipped, which reverses the triangle's winding - culling nothing sidesteps the question
+		VkPipelineRasterizationStateCreateInfo rasterizationState{};
+		rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+		rasterizationState.cullMode = VK_CULL_MODE_NONE;
+		rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		rasterizationState.lineWidth = 1.0f;
+
+		VkPipelineMultisampleStateCreateInfo multisampleState{};
+		multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+		// Premultiplied: the ray march already weighted every sample by the transmittance in front of it
+		VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+		colorBlendAttachment.blendEnable = VK_TRUE;
+		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+		colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+		colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+		VkPipelineColorBlendStateCreateInfo colorBlendState{};
+		colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		colorBlendState.attachmentCount = 1;
+		colorBlendState.pAttachments = &colorBlendAttachment;
+
+		// The solid mask stops the ray, so the body occludes the air behind it without a depth read the scene pass cannot give
+		VkPipelineDepthStencilStateCreateInfo depthStencilState{};
+		depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		depthStencilState.depthTestEnable = VK_FALSE;
+		depthStencilState.depthWriteEnable = VK_FALSE;
+		depthStencilState.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+
+		const std::array<VkDynamicState, 2> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+
+		VkPipelineDynamicStateCreateInfo dynamicState{};
+		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+		dynamicState.pDynamicStates = dynamicStates.data();
+
+		VkPushConstantRange pushConstantRange{};
+		pushConstantRange.stageFlags = stages;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = sizeof(FluidVolumePushConstants);
+
+		VkPipelineLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		layoutInfo.setLayoutCount = 1;
+		layoutInfo.pSetLayouts = &m_VolumeSetLayout;
+		layoutInfo.pushConstantRangeCount = 1;
+		layoutInfo.pPushConstantRanges = &pushConstantRange;
+
+		if (!VK_CHECK(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_VolumePipelineLayout)))
+		{
+			vkDestroyShaderModule(m_Device, shaderModule, nullptr);
+
+			return false;
+		}
+
+		VkPipelineRenderingCreateInfo renderingCreateInfo{};
+		renderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+		renderingCreateInfo.colorAttachmentCount = 1;
+		renderingCreateInfo.pColorAttachmentFormats = &colorFormat;
+		renderingCreateInfo.depthAttachmentFormat = depthFormat;
+
+		VkGraphicsPipelineCreateInfo pipelineInfo{};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		pipelineInfo.pNext = &renderingCreateInfo;
+		pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+		pipelineInfo.pStages = shaderStages.data();
+		pipelineInfo.pVertexInputState = &vertexInputState;
+		pipelineInfo.pInputAssemblyState = &inputAssemblyState;
+		pipelineInfo.pViewportState = &viewportState;
+		pipelineInfo.pRasterizationState = &rasterizationState;
+		pipelineInfo.pMultisampleState = &multisampleState;
+		pipelineInfo.pDepthStencilState = &depthStencilState;
+		pipelineInfo.pColorBlendState = &colorBlendState;
+		pipelineInfo.pDynamicState = &dynamicState;
+		pipelineInfo.layout = m_VolumePipelineLayout;
+		pipelineInfo.renderPass = VK_NULL_HANDLE;
+
+		const bool created = VK_CHECK(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_VolumePipeline));
+
+		vkDestroyShaderModule(m_Device, shaderModule, nullptr);
+
+		return created;
+	}
+
 	bool VulkanFluidSolver3D::IsValid() const
 	{
 		return m_ClearMaskPipeline.IsValid() && m_VoxelizePipeline.IsValid() && m_FloodSweepPipeline.IsValid() && m_FloodFinalizePipeline.IsValid() && m_InitializePipeline.IsValid() && m_ProjectedAreaPipeline.IsValid() && m_StreamCollidePipeline.IsValid() && m_ReducePartialPipeline.IsValid() && m_ReduceFinalPipeline.IsValid() && m_SlicePipeline.IsValid() && m_InitializeParticlesPipeline.IsValid() && m_AdvectParticlesPipeline.IsValid() && m_ShellPipeline.IsValid() && m_ShellFinalizePipeline.IsValid();
@@ -265,6 +428,18 @@ namespace Ignition
 			}
 
 			m_SliceImGuiTexture = VK_NULL_HANDLE;
+		}
+
+		if (m_VolumePipeline != VK_NULL_HANDLE)
+		{
+			vkDestroyPipeline(m_Device, m_VolumePipeline, nullptr);
+			m_VolumePipeline = VK_NULL_HANDLE;
+		}
+
+		if (m_VolumePipelineLayout != VK_NULL_HANDLE)
+		{
+			vkDestroyPipelineLayout(m_Device, m_VolumePipelineLayout, nullptr);
+			m_VolumePipelineLayout = VK_NULL_HANDLE;
 		}
 
 		m_ShellFinalizePipeline.Shutdown();
@@ -296,53 +471,65 @@ namespace Ignition
 				m_SliceSceneTexture = VK_NULL_HANDLE;
 			}
 
+			if (m_VolumeDescriptorSet != VK_NULL_HANDLE)
+			{
+				m_DescriptorAllocator->Free(m_VolumeDescriptorSet);
+				m_VolumeDescriptorSet = VK_NULL_HANDLE;
+			}
+
 			if (m_SetLayout != VK_NULL_HANDLE)
 			{
 				m_DescriptorAllocator->DestroySetLayout(m_SetLayout);
 				m_SetLayout = VK_NULL_HANDLE;
 			}
+
+			if (m_VolumeSetLayout != VK_NULL_HANDLE)
+			{
+				m_DescriptorAllocator->DestroySetLayout(m_VolumeSetLayout);
+				m_VolumeSetLayout = VK_NULL_HANDLE;
+			}
+
+			if (m_SliceSampler != VK_NULL_HANDLE)
+			{
+				vkDestroySampler(m_Device, m_SliceSampler, nullptr);
+				m_SliceSampler = VK_NULL_HANDLE;
+			}
+
+			if (m_Slice)
+			{
+				m_Slice->Shutdown();
+				m_Slice.reset();
+			}
+
+			m_VoxelIndices.Shutdown();
+			m_VoxelPositions.Shutdown();
+			m_ShellIndirect.Shutdown();
+			m_ShellVertices.Shutdown();
+			m_ParticleVertices.Shutdown();
+			m_Particles.Shutdown();
+
+			for (VulkanBuffer& readback : m_Readback)
+			{
+				readback.Shutdown();
+			}
+
+			m_Counters.Shutdown();
+			m_ForceResult.Shutdown();
+			m_ForcePartials.Shutdown();
+			m_CellForces.Shutdown();
+			m_Fields.Shutdown();
+			m_Flags.Shutdown();
+
+			for (VulkanBuffer& distribution : m_Distributions)
+			{
+				distribution.Shutdown();
+			}
+
+			m_Device = VK_NULL_HANDLE;
+			m_GraphicsQueue = VK_NULL_HANDLE;
+			m_Allocator = VK_NULL_HANDLE;
+			m_DescriptorAllocator = nullptr;
 		}
-
-		if (m_SliceSampler != VK_NULL_HANDLE)
-		{
-			vkDestroySampler(m_Device, m_SliceSampler, nullptr);
-			m_SliceSampler = VK_NULL_HANDLE;
-		}
-
-		if (m_Slice)
-		{
-			m_Slice->Shutdown();
-			m_Slice.reset();
-		}
-
-		m_VoxelIndices.Shutdown();
-		m_VoxelPositions.Shutdown();
-		m_ShellIndirect.Shutdown();
-		m_ShellVertices.Shutdown();
-		m_ParticleVertices.Shutdown();
-		m_Particles.Shutdown();
-
-		for (VulkanBuffer& readback : m_Readback)
-		{
-			readback.Shutdown();
-		}
-
-		m_Counters.Shutdown();
-		m_ForceResult.Shutdown();
-		m_ForcePartials.Shutdown();
-		m_CellForces.Shutdown();
-		m_Fields.Shutdown();
-		m_Flags.Shutdown();
-
-		for (VulkanBuffer& distribution : m_Distributions)
-		{
-			distribution.Shutdown();
-		}
-
-		m_Device = VK_NULL_HANDLE;
-		m_GraphicsQueue = VK_NULL_HANDLE;
-		m_Allocator = VK_NULL_HANDLE;
-		m_DescriptorAllocator = nullptr;
 	}
 
 	void VulkanFluidSolver3D::Configure(const FluidSolver3DSettings& settings)
@@ -666,12 +853,8 @@ namespace Ignition
 		// The fence for this frame index was waited on before the command buffer opened, so last cycle's result is here
 		ReadResults(frameIndex);
 
-		// Cross-frame hazards: last frame's draws read the vertex and indirect buffers, and its viz kernels read fields this frame rewrites
-		Utilities::VulkanUtilities::MemoryBarrier(commandBuffer,
-			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-			VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
-			VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT);
+		// Cross-frame hazards: last frame's draws read the vertex and indirect buffers, its viz kernels read fields this frame rewrites and its volume ray march was still reading the lattice out of a fragment shader - the frame fence is two frames back, not one
+		Utilities::VulkanUtilities::MemoryBarrier(commandBuffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT | VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT);
 
 		if (m_BodiesDirty)
 		{
@@ -804,10 +987,49 @@ namespace Ignition
 			m_ShellReady = true;
 		}
 
+		// The ray march reads both of these from a fragment shader later in this same frame
+		if (m_Settings.VolumeEnabled && m_VolumePipeline != VK_NULL_HANDLE)
+		{
+			Utilities::VulkanUtilities::BufferBarrier(commandBuffer, m_Fields.GetBuffer(), 0, VK_WHOLE_SIZE, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+			Utilities::VulkanUtilities::BufferBarrier(commandBuffer, m_Flags.GetBuffer(), 0, VK_WHOLE_SIZE, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+		}
+
 		if (timer)
 		{
 			timer->EndPass(commandBuffer, visualizationPass);
 		}
+	}
+
+	void VulkanFluidSolver3D::RecordSceneVolume(VkCommandBuffer commandBuffer, const glm::mat4& viewProjection)
+	{
+		if (!IsValid() || !m_Settings.VolumeEnabled || m_VolumePipeline == VK_NULL_HANDLE)
+		{
+			return;
+		}
+
+		FluidVolumePushConstants parameters{};
+
+		// One inverse is all the camera the ray march needs: origin and direction both fall out of it per pixel
+		parameters.InverseViewProjection = glm::inverse(viewProjection);
+		parameters.LatticeMinimum = LatticeMinimum();
+		parameters.CellSize = std::max(m_Scaling.CellSize, 1e-6f);
+		parameters.Resolution = m_Settings.Resolution;
+		parameters.Field = static_cast<uint32_t>(m_Settings.VolumeField);
+		parameters.LatticeVelocity = m_Scaling.LatticeVelocity;
+		parameters.ColorScale = m_Settings.ColorScale;
+		parameters.Density = std::max(m_Settings.VolumeDensity, 0.0f);
+		parameters.Threshold = std::clamp(m_Settings.VolumeThreshold, 0.0f, 0.95f);
+		parameters.StepCount = std::clamp(m_Settings.VolumeSteps, 16u, 512u);
+
+		// The mask toggle drives the shell and the volume together, so a silhouette check reads the same either way
+		parameters.Flags = m_Settings.VoxelDebugView ? 1u : 0u;
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VolumePipeline);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_VolumePipelineLayout, 0, 1, &m_VolumeDescriptorSet, 0, nullptr);
+		vkCmdPushConstants(commandBuffer, m_VolumePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(FluidVolumePushConstants), &parameters);
+
+		// Three vertices, no vertex buffer
+		vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 	}
 
 	bool VulkanFluidSolver3D::GetSceneQuad(VulkanSceneQuad& quad)

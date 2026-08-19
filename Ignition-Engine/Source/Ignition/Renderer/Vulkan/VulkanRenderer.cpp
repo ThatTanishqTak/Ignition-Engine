@@ -552,7 +552,12 @@ namespace Ignition
 
 		const VkCommandBuffer commandBuffer = m_VulkanFrameContext->GetCommandBuffer(m_FrameIndex);
 
-		// Fluid overlays draw into the still-open scene pass: translucent slice quads first, then GPU-resident line work (tracers, pressure shells)
+		// Fluid overlays draw into the still-open scene pass. The volume goes down first: it is the air itself, and the slice plane, the tracers, the pressure shell and every debug line are diagnostics that belong on top of it
+		for (VulkanComputePass* computePass : m_ComputePasses)
+		{
+			computePass->RecordSceneVolume(commandBuffer, m_SceneViewProjection);
+		}
+
 		if (m_VulkanPipeline && m_VulkanPipeline->IsValid() && m_OverlayQuad && m_OverlayQuad->IsValid())
 		{
 			for (VulkanComputePass* computePass : m_ComputePasses)
@@ -1021,9 +1026,11 @@ namespace Ignition
 
 		const char* basePath = SDL_GetBasePath();
 		const std::string shaderPath = std::string(basePath ? basePath : "") + ShaderDirectory + "Fluid3D.spv";
+		const std::string volumePath = std::string(basePath ? basePath : "") + ShaderDirectory + "FluidVolume.spv";
 
+		// The scene render target carries the swapchain's format, so one pipeline serves the editor viewport and the bare window alike
 		auto solver = std::make_unique<VulkanFluidSolver3D>();
-		solver->Initialize(*this, m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, settings);
+		solver->Initialize(*this, m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), *m_VulkanDescriptorAllocator, shaderPath, volumePath, m_VulkanSwapchain->GetImageFormat(), DepthFormat, settings);
 
 		if (!solver->IsValid())
 		{

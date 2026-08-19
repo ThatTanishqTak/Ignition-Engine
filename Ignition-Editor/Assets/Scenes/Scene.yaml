@@ -12,7 +12,12 @@ WindTunnel:
   ReferenceLength: 1
   Wheelbase: 1
   RollingRoad: true
-  SliceEnabled: true
+  VolumeEnabled: true
+  VolumeField: 1
+  VolumeDensity: 4
+  VolumeThreshold: 0.08
+  VolumeSteps: 256
+  SliceEnabled: false
   SliceAxis: 0
   SlicePosition: 0.5
   SliceField: 0

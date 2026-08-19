@@ -88,6 +88,15 @@ file(GLOB IGNITION_SHADER_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/*.slang"
 )
 
+# Shared helpers pulled in by the entry-point shaders. Never compiled alone, but every shader rebuilds when one changes
+file(GLOB IGNITION_SHADER_INCLUDES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/*.inc.slang"
+)
+
+if(IGNITION_SHADER_INCLUDES)
+    list(REMOVE_ITEM IGNITION_SHADER_SOURCES ${IGNITION_SHADER_INCLUDES})
+endif()
+
 set(IGNITION_SHADER_OUTPUT_DIRECTORY "${BASE_OUTPUT_DIRECTORY}/Shaders")
 
 set(IGNITION_SHADER_BINARIES "")
@@ -105,7 +114,7 @@ foreach(SHADER_SOURCE ${IGNITION_SHADER_SOURCES})
             -fvk-use-entrypoint-name
             $<$<CONFIG:Debug>:-g>
             -o ${SHADER_OUTPUT}
-        DEPENDS ${SHADER_SOURCE}
+        DEPENDS ${SHADER_SOURCE} ${IGNITION_SHADER_INCLUDES}
         COMMENT "Compiling shader ${SHADER_NAME}.slang -> ${SHADER_NAME}.spv"
         VERBATIM
     )
@@ -115,7 +124,7 @@ endforeach()
 
 add_custom_target(IgnitionShaders
     DEPENDS ${IGNITION_SHADER_BINARIES}
-    SOURCES ${IGNITION_SHADER_SOURCES}
+    SOURCES ${IGNITION_SHADER_SOURCES} ${IGNITION_SHADER_INCLUDES}
 )
 
-source_group("Shaders" FILES ${IGNITION_SHADER_SOURCES})
+source_group("Shaders" FILES ${IGNITION_SHADER_SOURCES} ${IGNITION_SHADER_INCLUDES})

@@ -57,7 +57,14 @@ namespace Ignition
 
 		bool RollingRoad = true;
 
-		bool SliceEnabled = true;
+		// The viewport shows the whole lattice: the slice plane is a diagnostic laid over it, not the only way to see the air
+		bool VolumeEnabled = true;
+		FluidField VolumeField = FluidField::Vorticity;
+		float VolumeDensity = 4.0f;                   // extinction per metre where the flow has departed fully from freestream
+		float VolumeThreshold = 0.08f;                // departure from freestream a disturbance must reach before it fogs at all
+		uint32_t VolumeSteps = 256;                   // ray-march samples across the lattice; more is sharper and slower
+
+		bool SliceEnabled = false;                    // the in-scene plane only - the panel preview is always live
 		FluidSliceAxis SliceAxis = FluidSliceAxis::X;
 		float SlicePosition = 0.5f;                   // fraction along the axis
 		FluidField SliceField = FluidField::VelocityMagnitude;

@@ -1,3 +1,5 @@
+#include "FluidColor.inc.slang"
+
 static const int3 Directions[19] =
 {
     int3( 0,  0,  0),
@@ -653,40 +655,7 @@ void reduceForcePartial(uint3 dispatchID : SV_DispatchThreadID, uint3 groupID : 
 }
 
 // ---------------- Step 3.4: visualization ----------------
-// Linear values into the texture; the composite pass does the sRGB encode, matching VulkanImGui's convention
-float3 Ramp(float value)
-{
-    const float scaled = saturate(value) * 4.0;
-
-    if (scaled < 1.0)
-    {
-        return lerp(float3(0.05, 0.02, 0.20), float3(0.10, 0.35, 0.75), scaled);
-    }
-
-    if (scaled < 2.0)
-    {
-        return lerp(float3(0.10, 0.35, 0.75), float3(0.10, 0.75, 0.60), scaled - 1.0);
-    }
-
-    if (scaled < 3.0)
-    {
-        return lerp(float3(0.10, 0.75, 0.60), float3(0.95, 0.85, 0.20), scaled - 2.0);
-    }
-
-    return lerp(float3(0.95, 0.85, 0.20), float3(0.95, 0.25, 0.10), saturate(scaled - 3.0));
-}
-
-float3 Diverging(float value)
-{
-    const float3 neutral = float3(0.96, 0.96, 0.96);
-
-    return value >= 0.0 ? lerp(neutral, float3(0.85, 0.15, 0.10), saturate(value)) : lerp(neutral, float3(0.10, 0.30, 0.85), saturate(-value));
-}
-
-float3 LinearFromSRGB(float3 color)
-{
-    return pow(max(color, 0.0), 2.2);
-}
+// The ramps live in FluidColor.inc.slang so the volume ray march reads the same colours off the same numbers
 
 uint Hash(uint value)
 {

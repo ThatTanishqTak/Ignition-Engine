@@ -204,6 +204,11 @@ namespace Ignition
 		out << YAML::Key << "ReferenceLength" << YAML::Value << tunnel.ReferenceLength;
 		out << YAML::Key << "Wheelbase" << YAML::Value << tunnel.Wheelbase;
 		out << YAML::Key << "RollingRoad" << YAML::Value << tunnel.RollingRoad;
+		out << YAML::Key << "VolumeEnabled" << YAML::Value << tunnel.VolumeEnabled;
+		out << YAML::Key << "VolumeField" << YAML::Value << static_cast<int>(tunnel.VolumeField);
+		out << YAML::Key << "VolumeDensity" << YAML::Value << tunnel.VolumeDensity;
+		out << YAML::Key << "VolumeThreshold" << YAML::Value << tunnel.VolumeThreshold;
+		out << YAML::Key << "VolumeSteps" << YAML::Value << tunnel.VolumeSteps;
 		out << YAML::Key << "SliceEnabled" << YAML::Value << tunnel.SliceEnabled;
 		out << YAML::Key << "SliceAxis" << YAML::Value << static_cast<int>(tunnel.SliceAxis);
 		out << YAML::Key << "SlicePosition" << YAML::Value << tunnel.SlicePosition;
@@ -355,7 +360,14 @@ namespace Ignition
 			tunnel.ReferenceLength = tunnelNode["ReferenceLength"].as<float>(1.0f);
 			tunnel.Wheelbase = tunnelNode["Wheelbase"].as<float>(3.6f);
 			tunnel.RollingRoad = tunnelNode["RollingRoad"].as<bool>(true);
-			tunnel.SliceEnabled = tunnelNode["SliceEnabled"].as<bool>(true);
+			tunnel.VolumeEnabled = tunnelNode["VolumeEnabled"].as<bool>(true);
+			tunnel.VolumeField = static_cast<FluidField>(std::clamp(tunnelNode["VolumeField"].as<int>(1), 0, 2));
+			tunnel.VolumeDensity = tunnelNode["VolumeDensity"].as<float>(4.0f);
+			tunnel.VolumeThreshold = tunnelNode["VolumeThreshold"].as<float>(0.08f);
+			tunnel.VolumeSteps = tunnelNode["VolumeSteps"].as<uint32_t>(256);
+
+			// A scene written before the volume existed keeps its plane; one written after gets whatever it was saved with
+			tunnel.SliceEnabled = tunnelNode["SliceEnabled"].as<bool>(false);
 			tunnel.SliceAxis = static_cast<FluidSliceAxis>(std::clamp(tunnelNode["SliceAxis"].as<int>(0), 0, 2));
 			tunnel.SlicePosition = tunnelNode["SlicePosition"].as<float>(0.5f);
 			tunnel.SliceField = static_cast<FluidField>(std::clamp(tunnelNode["SliceField"].as<int>(0), 0, 2));
