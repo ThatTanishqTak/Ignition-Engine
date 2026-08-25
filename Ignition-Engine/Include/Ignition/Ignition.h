@@ -18,6 +18,7 @@
 
 // Event codes
 #include "Ignition/Events/KeyCodes.h"
+#include "Ignition/Events/KeyModifiers.h"
 #include "Ignition/Events/ScanCodes.h"
 #include "Ignition/Events/MouseCodes.h"
 #include "Ignition/Events/GamepadCodes.h"
@@ -26,6 +27,7 @@
 #include "Ignition/Input/Input.h"
 #include "Ignition/Input/ActionMap.h"
 #include "Ignition/Input/CursorMode.h"
+#include "Ignition/Input/CursorShape.h"
 
 // Renderer
 #include "Ignition/Renderer/Renderer.h"

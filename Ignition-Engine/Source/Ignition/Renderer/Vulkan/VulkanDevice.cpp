@@ -98,8 +98,12 @@ namespace
 
 	bool HasRequiredFeatures(VkPhysicalDevice physicalDevice)
 	{
+		VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features{};
+		physicalDeviceVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+
 		VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features{};
 		physicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		physicalDeviceVulkan13Features.pNext = &physicalDeviceVulkan12Features;
 
 		VkPhysicalDeviceFeatures2 features2{};
 		features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -107,7 +111,7 @@ namespace
 
 		vkGetPhysicalDeviceFeatures2(physicalDevice, &features2);
 
-		return physicalDeviceVulkan13Features.dynamicRendering == VK_TRUE && physicalDeviceVulkan13Features.synchronization2 == VK_TRUE;
+		return physicalDeviceVulkan13Features.dynamicRendering == VK_TRUE && physicalDeviceVulkan13Features.synchronization2 == VK_TRUE && physicalDeviceVulkan12Features.descriptorIndexing == VK_TRUE && physicalDeviceVulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE && physicalDeviceVulkan12Features.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE && physicalDeviceVulkan12Features.descriptorBindingPartiallyBound == VK_TRUE && physicalDeviceVulkan12Features.runtimeDescriptorArray == VK_TRUE;
 	}
 
 	const char* RejectDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
@@ -129,7 +133,7 @@ namespace
 
 		if (!HasRequiredFeatures(physicalDevice))
 		{
-			return "dynamicRendering or synchronization2 unavailable";
+			return "dynamicRendering, synchronization2 or descriptor indexing unavailable";
 		}
 
 		return nullptr;
@@ -348,11 +352,21 @@ namespace Ignition
 		physicalDeviceVulkan11Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
 		physicalDeviceVulkan11Features.shaderDrawParameters = VK_TRUE;
 
+		// The UI's bindless texture table indexes one variable-count sampler array, updated after bind and only partially populated
+		VkPhysicalDeviceVulkan12Features physicalDeviceVulkan12Features{};
+		physicalDeviceVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		physicalDeviceVulkan12Features.descriptorIndexing = VK_TRUE;
+		physicalDeviceVulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		physicalDeviceVulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+		physicalDeviceVulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
+		physicalDeviceVulkan12Features.runtimeDescriptorArray = VK_TRUE;
+		physicalDeviceVulkan12Features.pNext = &physicalDeviceVulkan11Features;
+
 		VkPhysicalDeviceVulkan13Features physicalDeviceVulkan13Features{};
 		physicalDeviceVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 		physicalDeviceVulkan13Features.dynamicRendering = VK_TRUE;
 		physicalDeviceVulkan13Features.synchronization2 = VK_TRUE;
-		physicalDeviceVulkan13Features.pNext = &physicalDeviceVulkan11Features;
+		physicalDeviceVulkan13Features.pNext = &physicalDeviceVulkan12Features;
 
 		VkDeviceCreateInfo deviceCreateInfo{};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

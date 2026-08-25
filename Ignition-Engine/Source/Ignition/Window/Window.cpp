@@ -11,6 +11,38 @@
 
 #include <SDL3/SDL.h>
 
+namespace
+{
+	SDL_SystemCursor ToSDLSystemCursor(Ignition::CursorShape shape)
+	{
+		switch (shape)
+		{
+			case Ignition::CursorShape::TextInput:
+				return SDL_SYSTEM_CURSOR_TEXT;
+			case Ignition::CursorShape::Wait:
+				return SDL_SYSTEM_CURSOR_WAIT;
+			case Ignition::CursorShape::Crosshair:
+				return SDL_SYSTEM_CURSOR_CROSSHAIR;
+			case Ignition::CursorShape::Hand:
+				return SDL_SYSTEM_CURSOR_POINTER;
+			case Ignition::CursorShape::NotAllowed:
+				return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+			case Ignition::CursorShape::ResizeEW:
+				return SDL_SYSTEM_CURSOR_EW_RESIZE;
+			case Ignition::CursorShape::ResizeNS:
+				return SDL_SYSTEM_CURSOR_NS_RESIZE;
+			case Ignition::CursorShape::ResizeNESW:
+				return SDL_SYSTEM_CURSOR_NESW_RESIZE;
+			case Ignition::CursorShape::ResizeNWSE:
+				return SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+			case Ignition::CursorShape::ResizeAll:
+				return SDL_SYSTEM_CURSOR_MOVE;
+			default:
+				return SDL_SYSTEM_CURSOR_DEFAULT;
+		}
+	}
+}
+
 namespace Ignition
 {
 	Window::Window() : m_Implementation(std::make_unique<WindowImplementation>())
@@ -51,6 +83,15 @@ namespace Ignition
 	{
 		IG_CORE_TRACE("Shutting Down Window");
 
+		for (SDL_Cursor*& cursor : SystemCursors)
+		{
+			if (cursor)
+			{
+				SDL_DestroyCursor(cursor);
+				cursor = nullptr;
+			}
+		}
+
 		if (SDLWindow)
 		{
 			SDL_DestroyWindow(SDLWindow);
@@ -72,6 +113,7 @@ namespace Ignition
 	{
 		const SDL_WindowID windowID = SDLWindow ? SDL_GetWindowID(SDLWindow) : 0;
 
+		KeyModifiers modifiers = static_cast<KeyModifiers>(SDL_GetModState());
 		SDL_Event event;
 
 		while (SDL_PollEvent(&event))
@@ -187,6 +229,13 @@ namespace Ignition
 					}
 					break;
 
+				case SDL_EVENT_TEXT_EDITING:
+					if (event.edit.text)
+					{
+						eventQueue.Push<TextEditingEvent>(std::string(event.edit.text), event.edit.start, event.edit.length);
+					}
+					break;
+
 				case SDL_EVENT_GAMEPAD_ADDED:
 					eventQueue.Push<GamepadConnectedEvent>(event.gdevice.which);
 					break;
@@ -227,19 +276,22 @@ namespace Ignition
 				}
 
 				case SDL_EVENT_KEY_DOWN:
-					eventQueue.Push<KeyPressedEvent>(static_cast<KeyCode>(event.key.key), static_cast<ScanCode>(event.key.scancode), event.key.repeat);
+					modifiers = static_cast<KeyModifiers>(event.key.mod);
+					eventQueue.Push<KeyPressedEvent>(static_cast<KeyCode>(event.key.key), static_cast<ScanCode>(event.key.scancode), modifiers,
+						event.key.repeat);
 					break;
 
 				case SDL_EVENT_KEY_UP:
-					eventQueue.Push<KeyReleasedEvent>(static_cast<KeyCode>(event.key.key), static_cast<ScanCode>(event.key.scancode));
+					modifiers = static_cast<KeyModifiers>(event.key.mod);
+					eventQueue.Push<KeyReleasedEvent>(static_cast<KeyCode>(event.key.key), static_cast<ScanCode>(event.key.scancode), modifiers);
 					break;
 
 				case SDL_EVENT_MOUSE_BUTTON_DOWN:
-					eventQueue.Push<MouseButtonPressedEvent>(static_cast<MouseCode>(event.button.button));
+					eventQueue.Push<MouseButtonPressedEvent>(static_cast<MouseCode>(event.button.button), modifiers);
 					break;
 
 				case SDL_EVENT_MOUSE_BUTTON_UP:
-					eventQueue.Push<MouseButtonReleasedEvent>(static_cast<MouseCode>(event.button.button));
+					eventQueue.Push<MouseButtonReleasedEvent>(static_cast<MouseCode>(event.button.button), modifiers);
 					break;
 
 				case SDL_EVENT_MOUSE_MOTION:
@@ -284,6 +336,45 @@ namespace Ignition
 		}
 	}
 
+	// Called on every caret move so the IME candidate window follows the caret rather than parking in a corner
+	void Window::SetTextInputArea(int x, int y, int width, int height, int cursorOffset)
+	{
+		if (!m_Implementation->SDLWindow)
+		{
+			return;
+		}
+
+		const SDL_Rect area{ x, y, width, height };
+
+		if (!SDL_SetTextInputArea(m_Implementation->SDLWindow, &area, cursorOffset))
+		{
+			IG_CORE_WARN("Failed SDL_SetTextInputArea: {}", SDL_GetError());
+		}
+	}
+
+	std::string Window::GetClipboardText() const
+	{
+		char* const text = SDL_GetClipboardText();
+
+		if (!text)
+		{
+			return {};
+		}
+
+		std::string result(text);
+		SDL_free(text);
+
+		return result;
+	}
+
+	void Window::SetClipboardText(const char* text)
+	{
+		if (!SDL_SetClipboardText(text ? text : ""))
+		{
+			IG_CORE_WARN("Failed SDL_SetClipboardText: {}", SDL_GetError());
+		}
+	}
+
 	void Window::SetCursorMode(CursorMode mode)
 	{
 		if (!m_Implementation->SDLWindow)
@@ -324,6 +415,36 @@ namespace Ignition
 	CursorMode Window::GetCursorMode() const
 	{
 		return m_Implementation->Cursor;
+	}
+
+	void Window::SetCursorShape(CursorShape shape)
+	{
+		if (!m_Implementation->SDLWindow || shape == CursorShape::Count || shape == m_Implementation->Shape)
+		{
+			return;
+		}
+
+		const std::size_t index = static_cast<std::size_t>(shape);
+
+		if (!m_Implementation->SystemCursors[index])
+		{
+			m_Implementation->SystemCursors[index] = SDL_CreateSystemCursor(ToSDLSystemCursor(shape));
+
+			if (!m_Implementation->SystemCursors[index])
+			{
+				IG_CORE_WARN("Failed SDL_CreateSystemCursor: {}", SDL_GetError());
+
+				return;
+			}
+		}
+
+		m_Implementation->Shape = shape;
+		SDL_SetCursor(m_Implementation->SystemCursors[index]);
+	}
+
+	CursorShape Window::GetCursorShape() const
+	{
+		return m_Implementation->Shape;
 	}
 
 	bool Window::IsOpen() const

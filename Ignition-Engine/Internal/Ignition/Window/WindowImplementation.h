@@ -1,10 +1,13 @@
 #pragma once
 
 #include "Ignition/Input/CursorMode.h"
+#include "Ignition/Input/CursorShape.h"
 
+#include <array>
 #include <functional>
 
 struct SDL_Window;
+struct SDL_Cursor;
 
 namespace Ignition
 {
@@ -18,6 +21,8 @@ namespace Ignition
 		bool SDLInitialized = false;
 		bool IsOpen = false;
 		CursorMode Cursor = CursorMode::Normal;
+		CursorShape Shape = CursorShape::Arrow;
+		std::array<SDL_Cursor*, CursorShapeCount> SystemCursors{};
 		RawEventCallback RawCallback;
 
 		void Initialize(const char* title, int width, int height);

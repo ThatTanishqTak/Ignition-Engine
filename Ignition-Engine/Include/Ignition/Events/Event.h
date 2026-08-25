@@ -2,6 +2,7 @@
 
 #include "Ignition/Events/GamepadCodes.h"
 #include "Ignition/Events/KeyCodes.h"
+#include "Ignition/Events/KeyModifiers.h"
 #include "Ignition/Events/MouseCodes.h"
 #include "Ignition/Events/ScanCodes.h"
 
@@ -38,6 +39,7 @@ namespace Ignition
 		KeyPressed,
 		KeyReleased,
 		TextInput,
+		TextEditing,
 
 		MouseButtonPressed,
 		MouseButtonReleased,

@@ -46,18 +46,22 @@ namespace Ignition
 	public:
 		MouseCode GetMouseButton() const { return m_Button; }
 
+		// Modifier state as of this click - what Ctrl-click, Shift-click and Alt-drag are routed on
+		KeyModifiers GetModifiers() const { return m_Modifiers; }
+
 		IGNITION_EVENT_CLASS_CATEGORY(EventCategoryMouse | EventCategoryMouseButton | EventCategoryInput)
 
 	protected:
-		explicit MouseButtonEvent(MouseCode button) : m_Button(button) {}
+		MouseButtonEvent(MouseCode button, KeyModifiers modifiers) : m_Button(button), m_Modifiers(modifiers) {}
 
 		MouseCode m_Button = MouseCode::UNKNOWN;
+		KeyModifiers m_Modifiers = KeyModifiers::NONE;
 	};
 
 	class MouseButtonPressedEvent : public MouseButtonEvent
 	{
 	public:
-		explicit MouseButtonPressedEvent(MouseCode button) : MouseButtonEvent(button) {}
+		MouseButtonPressedEvent(MouseCode button, KeyModifiers modifiers) : MouseButtonEvent(button, modifiers) {}
 
 		IGNITION_EVENT_CLASS_TYPE(MouseButtonPressed)
 	};
@@ -65,7 +69,7 @@ namespace Ignition
 	class MouseButtonReleasedEvent : public MouseButtonEvent
 	{
 	public:
-		explicit MouseButtonReleasedEvent(MouseCode button) : MouseButtonEvent(button) {}
+		MouseButtonReleasedEvent(MouseCode button, KeyModifiers modifiers) : MouseButtonEvent(button, modifiers) {}
 
 		IGNITION_EVENT_CLASS_TYPE(MouseButtonReleased)
 	};
