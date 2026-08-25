@@ -76,6 +76,10 @@ namespace Ignition
 
 		IGNITION_API bool CollapsingHeader(const char* label, bool defaultOpen = true);
 
+		IGNITION_API bool TreeNode(const char* label, bool selected = false, bool leaf = false, bool defaultOpen = true);
+		IGNITION_API void TreePop();
+		IGNITION_API bool IsItemClicked();
+
 		IGNITION_API void Text(const char* text);
 		IGNITION_API void TextDisabled(const char* text);
 		IGNITION_API void LabelText(const char* label, const char* text);
@@ -99,7 +103,7 @@ namespace Ignition
 		IGNITION_API bool SmallButton(const char* label);
 		IGNITION_API bool Selectable(const char* label, bool selected = false);
 		IGNITION_API bool Checkbox(const char* label, bool* value);
-		IGNITION_API bool InputText(const char* label, char* buffer, size_t bufferSize);
+		IGNITION_API bool InputText(const char* label, char* buffer, size_t bufferSize, bool enterReturnsTrue = false);
 		IGNITION_API bool SliderFloat(const char* label, float* value, float minimum, float maximum);
 		IGNITION_API bool SliderInt(const char* label, int* value, int minimum, int maximum);
 		IGNITION_API bool DragFloat(const char* label, float* value, float speed = 0.01f, float minimum = 0.0f, float maximum = 0.0f);

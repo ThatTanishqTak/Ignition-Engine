@@ -391,7 +391,10 @@ namespace Editor
 
 		for (Ignition::Entity entity : m_Context->Scene->GetEntities())
 		{
-			const Ignition::TransformComponent& transform = entity.GetTransform();
+			// Colliders are simulated in world space, so their wireframes have to be drawn there too
+			Ignition::TransformComponent transform;
+			m_Context->Scene->GetWorldTransform(entity, transform.Position, transform.Rotation, transform.Scale);
+
 			const float scale = UniformScale(transform.Scale);
 
 			if (const Ignition::BoxColliderComponent* collider = entity.GetBoxCollider())
@@ -412,7 +415,10 @@ namespace Editor
 
 		if (m_Context->Selection.IsValid())
 		{
-			Ignition::DebugDraw::Axes(ColliderTransform(m_Context->Selection.GetTransform(), glm::vec3(0.0f)), 0.75f);
+			Ignition::TransformComponent selected;
+			m_Context->Scene->GetWorldTransform(m_Context->Selection, selected.Position, selected.Rotation, selected.Scale);
+
+			Ignition::DebugDraw::Axes(ColliderTransform(selected, glm::vec3(0.0f)), 0.75f);
 		}
 	}
 
@@ -459,15 +465,25 @@ namespace Editor
 		{
 			const Ignition::MeshRendererComponent* meshRenderer = entity.GetMeshRenderer();
 
-			if (!meshRenderer || !meshRenderer->Mesh || meshRenderer->Mesh->GetGeometry().Indices.size() < 3)
+			if (!meshRenderer || !meshRenderer->ParticipatesInAero)
+			{
+				continue;
+			}
+
+			// The wind prefers the sealed CFD copy and falls back to what the renderer draws, which is all most meshes ever have
+			const Ignition::Mesh* mesh = meshRenderer->CfdMesh ? meshRenderer->CfdMesh.get() : meshRenderer->Mesh.get();
+
+			if (!mesh || mesh->GetGeometry().Indices.size() < 3)
 			{
 				continue;
 			}
 
 			Ignition::FluidBody body{};
-			body.Geometry = &meshRenderer->Mesh->GetGeometry();
-			body.Transform = entity.GetTransform().GetMatrix();
-			body.ObjectID = objectID;
+			body.Geometry = &mesh->GetGeometry();
+			body.Transform = m_Context->Scene->GetWorldMatrix(entity);
+
+			// A pinned id survives an entity being added or deleted; enumeration order does not, and a wheel kernel needs one that does
+			body.ObjectID = meshRenderer->AeroObjectID != 0 ? glm::min(meshRenderer->AeroObjectID, 255u) : objectID;
 
 			m_AeroBodies.push_back(body);
 
@@ -520,6 +536,7 @@ namespace Editor
 		if (m_AeroBodyDebounce <= 0.0f && !Ignition::UI::IsGizmoInUse())
 		{
 			m_Tunnel->SetBodies(m_PendingAeroBodies);
+			m_VoxelizedBodies = m_PendingAeroBodies;
 		}
 
 		// The wind runs on the editor's transport. The lattice has its own timestep, so it advances per rendered frame rather than per fixed step
@@ -641,6 +658,11 @@ namespace Editor
 			if (voxels.RejectedTriangles > 0)
 			{
 				Ignition::UI::TextDisabled("{} triangles spanned too much of the domain and were skipped - the mesh needs decimating, or the tunnel is too small for it", voxels.RejectedTriangles);
+			}
+
+			if (m_AeroBodies != m_VoxelizedBodies)
+			{
+				Ignition::UI::TextDisabled("Geometry has moved since the last bake - the forces below are for where the meshes were, not where they are. A body under physics never settles, so it never re-bakes");
 			}
 
 			Ignition::UI::SeparatorText("Force (Newtons)");
@@ -917,6 +939,14 @@ namespace Editor
 				PromptForPath(PathPrompt::SaveAs);
 			}
 
+			Ignition::UI::Separator();
+
+			// One entity per submesh under a single root, which is the shape a multi-part car wants to arrive in
+			if (Ignition::UI::MenuItem("Import Model..."))
+			{
+				PromptForPath(PathPrompt::ImportModel);
+			}
+
 			Ignition::UI::EndMenu();
 		}
 
@@ -980,14 +1010,19 @@ namespace Editor
 
 		Ignition::UI::SetGizmoViewportRect(m_Context->ViewportPosition, m_Context->ViewportSize);
 
-		Ignition::TransformComponent& transform = m_Context->Selection.GetTransform();
+		// The gizmo lives in the viewport, so it manipulates world space; the hierarchy folds the result back into a local transform
+		glm::vec3 position{ 0.0f };
+		glm::quat rotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 scale{ 1.0f };
+
+		m_Context->Scene->GetWorldTransform(m_Context->Selection, position, rotation, scale);
 
 		// Hold Ctrl to snap: 0.5 m translate, 15 degrees rotate
 		const bool snapping = m_Input->IsKeyDown(Ignition::ScanCode::LCTRL);
 		const float snap = snapping ? (m_GizmoOperation == Ignition::UI::GizmoOperation::Rotate ? 15.0f : 0.5f) : 0.0f;
 		const Ignition::UI::GizmoMode mode = m_GizmoWorldSpace ? Ignition::UI::GizmoMode::World : Ignition::UI::GizmoMode::Local;
 
-		const bool manipulated = Ignition::UI::TransformGizmo(m_Camera->GetView(), m_Camera->GetProjection(), m_GizmoOperation, mode, transform.Position, transform.Rotation, transform.Scale, snap);
+		const bool manipulated = Ignition::UI::TransformGizmo(m_Camera->GetView(), m_Camera->GetProjection(), m_GizmoOperation, mode, position, rotation, scale, snap);
 
 		// Suppress camera input while the gizmo is hot
 		m_Context->GizmoUsing = Ignition::UI::IsGizmoInUse() || Ignition::UI::IsGizmoHovered();
@@ -996,6 +1031,8 @@ namespace Editor
 		{
 			return;
 		}
+
+		m_Context->Scene->SetWorldTransform(m_Context->Selection, position, rotation, scale);
 
 		// A body the simulation owns gets pushed; anything else lives only in the query world, which has to rebuild to follow it
 		if (m_RuntimePhysics && m_RuntimePhysics->HasBody(m_Context->Selection))
@@ -1008,38 +1045,71 @@ namespace Editor
 		}
 	}
 
+	void EditorLayer::DrawEntityNode(Ignition::Entity entity, Ignition::Entity& deferredDelete, Ignition::Entity& deferredUnparent)
+	{
+		const std::vector<Ignition::Entity> children = m_Context->Scene->GetChildren(entity);
+
+		Ignition::UI::PushID(static_cast<int>(entity.GetID()));
+
+		const bool open = Ignition::UI::TreeNode(entity.GetName().c_str(), m_Context->Selection == entity, children.empty());
+
+		if (Ignition::UI::IsItemClicked())
+		{
+			m_Context->Selection = entity;
+		}
+
+		if (Ignition::UI::BeginPopupContextItem("EntityContext"))
+		{
+			if (Ignition::UI::MenuItem("Create Child"))
+			{
+				Ignition::Entity child = m_Context->Scene->CreateEntity("Entity");
+				m_Context->Scene->SetParent(child, entity);
+				m_Context->Selection = child;
+			}
+
+			if (Ignition::UI::MenuItem("Duplicate"))
+			{
+				m_Context->Selection = m_Context->Scene->DuplicateEntity(entity);
+				m_Context->PhysicsSceneDirty = true;
+			}
+
+			if (m_Context->Scene->GetParent(entity).IsValid() && Ignition::UI::MenuItem("Unparent"))
+			{
+				deferredUnparent = entity;
+			}
+
+			// Deleting takes the subtree with it, which is what deleting a car means
+			if (Ignition::UI::MenuItem("Delete"))
+			{
+				deferredDelete = entity;
+			}
+
+			Ignition::UI::EndPopup();
+		}
+
+		if (open)
+		{
+			for (Ignition::Entity child : children)
+			{
+				DrawEntityNode(child, deferredDelete, deferredUnparent);
+			}
+
+			Ignition::UI::TreePop();
+		}
+
+		Ignition::UI::PopID();
+	}
+
 	void EditorLayer::DrawHierarchyPanel()
 	{
 		if (Ignition::UI::BeginWindow("Hierarchy"))
 		{
 			Ignition::Entity deferredDelete{};
+			Ignition::Entity deferredUnparent{};
 
-			for (Ignition::Entity entity : m_Context->Scene->GetEntities())
+			for (Ignition::Entity entity : m_Context->Scene->GetRootEntities())
 			{
-				Ignition::UI::PushID(static_cast<int>(entity.GetID()));
-
-				if (Ignition::UI::Selectable(entity.GetName().c_str(), m_Context->Selection == entity))
-				{
-					m_Context->Selection = entity;
-				}
-
-				if (Ignition::UI::BeginPopupContextItem("EntityContext"))
-				{
-					if (Ignition::UI::MenuItem("Duplicate"))
-					{
-						m_Context->Selection = m_Context->Scene->DuplicateEntity(entity);
-						m_Context->PhysicsSceneDirty = true;
-					}
-
-					if (Ignition::UI::MenuItem("Delete"))
-					{
-						deferredDelete = entity;
-					}
-
-					Ignition::UI::EndPopup();
-				}
-
-				Ignition::UI::PopID();
+				DrawEntityNode(entity, deferredDelete, deferredUnparent);
 			}
 
 			if (Ignition::UI::BeginPopupContextWindow("HierarchyContext"))
@@ -1052,9 +1122,16 @@ namespace Editor
 				Ignition::UI::EndPopup();
 			}
 
+			if (deferredUnparent.IsValid())
+			{
+				m_Context->Scene->SetParent(deferredUnparent, Ignition::Entity{});
+				m_Context->PhysicsSceneDirty = true;
+			}
+
 			if (deferredDelete.IsValid())
 			{
-				if (m_Context->Selection == deferredDelete)
+				// The selection may be anywhere in the subtree that is about to go
+				if (m_Context->Selection == deferredDelete || m_Context->Scene->IsDescendantOf(m_Context->Selection, deferredDelete))
 				{
 					m_Context->Selection = {};
 				}
@@ -1065,6 +1142,81 @@ namespace Editor
 		}
 
 		Ignition::UI::EndWindow();
+	}
+
+	void EditorLayer::DrawParentSelector(Ignition::Entity entity)
+	{
+		std::vector<Ignition::Entity> candidates{ Ignition::Entity{} };
+		std::vector<std::string> names{ "<none>" };
+
+		for (Ignition::Entity other : m_Context->Scene->GetEntities())
+		{
+			// Self and descendants are the cycles SetParent would refuse, so they are never offered
+			if (other == entity || m_Context->Scene->IsDescendantOf(other, entity))
+			{
+				continue;
+			}
+
+			candidates.push_back(other);
+			names.push_back(other.GetName());
+		}
+
+		const Ignition::Entity parent = m_Context->Scene->GetParent(entity);
+		int current = 0;
+
+		for (size_t index = 0; index < candidates.size(); ++index)
+		{
+			if (candidates[index] == parent)
+			{
+				current = static_cast<int>(index);
+
+				break;
+			}
+		}
+
+		std::vector<const char*> items;
+		items.reserve(names.size());
+
+		for (const std::string& name : names)
+		{
+			items.push_back(name.c_str());
+		}
+
+		if (Ignition::UI::Combo("Parent", &current, items.data(), static_cast<int>(items.size())))
+		{
+			// Reparenting keeps the world transform, so a wheel does not jump when it joins the car
+			m_Context->Scene->SetParent(entity, candidates[static_cast<size_t>(current)]);
+			m_Context->PhysicsSceneDirty = true;
+		}
+	}
+
+	void EditorLayer::DrawMeshAssetField(const char* label, const char* id, std::string& asset, std::shared_ptr<Ignition::Mesh>& mesh)
+	{
+		Ignition::UI::PushID(id);
+
+		std::array<char, 260> buffer{};
+		std::memcpy(buffer.data(), asset.c_str(), std::min(asset.size(), buffer.size() - 1));
+
+		// Enter or Load commits: reloading on every keystroke would hand assimp half-typed paths and fill the log with them
+		bool commit = Ignition::UI::InputText(label, buffer.data(), buffer.size(), true);
+
+		Ignition::UI::SameLine();
+		commit |= Ignition::UI::SmallButton("Load");
+
+		if (commit)
+		{
+			asset = buffer.data();
+			mesh = asset.empty() ? nullptr : m_Assets->LoadMesh(asset);
+
+			if (!asset.empty() && !mesh)
+			{
+				IG_APP_ERROR("Mesh '{}' did not load - paths resolve against the working directory, and the builtins are builtin:cube, builtin:quad and builtin:sphere", asset);
+			}
+
+			m_Context->PhysicsSceneDirty = true;
+		}
+
+		Ignition::UI::PopID();
 	}
 
 	void EditorLayer::DrawInspectorPanel()
@@ -1090,9 +1242,16 @@ namespace Editor
 				entity.SetName(nameBuffer.data());
 			}
 
+			DrawParentSelector(entity);
+
 			if (Ignition::UI::CollapsingHeader("Transform"))
 			{
 				Ignition::TransformComponent& transform = entity.GetTransform();
+
+				if (m_Context->Scene->GetParent(entity).IsValid())
+				{
+					Ignition::UI::TextDisabled("Local to the parent - the gizmo in the viewport edits world space");
+				}
 
 				bool transformEdited = Ignition::UI::DragFloat3("Position", transform.Position, 0.01f);
 				const bool rotationCacheStale = m_RotationEulerEntity != entity.GetID() || glm::abs(glm::dot(glm::quat(glm::radians(m_RotationEuler)), transform.Rotation)) < 0.9999f;
@@ -1128,18 +1287,41 @@ namespace Editor
 			{
 				if (Ignition::UI::CollapsingHeader("Mesh Renderer"))
 				{
-					Ignition::UI::LabelText("Mesh", meshRenderer->MeshAsset.empty() ? "<unreferenced>" : meshRenderer->MeshAsset.c_str());
+					DrawMeshAssetField("Mesh", "##MeshAsset", meshRenderer->MeshAsset, meshRenderer->Mesh);
 
 					if (meshRenderer->Mesh)
 					{
+						// Wrong scale silently wrecks every coefficient, so the size the wind actually sees is on screen
+						glm::vec3 worldPosition{ 0.0f };
+						glm::quat worldRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+						glm::vec3 worldScale{ 1.0f };
+
+						m_Context->Scene->GetWorldTransform(entity, worldPosition, worldRotation, worldScale);
+
 						const Ignition::MeshBounds bounds = meshRenderer->Mesh->GetBounds();
-						const glm::vec3 size = (bounds.Maximum - bounds.Minimum) * entity.GetTransform().Scale;
+						const glm::vec3 size = (bounds.Maximum - bounds.Minimum) * worldScale;
 
 						Ignition::UI::Text("Size: {:.3f} x {:.3f} x {:.3f} m", size.x, size.y, size.z);
 					}
 
 					Ignition::UI::ColorEdit4("Tint", meshRenderer->Material.Tint, true);
 					Ignition::UI::Checkbox("Two Sided", &meshRenderer->Material.TwoSided);
+
+					Ignition::UI::SeparatorText("Aero");
+
+					DrawMeshAssetField("CFD Mesh", "##CfdMeshAsset", meshRenderer->CfdMeshAsset, meshRenderer->CfdMesh);
+					Ignition::UI::TextDisabled("Decimated and sealed for the voxelizer - leave empty and the wind uses the visual mesh");
+
+					Ignition::UI::Checkbox("In The Wind", &meshRenderer->ParticipatesInAero);
+
+					int aeroObjectID = static_cast<int>(meshRenderer->AeroObjectID);
+
+					if (Ignition::UI::SliderInt("Object ID", &aeroObjectID, 0, 255))
+					{
+						meshRenderer->AeroObjectID = static_cast<uint32_t>(aeroObjectID);
+					}
+
+					Ignition::UI::TextDisabled(meshRenderer->AeroObjectID == 0 ? "0 - assigned by scene order, which moves when entities are added or deleted" : "Pinned, so a solver kernel can still recognise this body after an edit");
 				}
 			}
 
@@ -1213,7 +1395,9 @@ namespace Editor
 			{
 				if (Ignition::UI::CollapsingHeader("Mesh Collider"))
 				{
-					Ignition::UI::LabelText("Mesh", collider->MeshAsset.empty() ? "<unreferenced>" : collider->MeshAsset.c_str());
+					// The collider references its mesh by path only - cooking happens inside PhysicsWorld, so nothing is held here
+					std::shared_ptr<Ignition::Mesh> colliderMesh;
+					DrawMeshAssetField("Mesh", "##MeshColliderAsset", collider->MeshAsset, colliderMesh);
 
 					if (Ignition::UI::Checkbox("Convex", &collider->Convex))
 					{
@@ -1261,6 +1445,18 @@ namespace Editor
 					{
 						auto& meshRenderer = entity.AddMeshRenderer(m_Assets->LoadMesh("builtin:cube"));
 						meshRenderer.MeshAsset = "builtin:cube";
+					}
+
+					if (Ignition::UI::MenuItem("Mesh Renderer (Sphere)"))
+					{
+						auto& meshRenderer = entity.AddMeshRenderer(m_Assets->LoadMesh("builtin:sphere"));
+						meshRenderer.MeshAsset = "builtin:sphere";
+					}
+
+					// Anything else is typed into the Mesh field on the component - the field takes any path assimp reads
+					if (Ignition::UI::MenuItem("Mesh Renderer (Empty)"))
+					{
+						entity.AddMeshRenderer(nullptr);
 					}
 				}
 
@@ -1386,17 +1582,27 @@ namespace Editor
 		}
 
 		const bool saving = m_PathPrompt == PathPrompt::SaveAs;
+		const bool importing = m_PathPrompt == PathPrompt::ImportModel;
 
-		Ignition::UI::Text(saving ? "Save scene as" : "Open scene");
+		Ignition::UI::Text(importing ? "Import model" : (saving ? "Save scene as" : "Open scene"));
 		Ignition::UI::InputText("##ScenePath", m_PathBuffer.data(), m_PathBuffer.size());
 
-		if (Ignition::UI::Button(saving ? "Save" : "Open"))
+		if (importing)
+		{
+			Ignition::UI::TextDisabled("Any format assimp reads. Each submesh becomes an entity under one root, referenced by path so it survives a save and reload");
+		}
+
+		if (Ignition::UI::Button(importing ? "Import" : (saving ? "Save" : "Open")))
 		{
 			const std::string filepath = m_PathBuffer.data();
 
 			if (!filepath.empty())
 			{
-				if (saving)
+				if (importing)
+				{
+					ImportModel(filepath);
+				}
+				else if (saving)
 				{
 					SaveScene(filepath);
 				}
@@ -1456,6 +1662,24 @@ namespace Editor
 		{
 			IG_APP_ERROR("Failed to open scene '{}'", filepath);
 		}
+	}
+
+	void EditorLayer::ImportModel(const std::string& filepath)
+	{
+		const std::vector<Ignition::Entity> imported = Ignition::ModelImporter::Import(*m_Context->Scene, *m_Assets, filepath);
+
+		if (imported.empty())
+		{
+			IG_APP_ERROR("Import failed for '{}' - the path resolves against the working directory", filepath);
+
+			return;
+		}
+
+		// The root comes back first, and selecting it is what lets the scale sanity pass happen immediately
+		m_Context->Selection = imported.front();
+		m_Context->PhysicsSceneDirty = true;
+
+		IG_APP_INFO("Imported '{}' as {} parts - check the bounds readout on the Mesh Renderer before trusting any coefficient", filepath, imported.size() - 1);
 	}
 
 	void EditorLayer::SaveScene(const std::string& filepath)

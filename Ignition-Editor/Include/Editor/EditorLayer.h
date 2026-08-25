@@ -43,7 +43,8 @@ namespace Editor
 		{
 			None = 0,
 			Open,
-			SaveAs
+			SaveAs,
+			ImportModel
 		};
 
 		void DrawMenuBar();
@@ -51,7 +52,10 @@ namespace Editor
 		void DrawViewportPanel();
 		void DrawGizmo();
 		void DrawHierarchyPanel();
+		void DrawEntityNode(Ignition::Entity entity, Ignition::Entity& deferredDelete, Ignition::Entity& deferredUnparent);
 		void DrawInspectorPanel();
+		void DrawParentSelector(Ignition::Entity entity);
+		void DrawMeshAssetField(const char* label, const char* id, std::string& asset, std::shared_ptr<Ignition::Mesh>& mesh);
 		void DrawStatsPanel();
 		void DrawAeroPanel();
 		void DrawPathPrompt();
@@ -67,6 +71,7 @@ namespace Editor
 		void CreateFallbackScene();
 		void OpenScene(const std::string& filepath);
 		void SaveScene(const std::string& filepath);
+		void ImportModel(const std::string& filepath);
 
 		void OnPlay();
 		void OnStop();
@@ -110,6 +115,7 @@ namespace Editor
 		// Voxelizer input, debounced: re-voxelization is heavy, so a gizmo drag re-voxelizes on release rather than every frame
 		std::vector<Ignition::FluidBody> m_AeroBodies;
 		std::vector<Ignition::FluidBody> m_PendingAeroBodies;
+		std::vector<Ignition::FluidBody> m_VoxelizedBodies;
 		float m_AeroBodyDebounce = 0.0f;
 		bool m_AeroPanelOpen = true;
 		bool m_AeroAveraged = true;

@@ -110,13 +110,33 @@ namespace
 		return physicalDeviceVulkan13Features.dynamicRendering == VK_TRUE && physicalDeviceVulkan13Features.synchronization2 == VK_TRUE;
 	}
 
-	uint32_t ScoreDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
+	const char* RejectDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 	{
-		if (!FindQueueFamilies(physicalDevice, surface).IsComplete() || !CheckDeviceExtensionSupport(physicalDevice) || !HasAdequateSurfaceSupport(physicalDevice, surface) || !HasRequiredFeatures(physicalDevice))
+		if (!FindQueueFamilies(physicalDevice, surface).IsComplete())
 		{
-			return 0;
+			return "no queue family with both graphics and present support";
 		}
 
+		if (!CheckDeviceExtensionSupport(physicalDevice))
+		{
+			return "VK_KHR_swapchain unsupported";
+		}
+
+		if (!HasAdequateSurfaceSupport(physicalDevice, surface))
+		{
+			return "no surface formats or present modes for this window";
+		}
+
+		if (!HasRequiredFeatures(physicalDevice))
+		{
+			return "dynamicRendering or synchronization2 unavailable";
+		}
+
+		return nullptr;
+	}
+
+	uint32_t ScoreDevice(VkPhysicalDevice physicalDevice)
+	{
 		VkPhysicalDeviceProperties physicalDeviceProperties{};
 		vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 
@@ -131,6 +151,42 @@ namespace
 		}
 
 		return 10;
+	}
+
+	const char* DeviceTypeName(VkPhysicalDeviceType type)
+	{
+		switch (type)
+		{
+			case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+				return "discrete";
+			case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+				return "integrated";
+			case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+				return "virtual";
+			case VK_PHYSICAL_DEVICE_TYPE_CPU:
+				return "cpu";
+			default:
+				return "other";
+		}
+	}
+
+	// Device-local heap total - the number Appendix B's lattice budget actually has to fit inside, and which nothing printed until now
+	double DeviceLocalMegabytes(VkPhysicalDevice physicalDevice)
+	{
+		VkPhysicalDeviceMemoryProperties memoryProperties{};
+		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
+
+		VkDeviceSize total = 0;
+
+		for (uint32_t heap = 0; heap < memoryProperties.memoryHeapCount; ++heap)
+		{
+			if ((memoryProperties.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0)
+			{
+				total += memoryProperties.memoryHeaps[heap].size;
+			}
+		}
+
+		return static_cast<double>(total) / (1024.0 * 1024.0);
 	}
 }
 
@@ -192,10 +248,29 @@ namespace Ignition
 			return;
 		}
 
+		IG_CORE_TRACE("Enumerated {} physical device(s)", devices.size());
+
 		uint32_t bestScore = 0;
+
 		for (VkPhysicalDevice device : devices)
 		{
-			const uint32_t score = ScoreDevice(device, surface);
+			VkPhysicalDeviceProperties candidateProperties{};
+			vkGetPhysicalDeviceProperties(device, &candidateProperties);
+
+			const char* const type = DeviceTypeName(candidateProperties.deviceType);
+			const double megabytes = DeviceLocalMegabytes(device);
+
+			if (const char* rejection = RejectDevice(device, surface))
+			{
+				IG_CORE_TRACE("Rejected GPU: {} ({}, {:.0f} MB) - {}", candidateProperties.deviceName, type, megabytes, rejection);
+
+				continue;
+			}
+
+			const uint32_t score = ScoreDevice(device);
+
+			IG_CORE_TRACE("Candidate GPU: {} ({}, {:.0f} MB, score {})", candidateProperties.deviceName, type, megabytes, score);
+
 			if (score > bestScore)
 			{
 				bestScore = score;
@@ -215,7 +290,12 @@ namespace Ignition
 
 		m_TimestampPeriod = physicalDeviceProperties.limits.timestampPeriod;
 
-		IG_CORE_TRACE("Selected GPU: {}", physicalDeviceProperties.deviceName);
+		IG_CORE_TRACE("Selected GPU: {} ({}, {:.0f} MB device-local)", physicalDeviceProperties.deviceName, DeviceTypeName(physicalDeviceProperties.deviceType), DeviceLocalMegabytes(m_PhysicalDevice));
+
+		if (physicalDeviceProperties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		{
+			IG_CORE_WARN("No discrete GPU selected. Wind tunnel performance and allocations will not be representative - check the candidate lines above and this executable's system GPU preference");
+		}
 
 		const QueueFamilyIndices indices = FindQueueFamilies(m_PhysicalDevice, surface);
 		m_GraphicsQueueFamily = indices.Graphics;

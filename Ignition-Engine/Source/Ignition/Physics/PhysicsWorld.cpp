@@ -367,7 +367,9 @@ namespace Ignition
 
 		for (const entt::entity handle : registry.view<TransformComponent>())
 		{
-			const TransformComponent& transform = registry.get<TransformComponent>(handle);
+			// Colliders are authored in the entity's own space but simulated in the world's, so the hierarchy is resolved once, here
+			TransformComponent transform;
+			m_Scene->GetWorldTransform(m_Scene->GetEntity(static_cast<uint32_t>(handle)), transform.Position, transform.Rotation, transform.Scale);
 
 			const RigidBodyComponent* rigidBody = registry.try_get<RigidBodyComponent>(handle);
 			const BoxColliderComponent* boxCollider = registry.try_get<BoxColliderComponent>(handle);
@@ -383,6 +385,12 @@ namespace Ignition
 
 			if (!hasCollider && !boundsFallback)
 			{
+				// Silently dropping this is how a scene file comes to claim a dynamic body that never falls. Jolt needs a shape
+				if (rigidBody && !m_Settings.QueryOnly)
+				{
+					IG_CORE_WARN("Entity {} has a RigidBody but no collider, so no body was created - add a collider or drop the RigidBody", static_cast<uint32_t>(handle));
+				}
+
 				continue;
 			}
 
@@ -594,9 +602,25 @@ namespace Ignition
 			const JPH::Vec3 position = body.PreviousPosition + (body.CurrentPosition - body.PreviousPosition) * alpha;
 			const JPH::Quat rotation = body.PreviousRotation.SLERP(body.CurrentRotation, alpha);
 
-			TransformComponent& transform = registry.get<TransformComponent>(handle);
-			transform.Position = FromJolt(position);
-			transform.Rotation = FromJolt(rotation);
+			const Entity entity = m_Scene->GetEntity(entityID);
+
+			if (m_Scene->GetParent(entity).IsValid())
+			{
+				// Jolt simulates in world space, so a parented body's pose has to come back down through its parent
+				glm::vec3 worldPosition{ 0.0f };
+				glm::quat worldRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+				glm::vec3 worldScale{ 1.0f };
+
+				m_Scene->GetWorldTransform(entity, worldPosition, worldRotation, worldScale);
+				m_Scene->SetWorldTransform(entity, FromJolt(position), FromJolt(rotation), worldScale);
+			}
+			else
+			{
+				// A root's local transform is its world transform, and writing it straight through keeps the pose exact
+				TransformComponent& transform = registry.get<TransformComponent>(handle);
+				transform.Position = FromJolt(position);
+				transform.Rotation = FromJolt(rotation);
+			}
 		}
 	}
 
@@ -614,7 +638,7 @@ namespace Ignition
 
 	void PhysicsWorld::PushTransform(Entity entity)
 	{
-		if (!IsValid() || !entity.IsValid())
+		if (!IsValid() || !m_Scene || !entity.IsValid())
 		{
 			return;
 		}
@@ -626,9 +650,15 @@ namespace Ignition
 			return;
 		}
 
-		const TransformComponent& transform = entity.GetTransform();
-		const JPH::Vec3 position = ToJolt(transform.Position);
-		const JPH::Quat rotation = ToJoltRotation(transform.Rotation);
+		// The gizmo edits a local transform; the body lives in world space
+		glm::vec3 worldPosition{ 0.0f };
+		glm::quat worldRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+		glm::vec3 worldScale{ 1.0f };
+
+		m_Scene->GetWorldTransform(entity, worldPosition, worldRotation, worldScale);
+
+		const JPH::Vec3 position = ToJolt(worldPosition);
+		const JPH::Quat rotation = ToJoltRotation(worldRotation);
 
 		JPH::BodyInterface& bodyInterface = m_Implementation->System.GetBodyInterface();
 		bodyInterface.SetPositionAndRotation(it->second.ID, position, rotation, JPH::EActivation::Activate);

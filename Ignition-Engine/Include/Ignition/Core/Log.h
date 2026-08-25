@@ -44,4 +44,4 @@ namespace Ignition
 #define IG_APP_INFO(...) IG_INTERNAL_LOG(::Ignition::Log::Logger::Client, ::Ignition::Log::Level::Info, __VA_ARGS__)
 #define IG_APP_WARN(...) IG_INTERNAL_LOG(::Ignition::Log::Logger::Client, ::Ignition::Log::Level::Warn, __VA_ARGS__)
 #define IG_APP_ERROR(...) IG_INTERNAL_LOG(::Ignition::Log::Logger::Client, ::Ignition::Log::Level::Error, __VA_ARGS__)
-#define IG_APP_CRITICAL(...) IG_INTERNAL_LOG(::Ignition::Log::Logger::Client, ::Ignition::Log::Level::Critical, __VA_ARGS__)
+#define IG_APP_CRITICAL(...) IG_INTERNAL_LOG(::Ignition::Log::Logger::Client, ::Ignition::Log::Level::Critical, __VA_ARGS__)    

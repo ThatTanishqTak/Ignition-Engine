@@ -7,6 +7,7 @@
 #include "Ignition/Scene/ModelLoader.h"
 #include "Ignition/Scene/Scene.h"
 
+#include <filesystem>
 #include <string>
 
 namespace Ignition
@@ -23,7 +24,12 @@ namespace Ignition
 		}
 
 		std::vector<Entity> entities;
-		entities.reserve(model->Submeshes.size());
+		entities.reserve(model->Submeshes.size() + 1);
+
+		const std::filesystem::path source(filepath);
+		Entity root = scene.CreateEntity(source.stem().empty() ? std::string("Model") : source.stem().string());
+
+		entities.push_back(root);
 
 		for (size_t submeshIndex = 0; submeshIndex < model->Submeshes.size(); ++submeshIndex)
 		{
@@ -57,10 +63,22 @@ namespace Ignition
 			meshRenderer.MeshAsset = meshAsset;
 			meshRenderer.AlbedoAsset = albedoAsset;
 
+			// The submesh transforms are identity, so there is no world transform worth preserving through the reparent
+			scene.SetParent(entity, root, false);
+
 			entities.push_back(entity);
 		}
 
-		IG_CORE_INFO("------- MODEL IMPORTED: {} MESHES -------", entities.size());
+		if (entities.size() == 1)
+		{
+			IG_CORE_WARN("Model '{}' produced no usable meshes", filepath);
+
+			scene.DestroyEntity(root);
+
+			return {};
+		}
+
+		IG_CORE_INFO("------- MODEL IMPORTED: {} MESHES -------", entities.size() - 1);
 
 		return entities;
 	}

@@ -27,9 +27,26 @@ namespace Ignition
 
 		IGNITION_API Entity CreateEntity(const std::string& name = "Entity");
 		IGNITION_API Entity DuplicateEntity(Entity entity);
+
+		// Destroys the whole subtree: an orphaned child with a stale parent id is worse than a deleted one
 		IGNITION_API void DestroyEntity(Entity entity);
 
+		IGNITION_API Entity GetEntity(uint32_t id);
 		IGNITION_API std::vector<Entity> GetEntities();
+
+		// Transform hierarchy. TransformComponent is local to the parent; world space is only ever derived, never stored
+		IGNITION_API std::vector<Entity> GetRootEntities();
+		IGNITION_API std::vector<Entity> GetChildren(Entity entity);
+		IGNITION_API Entity GetParent(Entity entity);
+		IGNITION_API bool IsDescendantOf(Entity entity, Entity ancestor);
+
+		// Refuses a cycle and returns false. Keeping the world transform is what a reparent in an editor means
+		IGNITION_API bool SetParent(Entity child, Entity parent, bool keepWorldTransform = true);
+
+		IGNITION_API glm::mat4 GetParentWorldMatrix(Entity entity);
+		IGNITION_API glm::mat4 GetWorldMatrix(Entity entity);
+		IGNITION_API void GetWorldTransform(Entity entity, glm::vec3& position, glm::quat& rotation, glm::vec3& scale);
+		IGNITION_API void SetWorldTransform(Entity entity, const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale);
 
 		IGNITION_API void OnRender(Renderer& renderer, const Camera& camera);
 

@@ -287,6 +287,49 @@ namespace Ignition
 			return CanDraw() ? ImGui::CollapsingHeader(label, defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None) : false;
 		}
 
+		bool TreeNode(const char* label, bool selected, bool leaf, bool defaultOpen)
+		{
+			if (!CanDraw())
+			{
+				return false;
+			}
+
+			// OpenOnArrow keeps the label free for selection; Leaf makes a childless row return true so TreePop always pairs
+			ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+			if (selected)
+			{
+				flags |= ImGuiTreeNodeFlags_Selected;
+			}
+
+			if (leaf)
+			{
+				flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+			}
+			else if (defaultOpen)
+			{
+				flags |= ImGuiTreeNodeFlags_DefaultOpen;
+			}
+
+			const bool open = ImGui::TreeNodeEx(label, flags);
+
+			// NoTreePushOnOpen means a leaf pushed nothing, so report it closed and the caller's TreePop is skipped with its children
+			return leaf ? false : open;
+		}
+
+		void TreePop()
+		{
+			if (CanDraw())
+			{
+				ImGui::TreePop();
+			}
+		}
+
+		bool IsItemClicked()
+		{
+			return CanDraw() ? ImGui::IsItemClicked() : false;
+		}
+
 		void Text(const char* text)
 		{
 			if (CanDraw())
@@ -339,9 +382,9 @@ namespace Ignition
 			return CanDraw() ? ImGui::Checkbox(label, value) : false;
 		}
 
-		bool InputText(const char* label, char* buffer, size_t bufferSize)
+		bool InputText(const char* label, char* buffer, size_t bufferSize, bool enterReturnsTrue)
 		{
-			return CanDraw() ? ImGui::InputText(label, buffer, bufferSize) : false;
+			return CanDraw() ? ImGui::InputText(label, buffer, bufferSize, enterReturnsTrue ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None) : false;
 		}
 
 		bool SliderFloat(const char* label, float* value, float minimum, float maximum)

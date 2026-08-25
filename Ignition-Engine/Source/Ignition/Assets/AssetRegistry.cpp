@@ -14,6 +14,7 @@
 #include <glm/geometric.hpp>
 
 #include <array>
+#include <cmath>
 #include <vector>
 
 namespace Ignition
@@ -56,6 +57,52 @@ namespace Ignition
 				}
 
 				indices.insert(indices.end(), { base, base + 1, base + 2, base + 2, base + 3, base });
+			}
+		}
+
+		void BuildSphere(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
+		{
+			constexpr uint32_t Slices = 48; // around the equator
+			constexpr uint32_t Stacks = 24; // pole to pole
+			constexpr float Radius = 0.5f;
+			constexpr float Pi = 3.14159265358979323846f;
+
+			for (uint32_t stack = 0; stack <= Stacks; ++stack)
+			{
+				const float v = static_cast<float>(stack) / static_cast<float>(Stacks);
+				const float polar = v * Pi;
+
+				for (uint32_t slice = 0; slice <= Slices; ++slice)
+				{
+					const float u = static_cast<float>(slice) / static_cast<float>(Slices);
+					const float azimuth = u * 2.0f * Pi;
+
+					const glm::vec3 normal{ std::sin(polar) * std::cos(azimuth), std::cos(polar), std::sin(polar) * std::sin(azimuth) };
+
+					vertices.push_back({ normal * Radius, normal, glm::vec3(1.0f), glm::vec2(u, v) });
+				}
+			}
+
+			const uint32_t stride = Slices + 1;
+
+			for (uint32_t stack = 0; stack < Stacks; ++stack)
+			{
+				for (uint32_t slice = 0; slice < Slices; ++slice)
+				{
+					const uint32_t topLeft = stack * stride + slice;
+					const uint32_t bottomLeft = topLeft + stride;
+
+					// The pole rows collapse to a point, so one triangle of each cap quad is degenerate and is left out
+					if (stack != 0)
+					{
+						indices.insert(indices.end(), { topLeft, bottomLeft, topLeft + 1 });
+					}
+
+					if (stack != Stacks - 1)
+					{
+						indices.insert(indices.end(), { topLeft + 1, bottomLeft, bottomLeft + 1 });
+					}
+				}
 			}
 		}
 
@@ -149,6 +196,10 @@ namespace Ignition
 		else if (path == "builtin:cube")
 		{
 			BuildCube(vertices, indices);
+		}
+		else if (path == "builtin:sphere")
+		{
+			BuildSphere(vertices, indices);
 		}
 		else if (path.starts_with("builtin:"))
 		{

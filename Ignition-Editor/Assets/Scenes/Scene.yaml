@@ -1,22 +1,22 @@
-Scene: Untitled
+Scene: Wind Tunnel
 WindTunnel:
-  Resolution: [64, 32, 128]
-  DomainSize: [6.2, 3.65, 7.8]
+  Resolution: [128, 64, 256]
+  DomainSize: [4, 2, 8]
   ReferencePoint: [0, 0.5, 0]
-  InletSpeed: 50
-  AirDensity: 1
+  InletSpeed: 40
+  AirDensity: 1.225
   KinematicViscosity: 1.48e-05
   SmagorinskyConstant: 0.16
-  LatticeVelocity: 0.081
-  MinimumRelaxationTime: 0.514
+  LatticeVelocity: 0.06
+  MinimumRelaxationTime: 0.503
   ReferenceLength: 1
-  Wheelbase: 1
+  Wheelbase: 3.6
   RollingRoad: true
   VolumeEnabled: true
   VolumeField: 1
   VolumeDensity: 4
   VolumeThreshold: 0.08
-  VolumeSteps: 32
+  VolumeSteps: 256
   SliceEnabled: false
   SliceAxis: 0
   SlicePosition: 0.5
@@ -24,14 +24,14 @@ WindTunnel:
   ColorScale: 1
   SliceOpacity: 0.85
   ParticlesEnabled: true
-  ParticleCount: 1024
-  SurfacePressureEnabled: true
-  VoxelDebugView: true
+  ParticleCount: 100000
+  SurfacePressureEnabled: false
+  VoxelDebugView: false
   FloodIterations: 8
 Entities:
-  - Name: Entity
+  - Name: Cube
     Transform:
-      Position: [0, 1.1491356, -0.95698106]
+      Position: [0, 0.5, 0]
       Rotation: [0, 0, 0, 1]
       Scale: [1, 1, 1]
     MeshRenderer:
@@ -39,12 +39,18 @@ Entities:
       Albedo: ""
       Tint: [1, 1, 1, 1]
       TwoSided: false
+      CfdMesh: ""
+      ParticipatesInAero: true
+      AeroObjectID: 1
     RigidBody:
-      Type: 2
+      Type: 0
       Mass: 1
       LinearDamping: 0.01
       AngularDamping: 0.05
-      UseGravity: true
+      UseGravity: false
+    BoxCollider:
+      HalfExtents: [0.5, 0.5, 0.5]
+      Offset: [0, 0, 0]
     PhysicsMaterial:
       StaticFriction: 0.6
       DynamicFriction: 0.6

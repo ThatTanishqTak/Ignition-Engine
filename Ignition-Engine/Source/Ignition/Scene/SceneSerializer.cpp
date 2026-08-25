@@ -14,10 +14,13 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace YAML
 {
@@ -224,10 +227,31 @@ namespace Ignition
 
 		out << YAML::Key << "Entities" << YAML::Value << YAML::BeginSeq;
 
-		for (Entity entity : m_Scene->GetEntities())
+		const std::vector<Entity> entities = m_Scene->GetEntities();
+
+		// Parents are written as a position in this sequence, not as a runtime id: entt recycles handles, a file must not
+		std::unordered_map<uint32_t, int> entityIndices;
+		entityIndices.reserve(entities.size());
+
+		for (size_t index = 0; index < entities.size(); ++index)
+		{
+			entityIndices.emplace(entities[index].GetID(), static_cast<int>(index));
+		}
+
+		for (Entity entity : entities)
 		{
 			out << YAML::BeginMap;
 			out << YAML::Key << "Name" << YAML::Value << entity.GetName();
+
+			const Entity parent = m_Scene->GetParent(entity);
+
+			if (parent.IsValid())
+			{
+				if (const auto it = entityIndices.find(parent.GetID()); it != entityIndices.end())
+				{
+					out << YAML::Key << "Parent" << YAML::Value << it->second;
+				}
+			}
 
 			const TransformComponent& transform = entity.GetTransform();
 
@@ -244,6 +268,9 @@ namespace Ignition
 				out << YAML::Key << "Albedo" << YAML::Value << meshRenderer->AlbedoAsset;
 				out << YAML::Key << "Tint" << YAML::Value << meshRenderer->Material.Tint;
 				out << YAML::Key << "TwoSided" << YAML::Value << meshRenderer->Material.TwoSided;
+				out << YAML::Key << "CfdMesh" << YAML::Value << meshRenderer->CfdMeshAsset;
+				out << YAML::Key << "ParticipatesInAero" << YAML::Value << meshRenderer->ParticipatesInAero;
+				out << YAML::Key << "AeroObjectID" << YAML::Value << meshRenderer->AeroObjectID;
 				out << YAML::EndMap;
 			}
 
@@ -388,9 +415,16 @@ namespace Ignition
 			m_Scene->DestroyEntity(entity);
 		}
 
+		// Parents are sequence positions, so every entity has to exist before any of them can be wired
+		std::vector<Entity> loaded;
+		std::vector<int> parentIndices;
+
 		for (const YAML::Node& entityNode : root["Entities"])
 		{
 			Entity entity = m_Scene->CreateEntity(entityNode["Name"].as<std::string>("Entity"));
+
+			loaded.push_back(entity);
+			parentIndices.push_back(entityNode["Parent"].as<int>(-1));
 
 			if (const YAML::Node transformNode = entityNode["Transform"])
 			{
@@ -410,9 +444,15 @@ namespace Ignition
 				material.TwoSided = meshRendererNode["TwoSided"].as<bool>(false);
 				material.Albedo = m_Assets->LoadTexture(albedoAsset);
 
+				const std::string cfdMeshAsset = meshRendererNode["CfdMesh"].as<std::string>("");
+
 				MeshRendererComponent& meshRenderer = entity.AddMeshRenderer(m_Assets->LoadMesh(meshAsset), material);
 				meshRenderer.MeshAsset = meshAsset;
 				meshRenderer.AlbedoAsset = albedoAsset;
+				meshRenderer.CfdMeshAsset = cfdMeshAsset;
+				meshRenderer.CfdMesh = cfdMeshAsset.empty() ? nullptr : m_Assets->LoadMesh(cfdMeshAsset);
+				meshRenderer.ParticipatesInAero = meshRendererNode["ParticipatesInAero"].as<bool>(true);
+				meshRenderer.AeroObjectID = meshRendererNode["AeroObjectID"].as<uint32_t>(0u);
 			}
 
 			if (const YAML::Node rigidBodyNode = entityNode["RigidBody"])
@@ -473,6 +513,22 @@ namespace Ignition
 				collider.Offset = colliderNode["Offset"].as<glm::vec3>(glm::vec3(0.0f));
 
 				entity.AddMeshCollider(collider);
+			}
+		}
+
+		// Transforms in the file are already local to the parent, so the reparent must not re-derive them
+		for (size_t index = 0; index < loaded.size(); ++index)
+		{
+			const int parentIndex = parentIndices[index];
+
+			if (parentIndex < 0 || static_cast<size_t>(parentIndex) >= loaded.size())
+			{
+				continue;
+			}
+
+			if (!m_Scene->SetParent(loaded[index], loaded[static_cast<size_t>(parentIndex)], false))
+			{
+				IG_CORE_WARN("Scene load: entity '{}' names a parent that would form a cycle, loading it as a root instead", loaded[index].GetName());
 			}
 		}
 

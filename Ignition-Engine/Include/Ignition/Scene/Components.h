@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -17,6 +18,11 @@ namespace Ignition
 	struct TagComponent
 	{
 		std::string Name;
+	};
+
+	struct ParentComponent
+	{
+		uint32_t Parent = 0xFFFFFFFF; // entt::null
 	};
 
 	struct TransformComponent
@@ -49,5 +55,11 @@ namespace Ignition
 
 		std::string MeshAsset;
 		std::string AlbedoAsset;
+		std::shared_ptr<Ignition::Mesh> CfdMesh;
+		std::string CfdMeshAsset;
+
+		bool ParticipatesInAero = true;
+
+		uint32_t AeroObjectID = 0;
 	};
 }
