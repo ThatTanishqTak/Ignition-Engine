@@ -1,7 +1,7 @@
 #include "Sandbox/SandboxApplication.h"
 
 #include "Sandbox/CameraController.h"
-#include "Sandbox/ControlPanelLayer.h"
+#include "Sandbox/GalleryLayer.h"
 
 #include "Ignition/Ignition.h"
 
@@ -29,7 +29,7 @@ namespace Sandbox
 
 		m_Scene = std::make_unique<Ignition::Scene>();
 
-		PushLayer(std::make_unique<ControlPanelLayer>(m_Scene.get()));
+		PushLayer(std::make_unique<GalleryLayer>(GetUIContext()));
 
 		IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 	}

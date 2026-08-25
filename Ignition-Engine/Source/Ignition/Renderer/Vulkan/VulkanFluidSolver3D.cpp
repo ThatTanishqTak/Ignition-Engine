@@ -89,7 +89,7 @@ namespace Ignition
 			IG_CORE_ERROR("Wind tunnel: the volume view is unavailable, the viewport falls back to the slice plane and tracers");
 		}
 
-		m_SliceImGuiTexture = reinterpret_cast<VkDescriptorSet>(renderer.AddImGuiTexture(m_Slice->GetImageView()));
+		// TODO: publish m_Slice into the UI texture table for the Aero panel preview
 		m_ResetRequested = true;
 
 		IG_CORE_INFO("------- WIND TUNNEL INITIALIZED -------");
@@ -417,18 +417,7 @@ namespace Ignition
 
 	void VulkanFluidSolver3D::Shutdown()
 	{
-		if (m_SliceImGuiTexture != VK_NULL_HANDLE)
-		{
-			// The renderer may already be gone if the solver outlived it, which is what the weak reference is for
-			const std::shared_ptr<VulkanRenderer*> renderer = m_Renderer.lock();
-
-			if (renderer && *renderer)
-			{
-				(*renderer)->RemoveImGuiTexture(m_SliceImGuiTexture);
-			}
-
-			m_SliceImGuiTexture = VK_NULL_HANDLE;
-		}
+		// TODO: release the slice's UI texture slot here. m_Renderer stays as the weak reference that makes that safe when the solver outlives the renderer
 
 		if (m_VolumePipeline != VK_NULL_HANDLE)
 		{

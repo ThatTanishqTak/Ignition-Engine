@@ -163,18 +163,13 @@ namespace Ignition
 		return m_Implementation->Backend ? m_Implementation->Backend->GetPassTimings() : empty;
 	}
 
-	bool Renderer::IsImGuiFrameActive() const
-	{
-		return m_Implementation->Backend && m_Implementation->Backend->IsImGuiFrameActive();
-	}
-
 	bool Renderer::WantCaptureMouse() const
 	{
-		return m_Implementation->Backend && m_Implementation->Backend->WantCaptureMouse();
+		return false;
 	}
 
 	bool Renderer::WantCaptureKeyboard() const
 	{
-		return m_Implementation->Backend && m_Implementation->Backend->WantCaptureKeyboard();
+		return false;
 	}
 }

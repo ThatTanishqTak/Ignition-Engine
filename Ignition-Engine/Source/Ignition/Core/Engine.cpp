@@ -52,14 +52,6 @@ namespace Ignition
 		m_Renderer = std::unique_ptr<Renderer>(new Renderer());
 		m_Renderer->m_Implementation->Backend = m_Backend.get();
 
-		m_Window->m_Implementation->RawCallback = [this](const void* sdlEvent)
-		{
-			if (m_Backend)
-			{
-				m_Backend->ProcessImGuiEvent(sdlEvent);
-			}
-		};
-
 		IG_CORE_INFO("------- IGNITION INITIALIZED -------");
 	}
 
@@ -116,7 +108,6 @@ namespace Ignition
 		}
 
 		m_Backend->BeginFrame();
-		m_Backend->BeginImGuiFrame();
 	}
 
 	void Engine::EndFrame()

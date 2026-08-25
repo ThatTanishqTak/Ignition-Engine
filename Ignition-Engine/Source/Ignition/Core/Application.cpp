@@ -4,7 +4,7 @@
 #include "Ignition/Core/Engine.h"
 #include "Ignition/Core/Log.h"
 #include "Ignition/Core/ProfilerInternal.h"
-#include "Ignition/UI/ImGuiLayer.h"
+#include "Ignition/UI/UILayer.h"
 #include "Ignition/Core/Time.h"
 #include "Ignition/Events/EventQueue.h"
 
@@ -35,9 +35,9 @@ namespace Ignition
 			return;
 		}
 
-		auto imguiLayer = std::make_unique<ImGuiLayer>(m_Implementation->Engine->GetRenderer(), m_Implementation->Engine->GetInput());
-		m_Implementation->ImGui = imguiLayer.get();
-		m_Implementation->Layers.PushOverlay(std::move(imguiLayer));
+		auto uiLayer = std::make_unique<UILayer>(m_Implementation->Engine->GetWindow());
+		m_Implementation->UI = uiLayer.get();
+		m_Implementation->Layers.PushOverlay(std::move(uiLayer));
 
 		OnInitialize();
 
@@ -57,7 +57,7 @@ namespace Ignition
 
 		if (m_Implementation)
 		{
-			m_Implementation->ImGui = nullptr;
+			m_Implementation->UI = nullptr;
 			m_Implementation->Layers.Clear();
 
 			if (m_Implementation->Engine)
@@ -132,11 +132,6 @@ namespace Ignition
 
 			m_Implementation->Engine->BeginFrame();
 
-			if (m_Implementation->ImGui)
-			{
-				m_Implementation->ImGui->BeginFrame();
-			}
-
 			{
 				IG_PROFILE_ZONE_NAMED("Render");
 
@@ -179,5 +174,10 @@ namespace Ignition
 	Window* Application::GetWindow() const
 	{
 		return m_Implementation && m_Implementation->Engine ? m_Implementation->Engine->GetWindow() : nullptr;
+	}
+
+	UI::UIContext* Application::GetUIContext() const
+	{
+		return m_Implementation && m_Implementation->UI ? m_Implementation->UI->GetContext() : nullptr;
 	}
 }

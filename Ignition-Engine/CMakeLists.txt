@@ -57,8 +57,6 @@ target_link_libraries(Ignition PRIVATE
     Vulkan::Vulkan
     GPUOpen::VulkanMemoryAllocator
     spdlog::spdlog
-    imgui
-    imguizmo
     Jolt
     stb
     entt

@@ -30,7 +30,6 @@ namespace Ignition
 	class VulkanFrameContext;
 	class VulkanPipeline;
 	class VulkanMesh;
-	class VulkanImGui;
 	class VulkanLineRenderer;
 	class VulkanDescriptorAllocator;
 	class VulkanTexture;
@@ -56,13 +55,6 @@ namespace Ignition
 
 		void WaitIdle();
 
-		void ProcessImGuiEvent(const void* sdlEvent);
-		void BeginImGuiFrame();
-		bool IsImGuiFrameActive() const { return m_ImGuiFrameActive; }
-
-		bool WantCaptureMouse() const;
-		bool WantCaptureKeyboard() const;
-
 		std::unique_ptr<VulkanMesh> CreateMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 		std::unique_ptr<VulkanTexture> CreateTexture(const std::string& filepath);
 		std::unique_ptr<VulkanTexture> CreateTextureFromMemory(const void* data, size_t size);
@@ -73,10 +65,7 @@ namespace Ignition
 		void Retire(std::unique_ptr<VulkanImage> image);
 		void Retire(std::unique_ptr<VulkanFluidSolver3D> solver);
 
-		// Publishes a renderer-owned image view to ImGui with the shared linear sampler
-		VkDescriptorSet AddImGuiTexture(VkImageView imageView);
-		void RemoveImGuiTexture(VkDescriptorSet descriptorSet);
-
+		// TODO: VulkanUITextureTable replaces this - a variable-count combined-image-sampler array behind its own UPDATE_AFTER_BIND pool, with slots freed through the frame-gated retirement queue
 		const std::vector<PassTiming>& GetPassTimings() const;
 
 		std::shared_ptr<VulkanRenderer*> GetSelfReference() const { return m_SelfReference; }
@@ -127,7 +116,6 @@ namespace Ignition
 		std::unique_ptr<VulkanGPUTimer> m_VulkanGPUTimer;
 		std::unique_ptr<VulkanTexture> m_WhiteTexture;
 		std::unique_ptr<VulkanMesh> m_OverlayQuad; // unit quad for fluid slice planes and other in-scene overlays
-		std::unique_ptr<VulkanImGui> m_VulkanImGui;
 
 		// Compute work is recorded at the top of the frame, before any rendering begins - one slot, whatever registers into it
 		std::vector<VulkanComputePass*> m_ComputePasses;
@@ -139,8 +127,7 @@ namespace Ignition
 
 		std::unique_ptr<VulkanImage> m_SceneColorImage;
 		std::unique_ptr<VulkanImage> m_SceneDepthImage;
-		VkSampler m_LinearSampler = VK_NULL_HANDLE;
-		VkDescriptorSet m_SceneTextureDescriptor = VK_NULL_HANDLE;
+		VkSampler m_LinearSampler = VK_NULL_HANDLE; // The UI texture table's shared sampler
 		uint32_t m_PendingSceneTargetWidth = 0;
 		uint32_t m_PendingSceneTargetHeight = 0;
 		bool m_SceneTargetResizeRequested = false;
@@ -148,7 +135,6 @@ namespace Ignition
 
 		glm::mat4 m_SceneViewProjection{ 1.0f };
 		bool m_SceneActive = false;
-		bool m_ImGuiFrameActive = false;
 		int m_BoundPipelineVariant = -1;
 
 		uint32_t m_FrameIndex = 0;

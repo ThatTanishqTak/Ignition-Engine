@@ -56,7 +56,8 @@ namespace Ignition
 		bool GetSceneQuad(VulkanSceneQuad& quad) override;
 		void RecordSceneLines(VkCommandBuffer commandBuffer, uint32_t frameIndex, VulkanLineRenderer& lines, const glm::mat4& viewProjection) override;
 
-		uint64_t GetSliceTextureID() const { return m_SliceInitialized ? reinterpret_cast<uint64_t>(m_SliceImGuiTexture) : 0; }
+		// TODO: a VulkanUITextureTable slot for m_Slice. Zero until then, which the Aero panel already guards against it skips the preview image when this returns 0
+		uint64_t GetSliceTextureID() const { return 0; }
 
 		uint64_t GetStepCount() const { return m_StepCount; }
 		glm::vec3 GetLatticeForce() const { return m_LatticeForce; }
@@ -135,7 +136,6 @@ namespace Ignition
 		std::unique_ptr<VulkanImage> m_Slice;
 		VkSampler m_SliceSampler = VK_NULL_HANDLE;
 		VkDescriptorSet m_SliceSceneTexture = VK_NULL_HANDLE; // texture-layout set for the in-scene quad
-		VkDescriptorSet m_SliceImGuiTexture = VK_NULL_HANDLE; // panel preview
 		bool m_SliceInitialized = false;
 		bool m_ParticlesReady = false;
 		bool m_ShellReady = false;

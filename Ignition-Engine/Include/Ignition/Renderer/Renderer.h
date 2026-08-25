@@ -38,8 +38,6 @@ namespace Ignition
 
 		IGNITION_API void SetClearColor(float r, float g, float b, float a = 1.0f);
 
-		IGNITION_API bool IsImGuiFrameActive() const;
-
 		IGNITION_API bool WantCaptureMouse() const;
 		IGNITION_API bool WantCaptureKeyboard() const;
 

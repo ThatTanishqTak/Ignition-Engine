@@ -20,6 +20,11 @@ namespace Ignition
 	class Window;
 	struct ApplicationImplementation;
 
+	namespace UI
+	{
+		class UIContext;
+	}
+
 	class Application
 	{
 	public:
@@ -48,6 +53,9 @@ namespace Ignition
 		IGNITION_API Renderer* GetRenderer() const;
 		IGNITION_API Input* GetInput() const;
 		IGNITION_API Window* GetWindow() const;
+
+		// The retained UI tree for the window surface. Valid from the first line of OnInitialize
+		IGNITION_API UI::UIContext* GetUIContext() const;
 
 	private:
 		ApplicationSpecification m_Specification;

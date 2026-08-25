@@ -8,7 +8,6 @@
 #include "Ignition/Renderer/Vulkan/VulkanAllocator.h"
 #include "Ignition/Renderer/Vulkan/VulkanPipeline.h"
 #include "Ignition/Renderer/Vulkan/VulkanMesh.h"
-#include "Ignition/Renderer/Vulkan/VulkanImGui.h"
 #include "Ignition/Renderer/Vulkan/VulkanLineRenderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanDescriptorAllocator.h"
 #include "Ignition/Renderer/Vulkan/VulkanFluidSolver3D.h"
@@ -192,13 +191,7 @@ namespace Ignition
 			}
 		}
 
-		m_VulkanImGui = std::make_unique<VulkanImGui>();
-		m_VulkanImGui->Initialize(window, m_VulkanInstance->GetInstance(), m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanSwapchain->GetImageCount(), m_VulkanSwapchain->GetImageFormat(), DepthFormat);
-
-		if (!m_VulkanImGui->IsValid())
-		{
-			IG_CORE_ERROR("Vulkan renderer: ImGui unavailable, debug UI disabled");
-		}
+		// TODO: VulkanUIRenderer initializes here, modelled on VulkanLineRenderer's Initialize shape
 
 		IG_CORE_INFO("------- VULKAN RENDERER INITIALIZED -------");
 	}
@@ -228,12 +221,6 @@ namespace Ignition
 		{
 			vkDestroySampler(m_VulkanDevice->GetDevice(), m_LinearSampler, nullptr);
 			m_LinearSampler = VK_NULL_HANDLE;
-		}
-
-		if (m_VulkanImGui)
-		{
-			m_VulkanImGui->Shutdown();
-			m_VulkanImGui.reset();
 		}
 
 		IG_PROFILE_GPU_DESTROY(m_GPUProfiler);
@@ -644,20 +631,17 @@ namespace Ignition
 			vkCmdBeginRendering(commandBuffer, &compositeRenderingInfo);
 		}
 
-		if (m_ImGuiFrameActive)
 		{
 			const uint32_t userInterfacePass = m_VulkanGPUTimer ? m_VulkanGPUTimer->BeginPass(commandBuffer, "UI") : UINT32_MAX;
 
 			IG_PROFILE_GPU_ZONE(m_GPUProfiler, commandBuffer, "UI");
 
-			m_VulkanImGui->Render(commandBuffer);
+			// TODO: VulkanUIRenderer records the DrawList here
 
 			if (m_VulkanGPUTimer)
 			{
 				m_VulkanGPUTimer->EndPass(commandBuffer, userInterfacePass);
 			}
-
-			m_ImGuiFrameActive = false;
 		}
 
 		vkCmdEndRendering(commandBuffer);
@@ -757,35 +741,6 @@ namespace Ignition
 		m_FrameStarted = false;
 		m_FrameIndex = (m_FrameIndex + 1) % VulkanFrameContext::MaximumFramesInFlight;
 		++m_FrameNumber;
-	}
-
-	void VulkanRenderer::ProcessImGuiEvent(const void* sdlEvent)
-	{
-		if (m_VulkanImGui)
-		{
-			m_VulkanImGui->ProcessEvent(sdlEvent);
-		}
-	}
-
-	void VulkanRenderer::BeginImGuiFrame()
-	{
-		if (!m_FrameStarted || !m_VulkanImGui || !m_VulkanImGui->IsValid())
-		{
-			return;
-		}
-
-		m_VulkanImGui->BeginFrame();
-		m_ImGuiFrameActive = true;
-	}
-
-	bool VulkanRenderer::WantCaptureMouse() const
-	{
-		return m_VulkanImGui && m_VulkanImGui->WantCaptureMouse();
-	}
-
-	bool VulkanRenderer::WantCaptureKeyboard() const
-	{
-		return m_VulkanImGui && m_VulkanImGui->WantCaptureKeyboard();
 	}
 
 	void VulkanRenderer::WaitIdle()
@@ -937,7 +892,8 @@ namespace Ignition
 
 	uint64_t VulkanRenderer::GetSceneRenderTargetTextureID() const
 	{
-		return reinterpret_cast<uint64_t>(m_SceneTextureDescriptor);
+		// TODO: a VulkanUITextureTable slot index. Zero until then - the viewport image has nowhere to go
+		return 0;
 	}
 
 	uint32_t VulkanRenderer::GetSceneRenderTargetWidth() const
@@ -948,23 +904,6 @@ namespace Ignition
 	uint32_t VulkanRenderer::GetSceneRenderTargetHeight() const
 	{
 		return m_SceneColorImage && m_SceneColorImage->IsValid() ? m_SceneColorImage->GetExtent().height : 0;
-	}
-
-	namespace
-	{
-		struct RetiredImGuiTexture
-		{
-			VulkanImGui* ImGui = nullptr;
-			VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
-
-			void Shutdown()
-			{
-				if (ImGui && DescriptorSet != VK_NULL_HANDLE)
-				{
-					ImGui->RemoveTexture(DescriptorSet);
-				}
-			}
-		};
 	}
 
 	VkSampler VulkanRenderer::EnsureLinearSampler()
@@ -988,26 +927,6 @@ namespace Ignition
 		}
 
 		return m_LinearSampler;
-	}
-
-	VkDescriptorSet VulkanRenderer::AddImGuiTexture(VkImageView imageView)
-	{
-		const VkSampler sampler = EnsureLinearSampler();
-
-		if (sampler == VK_NULL_HANDLE || imageView == VK_NULL_HANDLE || !m_VulkanImGui || !m_VulkanImGui->IsValid())
-		{
-			return VK_NULL_HANDLE;
-		}
-
-		return m_VulkanImGui->AddTexture(sampler, imageView);
-	}
-
-	void VulkanRenderer::RemoveImGuiTexture(VkDescriptorSet descriptorSet)
-	{
-		if (m_VulkanImGui)
-		{
-			m_VulkanImGui->RemoveTexture(descriptorSet);
-		}
 	}
 
 	const std::vector<PassTiming>& VulkanRenderer::GetPassTimings() const
@@ -1079,22 +998,12 @@ namespace Ignition
 			return;
 		}
 
-		m_SceneTextureDescriptor = AddImGuiTexture(m_SceneColorImage->GetImageView());
-
-		if (m_SceneTextureDescriptor == VK_NULL_HANDLE)
-		{
-			IG_CORE_ERROR("Vulkan renderer: scene render target could not be published to ImGui");
-		}
+		// TODO: publish m_SceneColorImage into the UI texture table so the viewport draws as an image
 	}
 
 	void VulkanRenderer::DestroySceneRenderTarget()
 	{
-		if (m_SceneTextureDescriptor != VK_NULL_HANDLE)
-		{
-			RetireResource(std::make_unique<RetiredImGuiTexture>(RetiredImGuiTexture{ m_VulkanImGui.get(), m_SceneTextureDescriptor }));
-
-			m_SceneTextureDescriptor = VK_NULL_HANDLE;
-		}
+		// TODO: release the UI texture slot through the retirement queue, never immediately a slot freed and reused while a frame is in flight samples garbage
 
 		RetireResource(std::move(m_SceneColorImage));
 		RetireResource(std::move(m_SceneDepthImage));

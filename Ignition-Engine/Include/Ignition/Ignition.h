@@ -57,6 +57,11 @@
 
 // UI
 #include "Ignition/UI/UI.h"
+#include "Ignition/UI/UITypes.h"
+#include "Ignition/UI/Style.h"
+#include "Ignition/UI/UIEvent.h"
+#include "Ignition/UI/Element.h"
+#include "Ignition/UI/UIContext.h"
 
 // Window
 #include "Ignition/Window/Window.h"
