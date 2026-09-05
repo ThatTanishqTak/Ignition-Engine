@@ -276,7 +276,7 @@ namespace Ignition
 			const float width = Tessellator::SnapStrokeWidth(TransformScalar(thickness), m_DeviceScale);
 			const float half = width * 0.5f;
 
-			Rect bounds = TransformRect(rect);
+			const Rect bounds = TransformRect(rect);
 
 			if (bounds.Size.x <= width || bounds.Size.y <= width)
 			{
@@ -286,10 +286,10 @@ namespace Ignition
 				return;
 			}
 
-			bounds.Position = glm::vec2(Tessellator::SnapCentreline(bounds.GetLeft() + half, width), Tessellator::SnapCentreline(bounds.GetTop() + half, width));
-			bounds.Size = glm::vec2(Tessellator::SnapCentreline(rect.GetRight() * transform.Scale.x + transform.Translation.x - half, width), Tessellator::SnapCentreline(rect.GetBottom() * transform.Scale.y + transform.Translation.y - half, width)) - bounds.Position;
+			const glm::vec2 topLeft(Tessellator::SnapCentreline(bounds.GetLeft() + half, width), Tessellator::SnapCentreline(bounds.GetTop() + half, width));
+			const glm::vec2 bottomRight(Tessellator::SnapCentreline(bounds.GetRight() - half, width), Tessellator::SnapCentreline(bounds.GetBottom() - half, width));
 
-			EmitRounded(bounds, color, InsetRadii(ScaleRadii(radii, scale), half), half, EdgeSoftness, half + 1.0f);
+			EmitRounded(Rect{ topLeft, bottomRight - topLeft }, color, InsetRadii(ScaleRadii(radii, scale), half), half, EdgeSoftness, half + 1.0f);
 		}
 
 		void DrawList::AddShadow(const Rect& rect, const glm::vec4& color, float blur, const CornerRadii& radii, const glm::vec2& offset)

@@ -3,9 +3,15 @@
 #include <Ignition/UI/DrawList.h>
 #include <Ignition/UI/Element.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
+
+namespace Ignition
+{
+	class Renderer;
+}
 
 namespace Sandbox
 {
@@ -69,6 +75,38 @@ namespace Sandbox
 	{
 	public:
 		const char* GetTypeName() const override { return "TessellatorPage"; }
+
+	protected:
+		void OnTick(float deltaTime) override { m_Phase += deltaTime; }
+		void OnPaint(Ignition::UI::DrawList& drawList) override;
+
+	private:
+		float m_Phase = 0.0f;
+	};
+
+	class SceneTargetPage final : public Ignition::UI::Element
+	{
+	public:
+		explicit SceneTargetPage(Ignition::Renderer* renderer);
+		~SceneTargetPage() override;
+
+		const char* GetTypeName() const override { return "SceneTargetPage"; }
+
+	protected:
+		void OnTick(float deltaTime) override;
+		void OnPaint(Ignition::UI::DrawList& drawList) override;
+
+	private:
+		Ignition::Renderer* m_Renderer = nullptr;
+		float m_Phase = 0.0f;
+		int m_Step = -1;
+		uint64_t m_Slot = 0;
+	};
+
+	class StressPage final : public Ignition::UI::Element
+	{
+	public:
+		const char* GetTypeName() const override { return "StressPage"; }
 
 	protected:
 		void OnTick(float deltaTime) override { m_Phase += deltaTime; }

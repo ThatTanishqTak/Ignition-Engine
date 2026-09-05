@@ -29,7 +29,7 @@ namespace Sandbox
 
 		m_Scene = std::make_unique<Ignition::Scene>();
 
-		PushLayer(std::make_unique<GalleryLayer>(GetUIContext()));
+		PushLayer(std::make_unique<GalleryLayer>(GetUIContext(), GetRenderer()));
 
 		IG_APP_INFO("------- SANDBOX INITIALIZED -------");
 	}

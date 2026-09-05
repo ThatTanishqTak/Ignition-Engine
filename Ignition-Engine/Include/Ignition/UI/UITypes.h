@@ -38,6 +38,14 @@ namespace Ignition
 			glm::vec2 Maximum{ Unbounded, Unbounded };
 		};
 
+		struct DrawStatistics
+		{
+			uint32_t DrawCalls = 0;
+			uint32_t Vertices = 0;
+			uint32_t Indices = 0;
+			uint32_t Primitives = 0;
+		};
+
 		// Which surface a DrawList was built for. Phase 10 grows this into §16's UISurfaceDescription
 		enum class UISurfaceTarget : uint32_t
 		{

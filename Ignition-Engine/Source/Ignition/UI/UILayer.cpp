@@ -53,6 +53,14 @@ namespace Ignition
 		m_Context->Paint(m_DrawList);
 		m_DrawList.Finish();
 
+		const UI::DrawStatistics statistics = m_DrawList.GetStatistics();
+
+		m_Context->SetDrawStatistics(statistics);
+
+		IG_PROFILE_VALUE("UI Draw Calls", static_cast<int64_t>(statistics.DrawCalls));
+		IG_PROFILE_VALUE("UI Vertices", static_cast<int64_t>(statistics.Vertices));
+		IG_PROFILE_VALUE("UI Primitives", static_cast<int64_t>(statistics.Primitives));
+
 		// The layer is an overlay, so this runs after every content layer has rendered and before EndFrame records
 		m_Backend->SubmitUI(m_DrawList, UI::UISurfaceTarget::Swapchain);
 	}

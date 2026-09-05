@@ -10,6 +10,8 @@
 
 namespace Ignition
 {
+	class Renderer;
+
 	namespace UI
 	{
 		class UIContext;
@@ -25,7 +27,7 @@ namespace Sandbox
 	public:
 		using PageBuilder = std::function<void(Ignition::UI::UIContext&)>;
 
-		explicit GalleryLayer(Ignition::UI::UIContext* context);
+		GalleryLayer(Ignition::UI::UIContext* context, Ignition::Renderer* renderer);
 
 		void RegisterPage(std::string name, PageBuilder build);
 
@@ -48,6 +50,7 @@ namespace Sandbox
 		};
 
 		Ignition::UI::UIContext* m_Context = nullptr;
+		Ignition::Renderer* m_Renderer = nullptr;
 		std::vector<Page> m_Pages;
 		size_t m_CurrentPage = 0;
 

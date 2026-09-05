@@ -37,6 +37,10 @@ namespace Ignition
 
 			IGNITION_API void OnElementDestroyed(Element* element);
 
+			// The last frame's cost, so a host can read it without reaching into UILayer's DrawList
+			void SetDrawStatistics(const DrawStatistics& statistics) { m_DrawStatistics = statistics; }
+			const DrawStatistics& GetDrawStatistics() const { return m_DrawStatistics; }
+
 		private:
 			void PaintElement(Element& element, DrawList& drawList);
 			void TickElement(Element& element, float deltaTime);
@@ -44,6 +48,7 @@ namespace Ignition
 		private:
 			std::vector<std::unique_ptr<Element>> m_Roots;
 			glm::vec2 m_SurfaceSize{ 0.0f };
+			DrawStatistics m_DrawStatistics;
 
 			uint32_t m_LayoutPassCount = 0;
 		};

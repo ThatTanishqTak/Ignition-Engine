@@ -100,6 +100,12 @@ namespace Ignition
 
 			bool IsEmpty() const { return m_Commands.empty(); }
 
+			// Meaningful after Finish: before it, the open command has not been counted yet
+			DrawStatistics GetStatistics() const
+			{
+				return DrawStatistics{ static_cast<uint32_t>(m_Commands.size()), static_cast<uint32_t>(m_Vertices.size()), static_cast<uint32_t>(m_Indices.size()), static_cast<uint32_t>(m_Primitives.size()) };
+			}
+
 			const std::vector<DrawVertex>& GetVertices() const { return m_Vertices; }
 			const std::vector<uint32_t>& GetIndices() const { return m_Indices; }
 			const std::vector<DrawPrimitive>& GetPrimitives() const { return m_Primitives; }

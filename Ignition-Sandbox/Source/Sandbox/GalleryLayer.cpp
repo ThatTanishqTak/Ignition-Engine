@@ -6,7 +6,7 @@
 
 namespace Sandbox
 {
-	GalleryLayer::GalleryLayer(Ignition::UI::UIContext* context) : m_Context(context)
+	GalleryLayer::GalleryLayer(Ignition::UI::UIContext* context, Ignition::Renderer* renderer) : m_Context(context), m_Renderer(renderer)
 	{
 
 	}
@@ -47,6 +47,16 @@ namespace Sandbox
 		RegisterPage("Tessellator stress", [](Ignition::UI::UIContext& context)
 		{
 			context.AddRoot(std::make_unique<TessellatorPage>()).SetName("Tessellator");
+		});
+
+		RegisterPage("Scene target", [this](Ignition::UI::UIContext& context)
+		{
+			context.AddRoot(std::make_unique<SceneTargetPage>(m_Renderer));
+		});
+
+		RegisterPage("Primitive stress", [](Ignition::UI::UIContext& context)
+		{
+			context.AddRoot(std::make_unique<StressPage>()).SetName("Stress");
 		});
 	}
 
@@ -150,6 +160,12 @@ namespace Sandbox
 			else if (key == Ignition::KeyCode::RIGHTBRACKET)
 			{
 				StepPage(1);
+			}
+			else if (key == Ignition::KeyCode::S && m_Context)
+			{
+				const Ignition::UI::DrawStatistics statistics = m_Context->GetDrawStatistics();
+
+				IG_APP_INFO("UI frame: {} draw call(s), {} vertices, {} indices, {} primitives", statistics.DrawCalls, statistics.Vertices, statistics.Indices, statistics.Primitives);
 			}
 
 			return false;

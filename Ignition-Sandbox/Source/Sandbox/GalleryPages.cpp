@@ -1,8 +1,11 @@
 #include "Sandbox/GalleryPages.h"
 
+#include <Ignition/Core/Log.h>
+#include <Ignition/Renderer/Renderer.h>
 #include <Ignition/UI/Tessellator.h>
 #include <Ignition/UI/UIContext.h>
 
+#include <algorithm>
 #include <cmath>
 
 namespace Sandbox
@@ -77,8 +80,6 @@ namespace Sandbox
 				drawList.AddRectBorder(tab, Outline, 1.0f, CornerRadii::Uniform(5.0f));
 			}
 
-			// Phase 2 puts the page name here. Until then a ruled block stands in for the label, one bar per index, so
-			// the strip is still readable without a single glyph existing
 			for (size_t bar = 0; bar <= index; ++bar)
 			{
 				drawList.AddRect(Rect{ glm::vec2(tab.GetLeft() + 12.0f + static_cast<float>(bar) * 8.0f, tab.GetTop() + 7.0f), glm::vec2(4.0f, tab.Size.y - 14.0f) }, active ? Ink : Outline, CornerRadii::Uniform(2.0f));
@@ -94,8 +95,6 @@ namespace Sandbox
 
 		drawList.AddRect(Rect{ glm::vec2(0.0f), surface }, Surface);
 
-		// A radius sweep driven off the tick, which is what "animatable per frame" has to mean: no rebuild, no cached
-		// geometry, one number in the primitive buffer
 		for (int index = 0; index < 8; ++index)
 		{
 			const float radius = Pulse(m_Phase + static_cast<float>(index) * 0.4f, 0.0f, 36.0f);
@@ -215,5 +214,115 @@ namespace Sandbox
 
 		drawList.AddPolyline(chevronPoints, 3, Ink, 2.0f, false);
 		drawList.AddCircle(glm::vec2(560.0f, 408.0f), 8.0f, Ink, 2.0f);
+
+		const float scales[3] = { 1.0f, 1.5f, 2.0f };
+		float offset = 0.0f;
+
+		for (const float scale : scales)
+		{
+			drawList.PushTransform(glm::vec2(640.0f + offset, 390.0f), glm::vec2(scale));
+
+			const glm::vec2 marks[3] = { { 0.0f, 0.0f }, { 8.0f, 8.0f }, { 0.0f, 16.0f } };
+
+			drawList.AddPolyline(marks, 3, Ink, 2.0f, false);
+			drawList.AddCircle(glm::vec2(32.0f, 8.0f), 8.0f, Ink, 2.0f);
+			drawList.PopTransform();
+
+			offset += 60.0f * scale;
+		}
+	}
+
+	SceneTargetPage::SceneTargetPage(Ignition::Renderer* renderer) : m_Renderer(renderer)
+	{
+		SetName("Scene Target");
+	}
+
+	SceneTargetPage::~SceneTargetPage()
+	{
+		// Zero releases the target and its slot through the frame gate, and puts the scene back on the swapchain
+		if (m_Renderer)
+		{
+			m_Renderer->SetSceneRenderTargetSize(0, 0);
+		}
+	}
+
+	void SceneTargetPage::OnTick(float deltaTime)
+	{
+		if (!m_Renderer)
+		{
+			return;
+		}
+
+		m_Phase += deltaTime;
+
+		const int step = static_cast<int>(m_Phase / 0.75f) % 2;
+
+		if (step != m_Step)
+		{
+			m_Step = step;
+
+			m_Renderer->SetSceneRenderTargetSize(step == 0 ? 960u : 640u, step == 0 ? 540u : 360u);
+		}
+
+		const uint64_t slot = m_Renderer->GetSceneRenderTargetTextureID();
+
+		if (slot != m_Slot)
+		{
+			m_Slot = slot;
+
+			IG_APP_INFO("Scene target slot: {} ({}x{})", m_Slot, m_Renderer->GetSceneRenderTargetWidth(), m_Renderer->GetSceneRenderTargetHeight());
+		}
+	}
+
+	void SceneTargetPage::OnPaint(Ignition::UI::DrawList& drawList)
+	{
+		const glm::vec2 surface = GetContext() ? GetContext()->GetSurfaceSize() : glm::vec2(0.0f);
+
+		drawList.AddRect(Rect{ glm::vec2(0.0f), surface }, Surface);
+
+		const Rect frame{ glm::vec2(60.0f, 90.0f), glm::vec2(960.0f, 540.0f) };
+
+		// A checkerboard behind it, so the image's own extent and its alpha are both visible
+		for (int row = 0; row < 18; ++row)
+		{
+			for (int column = 0; column < 32; ++column)
+			{
+				if ((row + column) % 2 == 0)
+				{
+					continue;
+				}
+
+				drawList.AddRect(Rect{ frame.Position + glm::vec2(static_cast<float>(column) * 30.0f, static_cast<float>(row) * 30.0f), glm::vec2(30.0f) }, Raised);
+			}
+		}
+
+		drawList.AddImage(frame, static_cast<uint32_t>(m_Slot));
+		drawList.AddRectBorder(frame, m_Slot == 0 ? glm::vec4(0.85f, 0.20f, 0.15f, 1.0f) : Accent, 2.0f, {});
+		drawList.AddRect(Rect{ glm::vec2(60.0f, 650.0f), glm::vec2(static_cast<float>(m_Slot == 0 ? 0 : 240), 12.0f) }, Accent, CornerRadii::Uniform(6.0f));
+	}
+
+	void StressPage::OnPaint(Ignition::UI::DrawList& drawList)
+	{
+		const glm::vec2 surface = GetContext() ? GetContext()->GetSurfaceSize() : glm::vec2(0.0f);
+
+		drawList.AddRect(Rect{ glm::vec2(0.0f), surface }, Surface);
+
+		const int count = 1000 + static_cast<int>(Pulse(m_Phase * 0.5f, 0.0f, 11000.0f));
+		const int columns = 160;
+		const float cell = std::max(surface.x - 40.0f, 1.0f) / static_cast<float>(columns);
+
+		// Radius animates so nothing can be cached, and every rect is its own primitive in the std430 buffer
+		for (int index = 0; index < count; ++index)
+		{
+			const float x = 20.0f + static_cast<float>(index % columns) * cell;
+			const float y = 60.0f + static_cast<float>(index / columns) * cell;
+
+			if (y > surface.y)
+			{
+				break;
+			}
+
+			drawList.AddRect(Rect{ glm::vec2(x, y), glm::vec2(cell - 2.0f) }, index % 3 == 0 ? Accent : Ink, CornerRadii::Uniform(Pulse(m_Phase + static_cast<float>(index) * 0.01f, 0.0f, cell * 0.5f)));
+		}
 	}
 }
