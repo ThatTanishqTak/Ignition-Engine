@@ -36,6 +36,7 @@ namespace Ignition
 		EventQueue& GetEventQueue() { return m_EventQueue; }
 		Window* GetWindow() const { return m_Window.get(); }
 		Renderer* GetRenderer() const { return m_Renderer.get(); }
+		VulkanRenderer* GetBackend() const { return m_Backend.get(); }
 		Input* GetInput() const { return m_Input.get(); }
 
 		bool IsRunning() const;

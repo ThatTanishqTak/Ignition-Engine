@@ -89,7 +89,14 @@ namespace Ignition
 			IG_CORE_ERROR("Wind tunnel: the volume view is unavailable, the viewport falls back to the slice plane and tracers");
 		}
 
-		// TODO: publish m_Slice into the UI texture table for the Aero panel preview
+		// The slice sits in SHADER_READ_ONLY_OPTIMAL between frames, which is the layout the table's descriptor declares
+		m_SliceTextureSlot = renderer.AcquireUITextureSlot(m_Slice->GetImageView());
+
+		if (m_SliceTextureSlot == 0)
+		{
+			IG_CORE_WARN("Wind tunnel: no UI texture slot for the slice, the preview image will be skipped");
+		}
+
 		m_ResetRequested = true;
 
 		IG_CORE_INFO("------- WIND TUNNEL INITIALIZED -------");
@@ -417,7 +424,15 @@ namespace Ignition
 
 	void VulkanFluidSolver3D::Shutdown()
 	{
-		// TODO: release the slice's UI texture slot here. m_Renderer stays as the weak reference that makes that safe when the solver outlives the renderer
+		if (m_SliceTextureSlot != 0)
+		{
+			if (const std::shared_ptr<VulkanRenderer*> renderer = m_Renderer.lock(); renderer && *renderer)
+			{
+				(*renderer)->ReleaseUITextureSlot(m_SliceTextureSlot);
+			}
+
+			m_SliceTextureSlot = 0;
+		}
 
 		if (m_VolumePipeline != VK_NULL_HANDLE)
 		{
@@ -759,7 +774,7 @@ namespace Ignition
 			return;
 		}
 
-		// Both consumers - the scene quad's fragment shader and ImGui's composite - sample in a fragment stage
+		// Both consumers - the scene quad's fragment shader and the UI's composite pass - sample in a fragment stage
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_Slice->GetImage(), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
 		m_SliceInitialized = true;

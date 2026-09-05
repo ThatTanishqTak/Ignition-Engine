@@ -791,7 +791,7 @@ void sliceVisualize(uint3 id : SV_DispatchThreadID)
         }
     }
 
-    // Row 0 holds the top of the plane, so ImGui shows it upright; the scene quad's UVs account for the same flip
+    // Row 0 holds the top of the plane, so a UI image sampling it top-down shows it upright; the scene quad's UVs and the UI ortho's y sign account for the same flip
     g_Slice[uint2(id.x, SliceImageSize - 1 - id.y)] = float4(LinearFromSRGB(color), 1.0);
 }
 

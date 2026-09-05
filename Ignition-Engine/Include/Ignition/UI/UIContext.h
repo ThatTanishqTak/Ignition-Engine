@@ -12,6 +12,8 @@ namespace Ignition
 {
 	namespace UI
 	{
+		class DrawList;
+
 		class UIContext
 		{
 		public:
@@ -31,7 +33,13 @@ namespace Ignition
 
 			IGNITION_API void Tick(float deltaTime);
 
+			IGNITION_API void Paint(DrawList& drawList);
+
 			IGNITION_API void OnElementDestroyed(Element* element);
+
+		private:
+			void PaintElement(Element& element, DrawList& drawList);
+			void TickElement(Element& element, float deltaTime);
 
 		private:
 			std::vector<std::unique_ptr<Element>> m_Roots;

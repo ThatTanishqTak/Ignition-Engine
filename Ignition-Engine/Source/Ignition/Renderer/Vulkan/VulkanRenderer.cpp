@@ -15,6 +15,9 @@
 #include "Ignition/Renderer/DebugDrawBuffer.h"
 #include "Ignition/Renderer/Vulkan/VulkanTexture.h"
 #include "Ignition/Renderer/Vulkan/VulkanImage.h"
+#include "Ignition/Renderer/Vulkan/VulkanUIRenderer.h"
+#include "Ignition/Renderer/Vulkan/VulkanUITextureTable.h"
+#include "Ignition/UI/DrawList.h"
 
 #include "Ignition/Core/Log.h"
 #include "Ignition/Core/ProfilerInternal.h"
@@ -191,7 +194,26 @@ namespace Ignition
 			}
 		}
 
-		// TODO: VulkanUIRenderer initializes here, modelled on VulkanLineRenderer's Initialize shape
+		// The table owns the sampler's only consumer, so this is what EnsureLinearSampler and m_LinearSampler were kept for
+		m_UITextureTable = std::make_unique<VulkanUITextureTable>();
+		m_UITextureTable->Initialize(m_VulkanDevice->GetPhysicalDevice(), m_VulkanDevice->GetDevice(), m_VulkanDevice->GetGraphicsQueue(), m_VulkanDevice->GetGraphicsQueueFamily(), m_VulkanAllocator->GetAllocator(), EnsureLinearSampler());
+
+		if (!m_UITextureTable->IsValid())
+		{
+			IG_CORE_ERROR("Vulkan renderer: the UI texture table is unavailable, no UI will draw");
+		}
+		else
+		{
+			const std::string userInterfacePath = std::string(basePath ? basePath : "") + ShaderDirectory + "UI.spv";
+
+			m_VulkanUIRenderer = std::make_unique<VulkanUIRenderer>();
+			m_VulkanUIRenderer->Initialize(m_VulkanDevice->GetDevice(), m_VulkanAllocator->GetAllocator(), m_VulkanSwapchain->GetImageFormat(), DepthFormat, userInterfacePath, m_UITextureTable->GetSetLayout(), *m_VulkanDescriptorAllocator);
+
+			if (!m_VulkanUIRenderer->IsValid())
+			{
+				IG_CORE_ERROR("Vulkan renderer: UI pipeline unavailable, the UI DrawList will be dropped");
+			}
+		}
 
 		IG_CORE_INFO("------- VULKAN RENDERER INITIALIZED -------");
 	}
@@ -216,6 +238,19 @@ namespace Ignition
 		DestroySceneRenderTarget();
 
 		FlushRetirementQueue();
+
+		// Both hold the sampler and the descriptor allocator's layouts, so they go before either of those does
+		if (m_VulkanUIRenderer)
+		{
+			m_VulkanUIRenderer->Shutdown();
+			m_VulkanUIRenderer.reset();
+		}
+
+		if (m_UITextureTable)
+		{
+			m_UITextureTable->Shutdown();
+			m_UITextureTable.reset();
+		}
 
 		if (m_LinearSampler != VK_NULL_HANDLE && m_VulkanDevice && m_VulkanDevice->GetDevice() != VK_NULL_HANDLE)
 		{
@@ -364,6 +399,7 @@ namespace Ignition
 		IG_PROFILE_ZONE();
 
 		m_FrameStarted = false;
+		m_UIDrawLists.fill(nullptr);
 
 		if (!m_VulkanSwapchain || !m_VulkanFrameContext || !m_VulkanDevice || !m_DepthImage || !m_DepthImage->IsValid())
 		{
@@ -392,6 +428,11 @@ namespace Ignition
 		VK_CHECK(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
 
 		ProcessRetirementQueue();
+
+		if (m_UITextureTable)
+		{
+			m_UITextureTable->ProcessRetirement(m_FrameNumber);
+		}
 
 		const VkSemaphore imageAvailable = m_VulkanFrameContext->GetImageAvailableSemaphore(m_FrameIndex);
 		const VkResult acquireResult = vkAcquireNextImageKHR(device, m_VulkanSwapchain->GetSwapchain(), UINT64_MAX, imageAvailable, VK_NULL_HANDLE, &m_ImageIndex);
@@ -458,6 +499,11 @@ namespace Ignition
 			{
 				computePass->RecordCompute(commandBuffer, m_FrameIndex, m_VulkanGPUTimer.get());
 			}
+		}
+
+		if (m_VulkanUIRenderer && m_VulkanUIRenderer->IsValid())
+		{
+			m_VulkanUIRenderer->FlushUploads(commandBuffer);
 		}
 
 		Utilities::VulkanUtilities::TransitionImageLayout(commandBuffer, m_VulkanSwapchain->GetImage(m_ImageIndex), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
@@ -590,6 +636,11 @@ namespace Ignition
 
 		DebugDrawBuffer::Get().Clear();
 
+		if (m_ScenePassActive && m_VulkanUIRenderer && m_VulkanUIRenderer->IsValid() && m_UIDrawLists[static_cast<size_t>(UI::UISurfaceTarget::SceneColor)])
+		{
+			m_VulkanUIRenderer->Draw(commandBuffer, m_FrameIndex, *m_UIDrawLists[static_cast<size_t>(UI::UISurfaceTarget::SceneColor)], m_SceneColorImage->GetExtent(), true, m_UITextureTable->GetDescriptorSet());
+		}
+
 		if (m_VulkanGPUTimer)
 		{
 			m_VulkanGPUTimer->EndPass(commandBuffer, m_ScenePassTimer);
@@ -636,7 +687,10 @@ namespace Ignition
 
 			IG_PROFILE_GPU_ZONE(m_GPUProfiler, commandBuffer, "UI");
 
-			// TODO: VulkanUIRenderer records the DrawList here
+			if (m_VulkanUIRenderer && m_VulkanUIRenderer->IsValid() && m_UIDrawLists[static_cast<size_t>(UI::UISurfaceTarget::Swapchain)])
+			{
+				m_VulkanUIRenderer->Draw(commandBuffer, m_FrameIndex, *m_UIDrawLists[static_cast<size_t>(UI::UISurfaceTarget::Swapchain)], m_VulkanSwapchain->GetExtent(), false, m_UITextureTable->GetDescriptorSet());
+			}
 
 			if (m_VulkanGPUTimer)
 			{
@@ -892,8 +946,7 @@ namespace Ignition
 
 	uint64_t VulkanRenderer::GetSceneRenderTargetTextureID() const
 	{
-		// TODO: a VulkanUITextureTable slot index. Zero until then - the viewport image has nowhere to go
-		return 0;
+		return m_SceneColorSlot;
 	}
 
 	uint32_t VulkanRenderer::GetSceneRenderTargetWidth() const
@@ -998,12 +1051,20 @@ namespace Ignition
 			return;
 		}
 
-		// TODO: publish m_SceneColorImage into the UI texture table so the viewport draws as an image
+		if (m_UITextureTable)
+		{
+			m_SceneColorSlot = m_UITextureTable->Acquire(m_SceneColorImage->GetImageView());
+		}
 	}
 
 	void VulkanRenderer::DestroySceneRenderTarget()
 	{
-		// TODO: release the UI texture slot through the retirement queue, never immediately a slot freed and reused while a frame is in flight samples garbage
+		// Frame-gated like the image itself: a slot freed and rebound while a frame is in flight samples garbage
+		if (m_UITextureTable && m_SceneColorSlot != 0)
+		{
+			m_UITextureTable->Release(m_SceneColorSlot, m_FrameNumber);
+			m_SceneColorSlot = 0;
+		}
 
 		RetireResource(std::move(m_SceneColorImage));
 		RetireResource(std::move(m_SceneDepthImage));
@@ -1046,6 +1107,29 @@ namespace Ignition
 	void VulkanRenderer::Retire(std::unique_ptr<VulkanImage> image)
 	{
 		RetireResource(std::move(image));
+	}
+
+	void VulkanRenderer::SubmitUI(const UI::DrawList& drawList, UI::UISurfaceTarget target)
+	{
+		if (!m_FrameStarted || target >= UI::UISurfaceTarget::Count)
+		{
+			return;
+		}
+
+		m_UIDrawLists[static_cast<size_t>(target)] = &drawList;
+	}
+
+	uint32_t VulkanRenderer::AcquireUITextureSlot(VkImageView imageView)
+	{
+		return m_UITextureTable ? m_UITextureTable->Acquire(imageView) : 0;
+	}
+
+	void VulkanRenderer::ReleaseUITextureSlot(uint32_t slot)
+	{
+		if (m_UITextureTable)
+		{
+			m_UITextureTable->Release(slot, m_FrameNumber);
+		}
 	}
 
 	void VulkanRenderer::ProcessRetirementQueue()

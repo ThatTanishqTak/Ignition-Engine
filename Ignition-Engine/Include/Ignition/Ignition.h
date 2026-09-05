@@ -60,6 +60,8 @@
 #include "Ignition/UI/UITypes.h"
 #include "Ignition/UI/Style.h"
 #include "Ignition/UI/UIEvent.h"
+#include "Ignition/UI/DrawList.h"
+#include "Ignition/UI/Tessellator.h"
 #include "Ignition/UI/Element.h"
 #include "Ignition/UI/UIContext.h"
 

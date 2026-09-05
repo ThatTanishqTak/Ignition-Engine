@@ -35,7 +35,7 @@ namespace Ignition
 			return;
 		}
 
-		auto uiLayer = std::make_unique<UILayer>(m_Implementation->Engine->GetWindow());
+		auto uiLayer = std::make_unique<UILayer>(m_Implementation->Engine->GetWindow(), m_Implementation->Engine->GetBackend());
 		m_Implementation->UI = uiLayer.get();
 		m_Implementation->Layers.PushOverlay(std::move(uiLayer));
 

@@ -3,7 +3,7 @@
 #ifndef IGNITION_FLUID_COLOR
 #define IGNITION_FLUID_COLOR
 
-// Linear values throughout; the composite pass does the sRGB encode, matching VulkanImGui's convention
+// Linear values throughout; the sRGB swapchain format does the encode on write. UI.slang follows the same convention, which is what lets a theme colour, a ramp and a slice quad all agree about what a number looks like
 float3 Ramp(float value)
 {
     const float scaled = saturate(value) * 4.0;

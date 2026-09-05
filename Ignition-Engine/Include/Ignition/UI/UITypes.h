@@ -38,6 +38,14 @@ namespace Ignition
 			glm::vec2 Maximum{ Unbounded, Unbounded };
 		};
 
+		// Which surface a DrawList was built for. Phase 10 grows this into §16's UISurfaceDescription
+		enum class UISurfaceTarget : uint32_t
+		{
+			Swapchain = 0,
+			SceneColor,
+			Count
+		};
+
 		// Measure implies arrange implies paint, never the reverse. Phase 3 gives each flag its propagation rule
 		enum class DirtyFlags : uint32_t
 		{

@@ -7,6 +7,7 @@
 #include "Ignition/Renderer/Renderer.h"
 #include "Ignition/Renderer/Vulkan/VulkanComputePass.h"
 #include "Ignition/Renderer/Vertex.h"
+#include "Ignition/UI/UITypes.h"
 
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
@@ -36,6 +37,13 @@ namespace Ignition
 	class VulkanImage;
 	class VulkanGPUTimer;
 	class VulkanFluidSolver3D;
+	class VulkanUIRenderer;
+	class VulkanUITextureTable;
+
+	namespace UI
+	{
+		class DrawList;
+	}
 
 	class VulkanRenderer
 	{
@@ -65,8 +73,14 @@ namespace Ignition
 		void Retire(std::unique_ptr<VulkanImage> image);
 		void Retire(std::unique_ptr<VulkanFluidSolver3D> solver);
 
-		// TODO: VulkanUITextureTable replaces this - a variable-count combined-image-sampler array behind its own UPDATE_AFTER_BIND pool, with slots freed through the frame-gated retirement queue
 		const std::vector<PassTiming>& GetPassTimings() const;
+
+		// A DrawList submitted between BeginFrame and EndFrame, recorded at its surface's insertion point. The pointer is borrowed for the rest of the frame: the caller owns the list and must not rebuild it before EndFrame
+		void SubmitUI(const UI::DrawList& drawList, UI::UISurfaceTarget target);
+
+		// Bindless slots for anything that wants to be drawn as an image by the UI. Zero is the permanent white
+		uint32_t AcquireUITextureSlot(VkImageView imageView);
+		void ReleaseUITextureSlot(uint32_t slot);
 
 		std::shared_ptr<VulkanRenderer*> GetSelfReference() const { return m_SelfReference; }
 
@@ -116,6 +130,10 @@ namespace Ignition
 		std::unique_ptr<VulkanGPUTimer> m_VulkanGPUTimer;
 		std::unique_ptr<VulkanTexture> m_WhiteTexture;
 		std::unique_ptr<VulkanMesh> m_OverlayQuad; // unit quad for fluid slice planes and other in-scene overlays
+		std::unique_ptr<VulkanUITextureTable> m_UITextureTable;
+		std::unique_ptr<VulkanUIRenderer> m_VulkanUIRenderer;
+
+		std::array<const UI::DrawList*, static_cast<size_t>(UI::UISurfaceTarget::Count)> m_UIDrawLists{};
 
 		// Compute work is recorded at the top of the frame, before any rendering begins - one slot, whatever registers into it
 		std::vector<VulkanComputePass*> m_ComputePasses;
@@ -127,6 +145,7 @@ namespace Ignition
 
 		std::unique_ptr<VulkanImage> m_SceneColorImage;
 		std::unique_ptr<VulkanImage> m_SceneDepthImage;
+		uint32_t m_SceneColorSlot = 0;
 		VkSampler m_LinearSampler = VK_NULL_HANDLE; // The UI texture table's shared sampler
 		uint32_t m_PendingSceneTargetWidth = 0;
 		uint32_t m_PendingSceneTargetHeight = 0;

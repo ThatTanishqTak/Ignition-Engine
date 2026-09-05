@@ -111,7 +111,7 @@ namespace
 
 		vkGetPhysicalDeviceFeatures2(physicalDevice, &features2);
 
-		return physicalDeviceVulkan13Features.dynamicRendering == VK_TRUE && physicalDeviceVulkan13Features.synchronization2 == VK_TRUE && physicalDeviceVulkan12Features.descriptorIndexing == VK_TRUE && physicalDeviceVulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE && physicalDeviceVulkan12Features.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE && physicalDeviceVulkan12Features.descriptorBindingPartiallyBound == VK_TRUE && physicalDeviceVulkan12Features.runtimeDescriptorArray == VK_TRUE;
+		return physicalDeviceVulkan13Features.dynamicRendering == VK_TRUE && physicalDeviceVulkan13Features.synchronization2 == VK_TRUE && physicalDeviceVulkan12Features.descriptorIndexing == VK_TRUE && physicalDeviceVulkan12Features.shaderSampledImageArrayNonUniformIndexing == VK_TRUE && physicalDeviceVulkan12Features.descriptorBindingSampledImageUpdateAfterBind == VK_TRUE && physicalDeviceVulkan12Features.descriptorBindingPartiallyBound == VK_TRUE && physicalDeviceVulkan12Features.descriptorBindingVariableDescriptorCount == VK_TRUE && physicalDeviceVulkan12Features.runtimeDescriptorArray == VK_TRUE;
 	}
 
 	const char* RejectDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
@@ -359,6 +359,7 @@ namespace Ignition
 		physicalDeviceVulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 		physicalDeviceVulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 		physicalDeviceVulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
+		physicalDeviceVulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
 		physicalDeviceVulkan12Features.runtimeDescriptorArray = VK_TRUE;
 		physicalDeviceVulkan12Features.pNext = &physicalDeviceVulkan11Features;
 

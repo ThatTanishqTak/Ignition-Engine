@@ -1,14 +1,16 @@
 #include "Ignition/UI/UILayer.h"
 
+#include "Ignition/Core/ProfilerInternal.h"
 #include "Ignition/Core/Time.h"
 #include "Ignition/Events/Event.h"
 #include "Ignition/Events/WindowEvent.h"
+#include "Ignition/Renderer/Vulkan/VulkanRenderer.h"
 #include "Ignition/UI/UIContext.h"
 #include "Ignition/Window/Window.h"
 
 namespace Ignition
 {
-	UILayer::UILayer(Window* window) : m_Window(window)
+	UILayer::UILayer(Window* window, VulkanRenderer* backend) : m_Window(window), m_Backend(backend)
 	{
 
 	}
@@ -40,7 +42,19 @@ namespace Ignition
 
 	void UILayer::OnRender()
 	{
+		IG_PROFILE_ZONE_NAMED("UI Build");
 
+		if (!m_Context || !m_Backend)
+		{
+			return;
+		}
+
+		m_DrawList.Clear(m_Context->GetSurfaceSize());
+		m_Context->Paint(m_DrawList);
+		m_DrawList.Finish();
+
+		// The layer is an overlay, so this runs after every content layer has rendered and before EndFrame records
+		m_Backend->SubmitUI(m_DrawList, UI::UISurfaceTarget::Swapchain);
 	}
 
 	void UILayer::OnEvent(Event& event)

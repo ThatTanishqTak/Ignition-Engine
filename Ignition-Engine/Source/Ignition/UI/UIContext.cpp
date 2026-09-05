@@ -56,9 +56,42 @@ namespace Ignition
 		{
 			IG_PROFILE_ZONE_NAMED("UI Tick");
 
-			(void)deltaTime;
-
 			m_LayoutPassCount = 0;
+
+			for (const auto& root : m_Roots)
+			{
+				TickElement(*root, deltaTime);
+			}
+		}
+
+		void UIContext::TickElement(Element& element, float deltaTime)
+		{
+			element.OnTick(deltaTime);
+
+			for (const auto& child : element.GetChildren())
+			{
+				TickElement(*child, deltaTime);
+			}
+		}
+
+		void UIContext::Paint(DrawList& drawList)
+		{
+			IG_PROFILE_ZONE_NAMED("UI Paint");
+
+			for (const auto& root : m_Roots)
+			{
+				PaintElement(*root, drawList);
+			}
+		}
+
+		void UIContext::PaintElement(Element& element, DrawList& drawList)
+		{
+			element.OnPaint(drawList);
+
+			for (const auto& child : element.GetChildren())
+			{
+				PaintElement(*child, drawList);
+			}
 		}
 
 		void UIContext::OnElementDestroyed(Element* element)

@@ -1,5 +1,7 @@
 #include "Sandbox/GalleryLayer.h"
 
+#include "Sandbox/GalleryPages.h"
+
 #include "Ignition/Ignition.h"
 
 namespace Sandbox
@@ -32,9 +34,19 @@ namespace Sandbox
 
 	void GalleryLayer::RegisterPages()
 	{
-		RegisterPage("Placeholder", [](Ignition::UI::UIContext& context)
+		RegisterPage("Primitives", [](Ignition::UI::UIContext& context)
 		{
-			context.AddRoot(std::make_unique<Ignition::UI::Element>()).SetName("Placeholder Root");
+			context.AddRoot(std::make_unique<PrimitivesPage>()).SetName("Primitives");
+		});
+
+		RegisterPage("Clipping and layers", [](Ignition::UI::UIContext& context)
+		{
+			context.AddRoot(std::make_unique<ClippingPage>()).SetName("Clipping");
+		});
+
+		RegisterPage("Tessellator stress", [](Ignition::UI::UIContext& context)
+		{
+			context.AddRoot(std::make_unique<TessellatorPage>()).SetName("Tessellator");
 		});
 	}
 
@@ -48,7 +60,24 @@ namespace Sandbox
 		m_CurrentPage = index;
 
 		m_Context->ClearRoots();
+		m_NavStrip = nullptr;
+
 		m_Pages[m_CurrentPage].Build(*m_Context);
+
+		std::vector<std::string> names;
+		names.reserve(m_Pages.size());
+
+		for (const Page& page : m_Pages)
+		{
+			names.push_back(page.Name);
+		}
+
+		auto navStrip = std::make_unique<NavStripElement>(std::move(names), [this](size_t selected) { ShowPage(selected); });
+		m_NavStrip = navStrip.get();
+		m_NavStrip->SetActive(m_CurrentPage);
+		m_NavStrip->SetPointer(m_Pointer);
+
+		m_Context->AddRoot(std::move(navStrip));
 
 		IG_APP_INFO("Gallery page {}/{}: {}", m_CurrentPage + 1, m_Pages.size(), m_Pages[m_CurrentPage].Name);
 	}
@@ -69,6 +98,29 @@ namespace Sandbox
 	void GalleryLayer::OnEvent(Ignition::Event& event)
 	{
 		Ignition::EventDispatcher dispatcher(event);
+
+		dispatcher.Dispatch<Ignition::MouseMovedEvent>([this](Ignition::MouseMovedEvent& mouseEvent)
+		{
+			m_Pointer = ToSurface(mouseEvent.GetX(), mouseEvent.GetY());
+
+			if (m_NavStrip)
+			{
+				m_NavStrip->SetPointer(m_Pointer);
+			}
+
+			return false;
+		});
+
+		dispatcher.Dispatch<Ignition::MouseButtonPressedEvent>([this](Ignition::MouseButtonPressedEvent& mouseEvent)
+		{
+			if (m_NavStrip && mouseEvent.GetMouseButton() == Ignition::MouseCode::LEFT)
+			{
+				// ShowPage rebuilds the strip, so nothing may touch m_NavStrip after this returns
+				m_NavStrip->OnPointerDown(m_Pointer);
+			}
+
+			return false;
+		});
 
 		dispatcher.Dispatch<Ignition::KeyPressedEvent>([this](Ignition::KeyPressedEvent& keyEvent)
 		{
